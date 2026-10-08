@@ -1,0 +1,13 @@
+#%PAM-1.0
+
+# Environment setup
+auth        required    pam_env.so
+
+# Unconditionally permit the greeter session
+auth        required    pam_permit.so
+account     required    pam_permit.so
+password    required    pam_deny.so
+
+# Session registration with logind
+session     required    pam_unix.so
+-session    optional    pam_systemd.so

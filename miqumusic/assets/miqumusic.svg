@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#805bdf" />
+      <stop offset="100%" stop-color="#4924a1" />
+    </linearGradient>
+    <linearGradient id="noteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#eadaff" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Rounded App Background -->
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bgGrad)" filter="url(#shadow)" />
+
+  <!-- Stylized Vinyl / Disc Ring -->
+  <circle cx="64" cy="64" r="42" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="3" />
+  <circle cx="64" cy="64" r="30" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="2" />
+
+  <!-- Center Musical Note -->
+  <path d="M78 36v34.5a14.5 14.5 0 1 1-10-13.8V48l-26 5.8v22.7a14.5 14.5 0 1 1-10-13.8V42l36-8z"
+        fill="url(#noteGrad)" />
+</svg>

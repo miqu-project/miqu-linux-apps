@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Security & Privacy
+GenericName=Firewall • DNS Privacy • Hardware Shields • App Sandboxing
+Comment=Firewall, DNS privacy, hardware shields, sandboxing & metadata scrubber
+Exec=miqusecure
+Icon=security-high
+Terminal=false
+Categories=System;Security;Settings;
+Keywords=security;privacy;firewall;ufw;dns;sandbox;apparmor;mat2;hardware;radio;
+StartupNotify=true
+StartupWMClass=miqusecure

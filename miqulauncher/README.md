@@ -1,0 +1,9 @@
+- App launcher.
+- Window switcher
+- Workspace switcher
+- Binary launcher. 
+- dmenu (custom menu)
+- Combo mode support
+- Custom config file
+- Easy integration to theme switcher
+- I think if you only replace the word "rofi" with "miqulauncher", all your scripts that had rofi, might work. I could have gone with my own syntax but I did not want to make migration harder for those who just wants to try it. Hence kept the syntax almost same as rofi. Whether it is 100% like rofi or not, that needs to be checked by experts becasue rofi is so extensive, I did not have the luxury to learn and match everyting. Basic concept of rofi works fine i.e.newline separated items are piped into dmenu. 

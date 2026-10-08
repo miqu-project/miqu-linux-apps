@@ -1,0 +1,22 @@
+#!/bin/sh
+# miqudm Wayland Session Startup Script
+
+# Source system-wide profiles
+[ -f /etc/profile ] && . /etc/profile
+[ -f /etc/environment ] && . /etc/environment
+
+# Source user profile
+if [ -f "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+elif [ -f "$HOME/.bash_profile" ]; then
+    . "$HOME/.bash_profile"
+fi
+
+# Ensure essential XDG and PATH variables are populated
+export PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
+export XDG_DATA_DIRS="/usr/local/share:/usr/share:${XDG_DATA_DIRS:-}"
+export XDG_CONFIG_DIRS="/etc/xdg:${XDG_CONFIG_DIRS:-}"
+export XDG_SESSION_TYPE="wayland"
+export XDG_SESSION_CLASS="user"
+
+exec "$@"

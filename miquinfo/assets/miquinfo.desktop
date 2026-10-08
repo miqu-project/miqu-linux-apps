@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=System Information
+GenericName=System Information
+Comment=Modern, lightweight system information viewer
+Exec=miquinfo
+Icon=miquland
+Terminal=false
+Categories=System;Utility;
+Keywords=system;info;neofetch;specs;hardware;kernel;cpu;ram;
+StartupNotify=true

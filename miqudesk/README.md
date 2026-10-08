@@ -1,0 +1,5 @@
+- Provides the play ground for adding Apps, Widgets on desktop, the so called empty real state.
+- At this point it may look like mint.
+- Custom widgets can be build and added.
+- Premade couple of widgets.
+- To show apps on the  desktop, place your .desktop file on the ~/Desktop folder, it will auto scan and put into desktop. Drag to reposition and the app will remember its position. 

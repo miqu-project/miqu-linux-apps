@@ -1,0 +1,33 @@
+# Build directories
+build/
+*/build/
+bin/
+*/bin/
+out/
+*/out/
+
+# Object files & compiled binaries
+*.o
+*.a
+*.so
+*.dylib
+
+# CMake artifacts
+CMakeCache.txt
+CMakeFiles/
+*/CMakeFiles/
+cmake_install.cmake
+*/cmake_install.cmake
+Makefile
+compile_commands.json
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=miqutest
+Comment=Widget Testing & Playground for miqutoolkit
+Exec=miqutest
+Icon=miquland
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+Keywords=miqu;test;widgets;wayland;

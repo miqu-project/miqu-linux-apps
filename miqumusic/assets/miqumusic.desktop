@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Music
+GenericName=Music Player
+Comment=Modern native Wayland music player for MPD
+Exec=miqumusic
+Icon=miqumusic
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;
+Keywords=Music;Player;MPD;Audio;
+StartupNotify=true
+StartupWMClass=miqumusic
