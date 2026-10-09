@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=MiquBar
+Comment=Wayland Status Bar and Windows-Style Taskbar for Miquland
+Exec=miqubar
+Icon=miqubar
+Terminal=false
+Type=Application
+Categories=Utility;System;

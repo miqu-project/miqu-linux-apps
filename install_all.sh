@@ -21,6 +21,7 @@ APPS=(
     "miqugallery"
     "miqusecure"
     "miquoverview"
+    "miqubar"
     "miqudm"
     "miqutest"
 )
