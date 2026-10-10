@@ -1,36 +1,32 @@
 #pragma once
 
-#include "miqutoolkit/view/view.hpp"
+#include "miqutoolkit/view/linear_layout.hpp"
 #include "miqutoolkit/system/window_manager.hpp"
 #include <vector>
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace miqu {
 class Window;
+class View;
 }
 
 namespace miqubar {
 
-class TaskbarView : public miqu::View {
+class TaskbarView : public miqu::LinearLayout {
 public:
     TaskbarView();
-    ~TaskbarView() override;
+    ~TaskbarView() override = default;
 
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
-
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
-    bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
+    void sync_windows();
 
 private:
-    void sync_windows();
-    void show_context_menu(const miqu::WindowInfo& win, int x, int y);
+    void show_context_menu(const miqu::WindowInfo& win, miqu::View* anchor);
+    std::string resolve_window_icon(const miqu::WindowInfo& win);
 
     std::vector<miqu::WindowInfo> m_windows;
-    int m_hovered_index = -1;
-    int m_pressed_index = -1;
-
-    std::shared_ptr<miqu::Window> m_context_menu_window;
+    std::unordered_map<std::string, std::string> m_icon_path_cache;
 };
 
 } // namespace miqubar

@@ -106,6 +106,9 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "item_max_width") item_max_width = std::stoi(val);
         else if (key == "show_active_underline") show_active_underline = parse_bool(val);
         else if (key == "middle_click_close") middle_click_close = parse_bool(val);
+        else if (key == "show_hover_popup") show_hover_popup = parse_bool(val);
+        else if (key == "hover_popup_max_width") hover_popup_max_width = std::max(120, std::stoi(val));
+        else if (key == "hover_delay_ms") hover_delay_ms = std::max(50, std::stoi(val));
         else if (key == "show_cpu") show_cpu = parse_bool(val);
         else if (key == "show_memory") show_memory = parse_bool(val);
         else if (key == "show_volume") show_volume = parse_bool(val);

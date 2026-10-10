@@ -31,11 +31,14 @@ public:
 
     // Taskbar
     bool show_taskbar = true;
-    bool icon_only = false;
+    bool icon_only = true;
     int max_title_chars = 24;
     int item_max_width = 200;
     bool show_active_underline = true;
     bool middle_click_close = true;
+    bool show_hover_popup = true;
+    int hover_popup_max_width = 320;
+    int hover_delay_ms = 300;
 
     // Modules
     bool show_cpu = true;

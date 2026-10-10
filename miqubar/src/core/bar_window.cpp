@@ -1,6 +1,7 @@
 #include "bar_window.hpp"
 #include "../config/bar_config.hpp"
 #include "miqutoolkit/core/app_engine.hpp"
+#include "miqutoolkit/core/config.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -8,38 +9,113 @@ namespace miqubar {
 
 BarRootView::BarRootView() {
     const auto& cfg = BarConfig::get();
+    auto config = miqu::Config::get();
+
+    set_background_color(config->colors.background);
+
+    // 1. Left container (pinned left)
+    m_left_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
+    m_left_box->set_gravity(miqu::Gravity::CenterVertical);
+    m_left_box->set_margin(6, 0, 0, 0);
+    m_left_box->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::WrapContent),
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        miqu::Gravity::Left | miqu::Gravity::CenterVertical
+    ));
+
+    if (cfg.show_workspace_btn) {
+        m_ws_btn = std::make_shared<WorkspaceButtonView>();
+        m_left_box->add_view(m_ws_btn);
+    }
+    add_view(m_left_box);
+
+    // 2. Center container (centered dock)
+    m_center_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
+    m_center_box->set_gravity(miqu::Gravity::CenterVertical);
+    m_center_box->set_divider_spacing(4);
+    m_center_box->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::WrapContent),
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        miqu::Gravity::CenterHorizontal | miqu::Gravity::CenterVertical
+    ));
 
     if (cfg.show_start) {
         m_start_btn = std::make_shared<StartButtonView>();
-    }
-    if (cfg.show_workspace_btn) {
-        m_ws_btn = std::make_shared<WorkspaceButtonView>();
+        m_center_box->add_view(m_start_btn);
     }
     if (cfg.show_taskbar) {
         m_taskbar = std::make_shared<TaskbarView>();
+        m_center_box->add_view(m_taskbar);
     }
+    add_view(m_center_box);
 
-    if (cfg.show_cpu) m_cpu = std::make_shared<CpuModuleView>();
-    if (cfg.show_memory) m_mem = std::make_shared<MemoryModuleView>();
-    if (cfg.show_battery) m_battery = std::make_shared<BatteryModuleView>();
+    // 3. Right container (system telemetry & tray pinned right)
+    m_right_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
+    m_right_box->set_gravity(miqu::Gravity::CenterVertical);
+    m_right_box->set_divider_spacing(2);
+    m_right_box->set_margin(0, 0, 4, 0);
+    m_right_box->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::WrapContent),
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        miqu::Gravity::Right | miqu::Gravity::CenterVertical
+    ));
+
+    if (cfg.show_cpu) {
+        m_cpu = std::make_shared<CpuModuleView>();
+        m_right_box->add_view(m_cpu);
+    }
+    if (cfg.show_memory) {
+        m_mem = std::make_shared<MemoryModuleView>();
+        m_right_box->add_view(m_mem);
+    }
+    if (cfg.show_battery) {
+        m_battery = std::make_shared<BatteryModuleView>();
+        m_right_box->add_view(m_battery);
+    }
     if (cfg.show_volume) {
         m_volume = std::make_shared<VolumeModuleView>([this]() {
             toggle_quick_settings();
         });
+        m_right_box->add_view(m_volume);
     }
     if (cfg.show_clock) {
         m_clock = std::make_shared<ClockModuleView>([this]() {
             toggle_calendar();
         });
+        m_right_box->add_view(m_clock);
     }
     if (cfg.show_peek) {
         m_peek = std::make_shared<PeekButtonView>();
+        m_right_box->add_view(m_peek);
     }
+    add_view(m_right_box);
 }
 
 BarRootView::~BarRootView() {
     if (m_quick_settings_win) m_quick_settings_win->close();
     if (m_calendar_win) m_calendar_win->close();
+}
+
+void BarRootView::sync_theme() {
+    auto config = miqu::Config::get();
+    set_background_color(config->colors.background);
+    request_redraw();
+}
+
+bool BarRootView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    m_last_mouse_x = lx;
+    m_last_mouse_y = ly;
+    return miqu::FrameLayout::on_mouse_move(lx, ly, bounds);
+}
+
+bool BarRootView::on_scroll(double delta) {
+    if (m_ws_btn && m_ws_btn->is_visible() && m_ws_btn->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
+        return m_ws_btn->on_scroll(delta);
+    }
+    if (m_volume && m_volume->is_visible() && m_volume->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
+        return m_volume->on_scroll(delta);
+    }
+    return miqu::FrameLayout::on_scroll(delta);
 }
 
 void BarRootView::toggle_quick_settings() {
@@ -62,14 +138,26 @@ void BarRootView::toggle_quick_settings() {
         }
     });
 
-    uint32_t anchors = 2 | 8; // Bottom (2) | Right (8)
-    if (BarConfig::get().position == "top") anchors = 1 | 8; // Top (1) | Right (8)
+    const auto& cfg = BarConfig::get();
+    bool is_top = (cfg.position == "top");
+    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
+                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    miqu::Margin margin;
+    margin.right = 12;
+    if (is_top) {
+        margin.top = cfg.height + 8;
+    } else {
+        margin.bottom = cfg.height + 8;
+    }
 
     m_quick_settings_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-quicksettings")
         ->contentSize(300, 260)
-        ->anchors(anchors)
+        ->contentGravity(gravity)
+        ->contentMargin(margin)
+        ->dimBackdrop(false)
+        ->transparent(true)
         ->exclusiveZone(-1)
         ->closeOnClickOutside(true)
         ->closeOnEscape(true)
@@ -103,14 +191,26 @@ void BarRootView::toggle_calendar() {
         }
     });
 
-    uint32_t anchors = 2 | 8; // Bottom | Right
-    if (BarConfig::get().position == "top") anchors = 1 | 8;
+    const auto& cfg = BarConfig::get();
+    bool is_top = (cfg.position == "top");
+    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
+                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    miqu::Margin margin;
+    margin.right = 12;
+    if (is_top) {
+        margin.top = cfg.height + 8;
+    } else {
+        margin.bottom = cfg.height + 8;
+    }
 
     m_calendar_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-calendar")
-        ->contentSize(280, 310)
-        ->anchors(anchors)
+        ->contentSize(310, 360)
+        ->contentGravity(gravity)
+        ->contentMargin(margin)
+        ->dimBackdrop(false)
+        ->transparent(true)
         ->exclusiveZone(-1)
         ->closeOnClickOutside(true)
         ->closeOnEscape(true)
@@ -135,178 +235,6 @@ void BarRootView::update_telemetry() {
 void BarRootView::update_clock() {
     if (m_clock) m_clock->update_time();
     request_redraw();
-}
-
-void BarRootView::draw(cairo_t* cr, const miqu::Rect& bounds) {
-    if (!cr) return;
-    const auto& cfg = BarConfig::get();
-
-    // 1. Bar background
-    cairo_set_source_rgba(cr, 0.07, 0.09, 0.13, cfg.opacity);
-    cairo_rectangle(cr, bounds.x, bounds.y, bounds.width, bounds.height);
-    cairo_fill(cr);
-
-    // Subtle edge border line (top border for bottom bar, bottom border for top bar)
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.10);
-    cairo_set_line_width(cr, 1.0);
-    if (cfg.position == "bottom") {
-        cairo_move_to(cr, bounds.x, bounds.y + 0.5);
-        cairo_line_to(cr, bounds.x + bounds.width, bounds.y + 0.5);
-    } else {
-        cairo_move_to(cr, bounds.x, bounds.y + bounds.height - 0.5);
-        cairo_line_to(cr, bounds.x + bounds.width, bounds.y + bounds.height - 0.5);
-    }
-    cairo_stroke(cr);
-
-    // 2. Layout Left Children
-    int cur_x = bounds.x + 4;
-    if (m_start_btn) {
-        auto sz = m_start_btn->measure_size();
-        miqu::Rect r{cur_x, bounds.y, sz.width, bounds.height};
-        m_start_btn->set_bounds(r);
-        m_start_btn->draw(cr, r);
-        cur_x += sz.width + 4;
-    }
-
-    if (m_ws_btn) {
-        auto sz = m_ws_btn->measure_size();
-        miqu::Rect r{cur_x, bounds.y, sz.width, bounds.height};
-        m_ws_btn->set_bounds(r);
-        m_ws_btn->draw(cr, r);
-        cur_x += sz.width + 8;
-    }
-
-    int left_end_x = cur_x;
-
-    // 3. Layout Right Children (working backwards from right edge)
-    int right_x = bounds.x + bounds.width;
-
-    if (m_peek) {
-        auto sz = m_peek->measure_size();
-        right_x -= sz.width;
-        miqu::Rect r{right_x, bounds.y, sz.width, bounds.height};
-        m_peek->set_bounds(r);
-        m_peek->draw(cr, r);
-    }
-
-    if (m_clock) {
-        auto sz = m_clock->measure_size();
-        right_x -= sz.width + 2;
-        miqu::Rect r{right_x, bounds.y, sz.width, bounds.height};
-        m_clock->set_bounds(r);
-        m_clock->draw(cr, r);
-    }
-
-    if (m_battery) {
-        auto sz = m_battery->measure_size();
-        if (sz.width > 0) {
-            right_x -= sz.width + 2;
-            miqu::Rect r{right_x, bounds.y, sz.width, bounds.height};
-            m_battery->set_bounds(r);
-            m_battery->draw(cr, r);
-        }
-    }
-
-    if (m_volume) {
-        auto sz = m_volume->measure_size();
-        right_x -= sz.width + 2;
-        miqu::Rect r{right_x, bounds.y, sz.width, bounds.height};
-        m_volume->set_bounds(r);
-        m_volume->draw(cr, r);
-    }
-
-    if (m_mem) {
-        auto sz = m_mem->measure_size();
-        right_x -= sz.width + 2;
-        miqu::Rect r{right_x, bounds.y, sz.width, bounds.height};
-        m_mem->set_bounds(r);
-        m_mem->draw(cr, r);
-    }
-
-    if (m_cpu) {
-        auto sz = m_cpu->measure_size();
-        right_x -= sz.width + 2;
-        miqu::Rect r{right_x, bounds.y, sz.width, bounds.height};
-        m_cpu->set_bounds(r);
-        m_cpu->draw(cr, r);
-    }
-
-    // 4. Center: Running Applications Taskbar
-    if (m_taskbar) {
-        int taskbar_w = std::max(0, right_x - left_end_x - 8);
-        miqu::Rect r{left_end_x, bounds.y, taskbar_w, bounds.height};
-        m_taskbar->set_bounds(r);
-        m_taskbar->draw(cr, r);
-    }
-}
-
-static std::shared_ptr<miqu::View> find_child_at(
-    const std::vector<std::shared_ptr<miqu::View>>& children, int x, int y) {
-    for (const auto& child : children) {
-        if (child && child->get_bounds().contains(x, y)) {
-            return child;
-        }
-    }
-    return nullptr;
-}
-
-bool BarRootView::on_mouse_move(int lx, int ly, const miqu::Rect&) {
-    m_last_mouse_x = lx;
-    m_last_mouse_y = ly;
-
-    std::vector<std::shared_ptr<miqu::View>> views = {
-        m_start_btn, m_ws_btn, m_taskbar, m_cpu, m_mem, m_battery, m_volume, m_clock, m_peek
-    };
-
-    bool handled = false;
-    for (const auto& view : views) {
-        if (view) {
-            if (view->on_mouse_move(lx, ly, view->get_bounds())) {
-                handled = true;
-            }
-        }
-    }
-    return handled;
-}
-
-bool BarRootView::on_mouse_enter(int lx, int ly) {
-    return on_mouse_move(lx, ly, get_bounds());
-}
-
-bool BarRootView::on_mouse_leave() {
-    m_last_mouse_x = -1;
-    m_last_mouse_y = -1;
-
-    std::vector<std::shared_ptr<miqu::View>> views = {
-        m_start_btn, m_ws_btn, m_taskbar, m_cpu, m_mem, m_battery, m_volume, m_clock, m_peek
-    };
-    for (const auto& view : views) {
-        if (view) view->on_mouse_move(-999, -999, view->get_bounds());
-    }
-    request_redraw();
-    return true;
-}
-
-bool BarRootView::on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect&) {
-    std::vector<std::shared_ptr<miqu::View>> views = {
-        m_start_btn, m_ws_btn, m_taskbar, m_cpu, m_mem, m_battery, m_volume, m_clock, m_peek
-    };
-
-    auto target = find_child_at(views, lx, ly);
-    if (target) {
-        return target->on_mouse_button(lx, ly, button, pressed, target->get_bounds());
-    }
-    return false;
-}
-
-bool BarRootView::on_scroll(double delta) {
-    if (m_ws_btn && m_ws_btn->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
-        return m_ws_btn->on_scroll(delta);
-    }
-    if (m_volume && m_volume->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
-        return m_volume->on_scroll(delta);
-    }
-    return false;
 }
 
 // ==========================================
@@ -341,6 +269,7 @@ bool BarWindow::init() {
         ->anchors(anchors)
         ->exclusiveZone(cfg.exclusive_zone)
         ->preferredSize(0, cfg.height)
+        ->transparent(true)
         ->keyboardInteractive(false)
         ->closeOnClickOutside(false)
         ->closeOnEscape(false)
@@ -359,6 +288,11 @@ bool BarWindow::init() {
 
 void BarWindow::request_redraw() {
     if (m_window) m_window->schedule_redraw();
+}
+
+void BarWindow::sync_theme() {
+    if (m_root_view) m_root_view->sync_theme();
+    request_redraw();
 }
 
 void BarWindow::start_telemetry_timer() {

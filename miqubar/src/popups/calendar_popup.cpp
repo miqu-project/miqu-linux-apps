@@ -1,17 +1,28 @@
 #include "calendar_popup.hpp"
 #include "../config/bar_config.hpp"
-#include <pango/pangocairo.h>
+#include "miqutoolkit/core/config.hpp"
+#include "miqutoolkit/view/divider_view.hpp"
+#include "miqutoolkit/view/text_view.hpp"
+#include "miqutoolkit/view/button.hpp"
 #include <ctime>
-#include <cmath>
 #include <vector>
+#include <array>
+#include <iostream>
 
 namespace miqubar {
 
 CalendarPopupView::CalendarPopupView(std::function<void()> on_close)
     : m_on_close(std::move(on_close)) {
+    auto config = miqu::Config::get();
+    set_style(miqu::CardStyle::Outlined);
+    set_radius(config->metrics.corner_radius);
+    set_elevation(6);
+
     update_time();
     m_view_year = m_cur_year;
     m_view_month = m_cur_month;
+
+    setup_ui();
 }
 
 void CalendarPopupView::update_time() {
@@ -44,188 +55,248 @@ int CalendarPopupView::get_first_weekday_of_month(int year, int month) const {
     std::tm time_in = { 0, 0, 0, 1, month - 1, year - 1900, 0, 0, 0, 0, nullptr };
     std::time_t time_temp = std::mktime(&time_in);
     const std::tm* time_out = std::localtime(&time_temp);
-    // Sunday is 0, Monday is 1... Convert to Monday=0
     int w = time_out->tm_wday;
-    return (w == 0) ? 6 : (w - 1);
+    return (w == 0) ? 6 : (w - 1); // Monday = 0, Sunday = 6
 }
 
-miqu::Size CalendarPopupView::measure_size() const {
-    return {280, 310};
+void CalendarPopupView::setup_ui() {
+    auto config = miqu::Config::get();
+    int base_font_size = config->metrics.font_size > 0 ? config->metrics.font_size : 11;
+    int h1_font_size = config->metrics.h1_size > 0 ? config->metrics.h1_size : 22;
+    int h3_font_size = config->metrics.h3_size > 0 ? config->metrics.h3_size : 13;
+
+    auto root = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
+    root->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        static_cast<int>(miqu::LayoutDimension::MatchParent)
+    ));
+    root->set_padding(16, 16, 16, 16);
+
+    // 1. Digital Clock (large bold, no ellipsize)
+    m_time_text = miqu::TextViewBuilder::create()
+        ->text(m_time_str)
+        ->bold(true)
+        ->textSize(h1_font_size)
+        ->ellipsize(false)
+        ->build();
+    m_time_text->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        static_cast<int>(miqu::LayoutDimension::WrapContent)
+    ));
+    m_time_text->set_margin(0, 0, 0, 2);
+    root->add_view(m_time_text);
+
+    // 2. Full Date (synced font size, no ellipsize)
+    m_date_text = miqu::TextViewBuilder::create()
+        ->text(m_date_full_str)
+        ->textSize(base_font_size)
+        ->ellipsize(false)
+        ->muted(true)
+        ->build();
+    m_date_text->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        static_cast<int>(miqu::LayoutDimension::WrapContent)
+    ));
+    m_date_text->set_margin(0, 0, 0, 12);
+    root->add_view(m_date_text);
+
+    // 3. Divider
+    auto div = std::make_shared<miqu::DividerView>(miqu::Orientation::Horizontal, 1);
+    div->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        1
+    ));
+    div->set_margin(0, 0, 0, 12);
+    root->add_view(div);
+
+    // 4. Month Navigation Header (Prev Button | Month Year | Next Button)
+    auto nav_row = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
+    nav_row->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        static_cast<int>(miqu::LayoutDimension::WrapContent)
+    ));
+    nav_row->set_gravity(miqu::Gravity::CenterVertical);
+    nav_row->set_margin(0, 0, 0, 8);
+
+    auto prev_btn = miqu::ButtonBuilder::create()
+        ->text("<")
+        ->flat(true)
+        ->textSize(base_font_size)
+        ->bold(true)
+        ->build();
+    prev_btn->set_layout_params(miqu::LayoutParams(32, 30));
+    prev_btn->set_padding(1, 0, 1, 0);
+    prev_btn->set_on_click_listener([this]() {
+        m_view_month--;
+        if (m_view_month < 1) {
+            m_view_month = 12;
+            m_view_year--;
+        }
+        rebuild_calendar();
+    });
+    nav_row->add_view(prev_btn);
+
+    m_month_label = miqu::TextViewBuilder::create()
+        ->bold(true)
+        ->textSize(h3_font_size)
+        ->ellipsize(false)
+        ->textAlignment(miqu::TextAlignment::Center)
+        ->build();
+    m_month_label->set_layout_params(miqu::LayoutParams(0, 30, 1.0f));
+    nav_row->add_view(m_month_label);
+
+    auto next_btn = miqu::ButtonBuilder::create()
+        ->text(">")
+        ->flat(true)
+        ->textSize(base_font_size)
+        ->bold(true)
+        ->build();
+    next_btn->set_layout_params(miqu::LayoutParams(32, 30));
+    next_btn->set_padding(1, 0, 1, 0);
+    next_btn->set_on_click_listener([this]() {
+        m_view_month++;
+        if (m_view_month > 12) {
+            m_view_month = 1;
+            m_view_year++;
+        }
+        rebuild_calendar();
+    });
+    nav_row->add_view(next_btn);
+
+    root->add_view(nav_row);
+
+    // 5. Day names header row (MatchParent width + ellipsize=false ensures 2-char names never get cut)
+    auto days_header = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
+    days_header->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        static_cast<int>(miqu::LayoutDimension::WrapContent)
+    ));
+    days_header->set_margin(0, 0, 0, 6);
+    const std::array<const char*, 7> day_names = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+    for (const auto* name : day_names) {
+        auto th = miqu::TextViewBuilder::create()
+            ->text(name)
+            ->textSize(base_font_size)
+            ->ellipsize(false)
+            ->muted(true)
+            ->textAlignment(miqu::TextAlignment::Center)
+            ->build();
+        th->set_layout_params(miqu::LayoutParams(0, 22, 1.0f));
+        days_header->add_view(th);
+    }
+    root->add_view(days_header);
+
+    // 6. Days Grid container
+    m_grid_layout = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
+    m_grid_layout->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        static_cast<int>(miqu::LayoutDimension::WrapContent)
+    ));
+    m_grid_layout->set_divider_spacing(3);
+    root->add_view(m_grid_layout);
+
+    add_view(root);
+
+    rebuild_calendar();
 }
 
-void CalendarPopupView::draw(cairo_t* cr, const miqu::Rect& bounds) {
-    if (!cr) return;
-    const auto& cfg = BarConfig::get();
+void CalendarPopupView::rebuild_calendar() {
+    auto config = miqu::Config::get();
+    int base_font_size = config->metrics.font_size > 0 ? config->metrics.font_size : 11;
 
-    // Flyout backdrop
-    double r = cfg.corner_radius + 4;
-    cairo_new_sub_path(cr);
-    cairo_arc(cr, bounds.x + bounds.width - r, bounds.y + r, r, -M_PI / 2, 0);
-    cairo_arc(cr, bounds.x + bounds.width - r, bounds.y + bounds.height - r, r, 0, M_PI / 2);
-    cairo_arc(cr, bounds.x + r, bounds.y + bounds.height - r, r, M_PI / 2, M_PI);
-    cairo_arc(cr, bounds.x + r, bounds.y + r, r, M_PI, 3 * M_PI / 2);
-    cairo_close_path(cr);
+    const std::array<const char*, 12> month_names = {
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    };
 
-    cairo_set_source_rgba(cr, 0.08, 0.10, 0.16, 0.98);
-    cairo_fill_preserve(cr);
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.12);
-    cairo_set_line_width(cr, 1.0);
-    cairo_stroke(cr);
-
-    // Large Digital Time
-    PangoLayout* t_layout = pango_cairo_create_layout(cr);
-    PangoFontDescription* t_desc = pango_font_description_from_string((cfg.font_family + " Bold 20").c_str());
-    pango_layout_set_font_description(t_layout, t_desc);
-    pango_layout_set_text(t_layout, m_time_str.c_str(), -1);
-
-    cairo_move_to(cr, bounds.x + 18, bounds.y + 14);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    pango_cairo_show_layout(cr, t_layout);
-    pango_font_description_free(t_desc);
-    g_object_unref(t_layout);
-
-    // Full Date subtitle
-    PangoLayout* d_layout = pango_cairo_create_layout(cr);
-    PangoFontDescription* d_desc = pango_font_description_from_string((cfg.font_family + " 10").c_str());
-    pango_layout_set_font_description(d_layout, d_desc);
-    pango_layout_set_text(d_layout, m_date_full_str.c_str(), -1);
-
-    cairo_move_to(cr, bounds.x + 18, bounds.y + 44);
-    cairo_set_source_rgba(cr, 0.85, 0.90, 0.96, 0.7);
-    pango_cairo_show_layout(cr, d_layout);
-    pango_font_description_free(d_desc);
-    g_object_unref(d_layout);
-
-    // Divider
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.08);
-    cairo_move_to(cr, bounds.x + 16, bounds.y + 68);
-    cairo_line_to(cr, bounds.x + bounds.width - 16, bounds.y + 68);
-    cairo_stroke(cr);
-
-    // Calendar Header (< Month Year >)
-    static const char* months[] = {"January", "February", "March", "April", "May", "June",
-                                   "July", "August", "September", "October", "November", "December"};
-    std::string month_title = std::string(months[m_view_month - 1]) + " " + std::to_string(m_view_year);
-
-    PangoLayout* m_layout = pango_cairo_create_layout(cr);
-    PangoFontDescription* m_desc = pango_font_description_from_string((cfg.font_family + " Bold 11").c_str());
-    pango_layout_set_font_description(m_layout, m_desc);
-    pango_layout_set_text(m_layout, month_title.c_str(), -1);
-
-    cairo_move_to(cr, bounds.x + 20, bounds.y + 78);
-    cairo_set_source_rgb(cr, 0.0, 0.90, 1.0); // #00e5ff
-    pango_cairo_show_layout(cr, m_layout);
-    pango_font_description_free(m_desc);
-    g_object_unref(m_layout);
-
-    // Nav arrows
-    PangoLayout* arr_layout = pango_cairo_create_layout(cr);
-    PangoFontDescription* arr_desc = pango_font_description_from_string((cfg.font_family + " Bold 11").c_str());
-    pango_layout_set_font_description(arr_layout, arr_desc);
-    pango_layout_set_text(arr_layout, "<   >", -1);
-
-    int aw, ah;
-    pango_layout_get_pixel_size(arr_layout, &aw, &ah);
-    cairo_move_to(cr, bounds.x + bounds.width - aw - 20, bounds.y + 78);
-    cairo_set_source_rgba(cr, 0.85, 0.90, 0.96, 0.8);
-    pango_cairo_show_layout(cr, arr_layout);
-    pango_font_description_free(arr_desc);
-    g_object_unref(arr_layout);
-
-    // Day of week headers
-    static const char* days[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
-    int cell_w = 34;
-    int cell_h = 26;
-    int grid_x = bounds.x + 18;
-    int grid_y = bounds.y + 104;
-
-    PangoFontDescription* day_desc = pango_font_description_from_string((cfg.font_family + " 9").c_str());
-    for (int col = 0; col < 7; ++col) {
-        PangoLayout* day_layout = pango_cairo_create_layout(cr);
-        pango_layout_set_font_description(day_layout, day_desc);
-        pango_layout_set_text(day_layout, days[col], -1);
-
-        int dw, dh;
-        pango_layout_get_pixel_size(day_layout, &dw, &dh);
-        cairo_move_to(cr, grid_x + col * cell_w + (cell_w - dw) / 2.0, grid_y);
-        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.4);
-        pango_cairo_show_layout(cr, day_layout);
-        g_object_unref(day_layout);
+    if (m_month_label && m_view_month >= 1 && m_view_month <= 12) {
+        m_month_label->set_text(std::string(month_names[m_view_month - 1]) + " " + std::to_string(m_view_year));
     }
 
-    // Days grid
-    int first_wd = get_first_weekday_of_month(m_view_year, m_view_month);
-    int total_days = get_days_in_month(m_view_year, m_view_month);
+    if (!m_grid_layout) return;
+    m_grid_layout->clear_views();
 
-    int day_num = 1;
-    int start_cell = first_wd;
-    grid_y += 24;
+    int days_in_month = get_days_in_month(m_view_year, m_view_month);
+    int first_weekday = get_first_weekday_of_month(m_view_year, m_view_month);
 
-    for (int row = 0; row < 6 && day_num <= total_days; ++row) {
-        for (int col = 0; col < 7 && day_num <= total_days; ++col) {
-            if (row == 0 && col < start_cell) continue;
+    int prev_month = m_view_month - 1;
+    int prev_year = m_view_year;
+    if (prev_month < 1) {
+        prev_month = 12;
+        prev_year--;
+    }
+    int days_in_prev_month = get_days_in_month(prev_year, prev_month);
 
-            int cx = grid_x + col * cell_w;
-            int cy = grid_y + row * cell_h;
-            bool is_today = (m_view_year == m_cur_year && m_view_month == m_cur_month && day_num == m_cur_day);
+    int cur_day_num = 1;
+    for (int week = 0; week < 6; ++week) {
+        auto row = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
+        row->set_layout_params(miqu::LayoutParams(
+            static_cast<int>(miqu::LayoutDimension::MatchParent),
+            static_cast<int>(miqu::LayoutDimension::WrapContent)
+        ));
+        row->set_divider_spacing(3);
 
-            if (is_today) {
-                // Today highlighted circle
-                cairo_set_source_rgb(cr, 0.0, 0.90, 1.0); // #00e5ff
-                cairo_arc(cr, cx + cell_w / 2.0, cy + cell_h / 2.0, 11, 0, 2 * M_PI);
-                cairo_fill(cr);
-            }
-
-            PangoLayout* num_layout = pango_cairo_create_layout(cr);
-            pango_layout_set_font_description(num_layout, day_desc);
-            std::string d_str = std::to_string(day_num);
-            pango_layout_set_text(num_layout, d_str.c_str(), -1);
-
-            int nw, nh;
-            pango_layout_get_pixel_size(num_layout, &nw, &nh);
-            cairo_move_to(cr, cx + (cell_w - nw) / 2.0, cy + (cell_h - nh) / 2.0);
-
-            if (is_today) {
-                cairo_set_source_rgb(cr, 0.05, 0.07, 0.12);
+        for (int d = 0; d < 7; ++d) {
+            int slot = week * 7 + d;
+            if (slot < first_weekday) {
+                // Day from previous month
+                int prev_day = days_in_prev_month - (first_weekday - 1 - slot);
+                auto btn = miqu::ButtonBuilder::create()
+                    ->text(std::to_string(prev_day))
+                    ->flat(true)
+                    ->textSize(base_font_size)
+                    ->build();
+                btn->set_layout_params(miqu::LayoutParams(0, 30, 1.0f));
+                btn->set_padding(1, 0, 1, 0);
+                btn->set_on_click_listener([this]() {
+                    m_view_month--;
+                    if (m_view_month < 1) {
+                        m_view_month = 12;
+                        m_view_year--;
+                    }
+                    rebuild_calendar();
+                });
+                row->add_view(btn);
+            } else if (cur_day_num <= days_in_month) {
+                // Day in current view month
+                auto btn = miqu::ButtonBuilder::create()
+                    ->text(std::to_string(cur_day_num))
+                    ->textSize(base_font_size)
+                    ->build();
+                btn->set_layout_params(miqu::LayoutParams(0, 30, 1.0f));
+                btn->set_padding(1, 0, 1, 0);
+                if (cur_day_num == m_cur_day && m_view_month == m_cur_month && m_view_year == m_cur_year) {
+                    btn->set_primary(true);
+                } else {
+                    btn->set_flat(true);
+                }
+                row->add_view(btn);
+                cur_day_num++;
             } else {
-                cairo_set_source_rgba(cr, 0.88, 0.92, 0.96, 0.85);
+                // Day from next month
+                int next_day = slot - (first_weekday + days_in_month) + 1;
+                auto btn = miqu::ButtonBuilder::create()
+                    ->text(std::to_string(next_day))
+                    ->flat(true)
+                    ->textSize(base_font_size)
+                    ->build();
+                btn->set_layout_params(miqu::LayoutParams(0, 30, 1.0f));
+                btn->set_padding(1, 0, 1, 0);
+                btn->set_on_click_listener([this]() {
+                    m_view_month++;
+                    if (m_view_month > 12) {
+                        m_view_month = 1;
+                        m_view_year++;
+                    }
+                    rebuild_calendar();
+                });
+                row->add_view(btn);
             }
-            pango_cairo_show_layout(cr, num_layout);
-            g_object_unref(num_layout);
-
-            day_num++;
         }
+        m_grid_layout->add_view(row);
     }
 
-    pango_font_description_free(day_desc);
-}
-
-bool CalendarPopupView::on_mouse_move(int, int, const miqu::Rect&) {
     request_redraw();
-    return true;
-}
-
-bool CalendarPopupView::on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) {
-    if (button != miqu::MouseButton::Left || !pressed) return false;
-
-    // Check prev/next month buttons
-    if (ly >= bounds.y + 70 && ly <= bounds.y + 98) {
-        if (lx >= bounds.x + bounds.width - 50 && lx <= bounds.x + bounds.width - 32) {
-            // '<'
-            m_view_month--;
-            if (m_view_month < 1) { m_view_month = 12; m_view_year--; }
-            request_redraw();
-            return true;
-        } else if (lx >= bounds.x + bounds.width - 30 && lx <= bounds.x + bounds.width - 10) {
-            // '>'
-            m_view_month++;
-            if (m_view_month > 12) { m_view_month = 1; m_view_year++; }
-            request_redraw();
-            return true;
-        }
-    }
-
-    return false;
 }
 
 } // namespace miqubar

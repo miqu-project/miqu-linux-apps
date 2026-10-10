@@ -1,6 +1,7 @@
 #pragma once
 
-#include "miqutoolkit/view/view.hpp"
+#include "miqutoolkit/view/frame_layout.hpp"
+#include "miqutoolkit/view/linear_layout.hpp"
 #include "miqutoolkit/core/window.hpp"
 #include "../modules/start_button.hpp"
 #include "../modules/workspace_button.hpp"
@@ -16,17 +17,13 @@
 
 namespace miqubar {
 
-class BarRootView : public miqu::View {
+class BarRootView : public miqu::FrameLayout {
 public:
     BarRootView();
     ~BarRootView() override;
 
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-
-    bool on_mouse_enter(int lx, int ly);
-    bool on_mouse_leave();
+    void sync_theme();
     bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
-    bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
     bool on_scroll(double delta) override;
 
     void update_telemetry();
@@ -36,6 +33,10 @@ public:
     void toggle_calendar();
 
 private:
+    std::shared_ptr<miqu::LinearLayout> m_left_box;
+    std::shared_ptr<miqu::LinearLayout> m_center_box;
+    std::shared_ptr<miqu::LinearLayout> m_right_box;
+
     std::shared_ptr<StartButtonView> m_start_btn;
     std::shared_ptr<WorkspaceButtonView> m_ws_btn;
     std::shared_ptr<TaskbarView> m_taskbar;
@@ -55,11 +56,12 @@ private:
 
 class BarWindow {
 public:
-    BarWindow(miqu::AppEngine* engine);
+    explicit BarWindow(miqu::AppEngine* engine);
     ~BarWindow();
 
     bool init();
     void request_redraw();
+    void sync_theme();
 
 private:
     void start_telemetry_timer();

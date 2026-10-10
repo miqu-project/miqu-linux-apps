@@ -6,8 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Configure RPATH so the executable always finds libmiqutoolkit.so
+set(CMAKE_BUILD_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/../../miqutoolkit/build")
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;$ORIGIN/../lib")
-set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MIQUTOOLKIT REQUIRED IMPORTED_TARGET miqutoolkit)
@@ -34,11 +34,15 @@ target_link_libraries(miqubar PRIVATE
     pthread
 )
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../miqutoolkit/build/libmiqutoolkit.so")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../miqutoolkit/build/libmiqutoolkit.so")
+    target_link_libraries(miqubar PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../miqutoolkit/build/libmiqutoolkit.so")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../miqutoolkit/build/libmiqutoolkit.so")
     target_link_libraries(miqubar PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../miqutoolkit/build/libmiqutoolkit.so")
 endif()
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../miqutoolkit/include")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../miqutoolkit/include")
+    target_include_directories(miqubar BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../miqutoolkit/include")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../miqutoolkit/include")
     target_include_directories(miqubar BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../miqutoolkit/include")
 endif()
 

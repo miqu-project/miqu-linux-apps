@@ -1,146 +1,36 @@
 #include "workspace_button.hpp"
 #include "../config/bar_config.hpp"
+#include "miqutoolkit/core/config.hpp"
 #include "miqutoolkit/core/window.hpp"
-#include <pango/pangocairo.h>
+#include "miqutoolkit/view/card_view.hpp"
+#include "miqutoolkit/view/linear_layout.hpp"
 #include <cmath>
 #include <iostream>
 
 namespace miqubar {
 
-// Interactive floating flyout view for workspaces
-class WorkspaceFlyoutView : public miqu::View {
-public:
-    WorkspaceFlyoutView(std::vector<miqu::WorkspaceInfo> workspaces,
-                        size_t active_id,
-                        std::function<void(size_t)> on_select)
-        : m_workspaces(std::move(workspaces)),
-          m_active_id(active_id),
-          m_on_select(std::move(on_select)) {}
-
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override {
-        if (!cr) return;
-        const auto& cfg = BarConfig::get();
-
-        // Flyout backdrop
-        double r = cfg.corner_radius + 2;
-        cairo_new_sub_path(cr);
-        cairo_arc(cr, bounds.x + bounds.width - r, bounds.y + r, r, -M_PI / 2, 0);
-        cairo_arc(cr, bounds.x + bounds.width - r, bounds.y + bounds.height - r, r, 0, M_PI / 2);
-        cairo_arc(cr, bounds.x + r, bounds.y + bounds.height - r, r, M_PI / 2, M_PI);
-        cairo_arc(cr, bounds.x + r, bounds.y + r, r, M_PI, 3 * M_PI / 2);
-        cairo_close_path(cr);
-
-        cairo_set_source_rgba(cr, 0.08, 0.10, 0.15, 0.98);
-        cairo_fill_preserve(cr);
-        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.12);
-        cairo_set_line_width(cr, 1.0);
-        cairo_stroke(cr);
-
-        // Draw each workspace pill
-        int pill_w = 34;
-        int pill_h = 34;
-        int gap = 6;
-        int start_x = bounds.x + 8;
-        int start_y = bounds.y + 8;
-
-        for (size_t i = 0; i < m_workspaces.size(); ++i) {
-            const auto& ws = m_workspaces[i];
-            int px = start_x + static_cast<int>(i) * (pill_w + gap);
-            int py = start_y;
-            bool is_active = (ws.id == m_active_id);
-            bool is_hovered = (static_cast<int>(i) == m_hovered_index);
-
-            // Pill background
-            cairo_new_sub_path(cr);
-            double pr = 6.0;
-            cairo_arc(cr, px + pill_w - pr, py + pr, pr, -M_PI / 2, 0);
-            cairo_arc(cr, px + pill_w - pr, py + pill_h - pr, pr, 0, M_PI / 2);
-            cairo_arc(cr, px + pr, py + pill_h - pr, pr, M_PI / 2, M_PI);
-            cairo_arc(cr, px + pr, py + pr, pr, M_PI, 3 * M_PI / 2);
-            cairo_close_path(cr);
-
-            if (is_active) {
-                cairo_set_source_rgba(cr, 0.65, 0.33, 0.97, 0.35); // #a855f7
-                cairo_fill_preserve(cr);
-                cairo_set_source_rgb(cr, 0.65, 0.33, 0.97);
-                cairo_set_line_width(cr, 1.5);
-                cairo_stroke(cr);
-            } else if (is_hovered) {
-                cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.14);
-                cairo_fill(cr);
-            } else {
-                cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.05);
-                cairo_fill(cr);
-            }
-
-            // Draw workspace number
-            std::string num = std::to_string(ws.id);
-            PangoLayout* layout = pango_cairo_create_layout(cr);
-            PangoFontDescription* desc = pango_font_description_from_string((cfg.font_family + " Bold 11").c_str());
-            pango_layout_set_font_description(layout, desc);
-            pango_layout_set_text(layout, num.c_str(), -1);
-
-            int lw, lh;
-            pango_layout_get_pixel_size(layout, &lw, &lh);
-            cairo_move_to(cr, px + (pill_w - lw) / 2.0, py + (pill_h - lh) / 2.0);
-            if (is_active) {
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-            } else {
-                cairo_set_source_rgba(cr, 0.85, 0.90, 0.95, 0.8);
-            }
-            pango_cairo_show_layout(cr, layout);
-
-            pango_font_description_free(desc);
-            g_object_unref(layout);
-        }
-    }
-
-    bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override {
-        if (button != miqu::MouseButton::Left || !pressed) return false;
-
-        int pill_w = 34;
-        int gap = 6;
-        int start_x = bounds.x + 8;
-        int rel_x = lx - start_x;
-        if (rel_x >= 0 && ly >= bounds.y + 8 && ly <= bounds.y + 42) {
-            int idx = rel_x / (pill_w + gap);
-            if (idx >= 0 && static_cast<size_t>(idx) < m_workspaces.size()) {
-                if (m_on_select) {
-                    m_on_select(m_workspaces[idx].id);
-                }
-                return true;
-            }
-        }
-        return false;
-    }
-
-    bool on_mouse_move(int lx, int, const miqu::Rect& bounds) override {
-        int pill_w = 34;
-        int gap = 6;
-        int start_x = bounds.x + 8;
-        int rel_x = lx - start_x;
-        int idx = (rel_x >= 0) ? (rel_x / (pill_w + gap)) : -1;
-        if (idx != m_hovered_index) {
-            m_hovered_index = idx;
-            request_redraw();
-        }
-        return true;
-    }
-
-private:
-    std::vector<miqu::WorkspaceInfo> m_workspaces;
-    size_t m_active_id = 1;
-    int m_hovered_index = -1;
-    std::function<void(size_t)> m_on_select;
-};
-
 WorkspaceButtonView::WorkspaceButtonView() {
+    auto config = miqu::Config::get();
+    int fs = config->metrics.font_size > 0 ? config->metrics.font_size : 11;
+    set_flat(true);
+    set_text_size(fs);
+    set_bold(true);
+    set_padding(8, 2);
+    set_icon("user-desktop");
     sync_workspaces();
+
+    set_on_click_listener([this]() {
+        if (m_flyout_window) {
+            hide_flyout();
+        } else {
+            show_flyout();
+        }
+    });
+
     auto mgr = miqu::WorkspaceManager::get();
     if (mgr) {
         mgr->on_workspaces_changed([this]() {
             sync_workspaces();
-            request_redraw();
         });
     }
 }
@@ -165,129 +55,91 @@ void WorkspaceButtonView::sync_workspaces() {
         fallback.is_active = true;
         m_workspaces.push_back(fallback);
     }
+    set_text(std::to_string(m_active_id));
+    request_redraw();
 }
 
-miqu::Size WorkspaceButtonView::measure_size() const {
-    const auto& cfg = BarConfig::get();
-    // Compact button with room for icon + badge
-    return {cfg.height + 8, cfg.height};
-}
-
-void WorkspaceButtonView::draw(cairo_t* cr, const miqu::Rect& bounds) {
-    if (!cr) return;
-
-    const auto& cfg = BarConfig::get();
-    int pad = 4;
-    double x = bounds.x + pad;
-    double y = bounds.y + pad;
-    double w = bounds.width - (pad * 2);
-    double h = bounds.height - (pad * 2);
-    double r = cfg.corner_radius;
-
-    // Button Background
-    if (m_pressed || (m_flyout_window != nullptr)) {
-        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.16);
-    } else if (m_hovered) {
-        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.08);
-    } else {
-        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+void WorkspaceButtonView::show_flyout() {
+    if (m_flyout_window) {
+        hide_flyout();
+        return;
     }
+    sync_workspaces();
 
-    if (m_hovered || m_pressed || m_flyout_window) {
-        cairo_new_sub_path(cr);
-        cairo_arc(cr, x + w - r, y + r, r, -M_PI / 2, 0);
-        cairo_arc(cr, x + w - r, y + h - r, r, 0, M_PI / 2);
-        cairo_arc(cr, x + r, y + h - r, r, M_PI / 2, M_PI);
-        cairo_arc(cr, x + r, y + r, r, M_PI, 3 * M_PI / 2);
-        cairo_close_path(cr);
-        cairo_fill(cr);
-    }
+    auto config = miqu::Config::get();
+    auto card = std::make_shared<miqu::CardView>();
+    card->set_style(miqu::CardStyle::Outlined);
+    card->set_radius(config->metrics.corner_radius);
+    card->set_elevation(6);
 
-    // Draw Workspace Icon (2 stacked rectangles)
-    double icon_x = bounds.x + 8;
-    double icon_y = bounds.y + (bounds.height - 18) / 2.0;
+    auto row = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
+    row->set_divider_spacing(6);
+    row->set_padding(8, 8, 8, 8);
 
-    cairo_set_line_width(cr, 1.5);
-    cairo_set_source_rgba(cr, 0.85, 0.90, 0.96, 0.85);
-
-    // Front workspace screen
-    cairo_rectangle(cr, icon_x, icon_y + 3, 14, 11);
-    cairo_stroke(cr);
-    // Back layered screen
-    cairo_move_to(cr, icon_x + 3, icon_y + 3);
-    cairo_line_to(cr, icon_x + 3, icon_y);
-    cairo_line_to(cr, icon_x + 17, icon_y);
-    cairo_line_to(cr, icon_x + 17, icon_y + 8);
-    cairo_line_to(cr, icon_x + 14, icon_y + 8);
-    cairo_stroke(cr);
-
-    // Draw Active Workspace Badge pill on the right
-    double badge_x = icon_x + 20;
-    double badge_y = bounds.y + (bounds.height - 18) / 2.0;
-    double badge_w = 18;
-    double badge_h = 18;
-    double br = 5;
-
-    cairo_new_sub_path(cr);
-    cairo_arc(cr, badge_x + badge_w - br, badge_y + br, br, -M_PI / 2, 0);
-    cairo_arc(cr, badge_x + badge_w - br, badge_y + badge_h - br, br, 0, M_PI / 2);
-    cairo_arc(cr, badge_x + br, badge_y + badge_h - br, br, M_PI / 2, M_PI);
-    cairo_arc(cr, badge_x + br, badge_y + br, br, M_PI, 3 * M_PI / 2);
-    cairo_close_path(cr);
-
-    // Badge background in violet/purple accent
-    cairo_set_source_rgba(cr, 0.65, 0.33, 0.97, 0.85); // #a855f7
-    cairo_fill(cr);
-
-    // Badge text: active workspace number
-    std::string badge_num = std::to_string(m_active_id);
-    PangoLayout* layout = pango_cairo_create_layout(cr);
-    PangoFontDescription* desc = pango_font_description_from_string((cfg.font_family + " Bold 10").c_str());
-    pango_layout_set_font_description(layout, desc);
-    pango_layout_set_text(layout, badge_num.c_str(), -1);
-
-    int lw, lh;
-    pango_layout_get_pixel_size(layout, &lw, &lh);
-    cairo_move_to(cr, badge_x + (badge_w - lw) / 2.0, badge_y + (badge_h - lh) / 2.0);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    pango_cairo_show_layout(cr, layout);
-
-    pango_font_description_free(desc);
-    g_object_unref(layout);
-}
-
-bool WorkspaceButtonView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hov = bounds.contains(lx, ly);
-    if (hov != m_hovered) {
-        m_hovered = hov;
-        request_redraw();
-        if (m_hovered && BarConfig::get().hover_flyout && !m_flyout_window) {
-            show_flyout();
+    for (const auto& ws : m_workspaces) {
+        auto btn = std::make_shared<miqu::Button>(std::to_string(ws.id));
+        btn->set_text_size(11);
+        btn->set_bold(true);
+        btn->set_layout_params(miqu::LayoutParams(34, 34));
+        if (ws.id == m_active_id) {
+            btn->set_selected(true);
+        } else {
+            btn->set_flat(true);
         }
-    }
-    return hov;
-}
-
-bool WorkspaceButtonView::on_mouse_button(int, int, miqu::MouseButton button, bool pressed, const miqu::Rect&) {
-    if (button != miqu::MouseButton::Left) return false;
-
-    if (pressed) {
-        m_pressed = true;
-        request_redraw();
-        return true;
-    } else {
-        if (m_pressed) {
-            m_pressed = false;
-            if (m_flyout_window) {
-                hide_flyout();
-            } else {
-                show_flyout();
+        btn->set_on_click_listener([this, id = ws.id]() {
+            auto mgr = miqu::WorkspaceManager::get();
+            if (mgr) {
+                mgr->activate_workspace(id);
             }
-            request_redraw();
-            return true;
-        }
+            hide_flyout();
+            sync_workspaces();
+        });
+        row->add_view(btn);
     }
-    return false;
+    card->add_view(row);
+
+    int count = static_cast<int>(m_workspaces.size());
+    int flyout_w = count * 40 + 16;
+    int flyout_h = 50;
+
+    const auto& cfg = BarConfig::get();
+    bool is_top = (cfg.position == "top");
+    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Left)
+                                   : (miqu::Gravity::Bottom | miqu::Gravity::Left);
+    miqu::Margin margin;
+    margin.left = 12;
+    if (is_top) {
+        margin.top = cfg.height + 8;
+    } else {
+        margin.bottom = cfg.height + 8;
+    }
+
+    m_flyout_window = miqu::WindowBuilder::create()
+        ->role(miqu::WindowRole::LayerOverlay)
+        ->layerNamespace("miqubar-workspaces")
+        ->contentSize(flyout_w, flyout_h)
+        ->contentGravity(gravity)
+        ->contentMargin(margin)
+        ->dimBackdrop(false)
+        ->transparent(true)
+        ->exclusiveZone(-1)
+        ->closeOnClickOutside(true)
+        ->closeOnEscape(true)
+        ->contentView(card)
+        ->onClose([this]() {
+            m_flyout_window = nullptr;
+            request_redraw();
+        })
+        ->build();
+
+    if (m_flyout_window) m_flyout_window->show();
+}
+
+void WorkspaceButtonView::hide_flyout() {
+    if (m_flyout_window) {
+        m_flyout_window->close();
+        m_flyout_window = nullptr;
+    }
 }
 
 bool WorkspaceButtonView::on_scroll(double delta) {
@@ -301,75 +153,24 @@ bool WorkspaceButtonView::on_scroll(double delta) {
 
 void WorkspaceButtonView::cycle_workspace(int delta) {
     if (m_workspaces.empty()) return;
-
-    size_t cur_idx = 0;
+    int cur_idx = 0;
     for (size_t i = 0; i < m_workspaces.size(); ++i) {
         if (m_workspaces[i].id == m_active_id) {
-            cur_idx = i;
+            cur_idx = static_cast<int>(i);
             break;
         }
     }
 
-    int next_idx = static_cast<int>(cur_idx) + delta;
+    int next_idx = cur_idx + delta;
     if (next_idx < 0) next_idx = static_cast<int>(m_workspaces.size()) - 1;
-    if (static_cast<size_t>(next_idx) >= m_workspaces.size()) next_idx = 0;
+    if (next_idx >= static_cast<int>(m_workspaces.size())) next_idx = 0;
 
+    size_t target_id = m_workspaces[next_idx].id;
     auto mgr = miqu::WorkspaceManager::get();
     if (mgr) {
-        mgr->activate_workspace(m_workspaces[next_idx].id);
+        mgr->activate_workspace(target_id);
     }
-    m_active_id = m_workspaces[next_idx].id;
-    request_redraw();
-}
-
-void WorkspaceButtonView::show_flyout() {
     sync_workspaces();
-    int count = static_cast<int>(m_workspaces.size());
-    int flyout_w = std::max(120, 16 + count * 40);
-    int flyout_h = 50;
-
-    auto flyout_content = std::make_shared<WorkspaceFlyoutView>(
-        m_workspaces,
-        m_active_id,
-        [this](size_t id) {
-            auto mgr = miqu::WorkspaceManager::get();
-            if (mgr) mgr->activate_workspace(id);
-            m_active_id = id;
-            hide_flyout();
-            request_redraw();
-        }
-    );
-
-    uint32_t anchors = 2 | 4; // Bottom (2) | Left (4)
-    if (BarConfig::get().position == "top") {
-        anchors = 1 | 4; // Top (1) | Left (4)
-    }
-
-    m_flyout_window = miqu::WindowBuilder::create()
-        ->role(miqu::WindowRole::LayerOverlay)
-        ->layerNamespace("miqubar-workspaces")
-        ->contentSize(flyout_w, flyout_h)
-        ->anchors(anchors)
-        ->exclusiveZone(-1)
-        ->closeOnClickOutside(true)
-        ->closeOnEscape(true)
-        ->contentView(flyout_content)
-        ->onClose([this]() {
-            m_flyout_window = nullptr;
-            request_redraw();
-        })
-        ->build();
-
-    if (m_flyout_window) {
-        m_flyout_window->show();
-    }
-}
-
-void WorkspaceButtonView::hide_flyout() {
-    if (m_flyout_window) {
-        m_flyout_window->close();
-        m_flyout_window = nullptr;
-    }
 }
 
 } // namespace miqubar

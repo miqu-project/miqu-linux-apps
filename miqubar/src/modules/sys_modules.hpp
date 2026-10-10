@@ -1,18 +1,16 @@
 #pragma once
 
-#include "miqutoolkit/view/view.hpp"
+#include "miqutoolkit/view/button.hpp"
 #include <string>
 #include <functional>
 
 namespace miqubar {
 
-// CPU Usage
-class CpuModuleView : public miqu::View {
+// CPU Usage Button
+class CpuModuleView : public miqu::Button {
 public:
     CpuModuleView();
     void update_metrics();
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
 
 private:
     int m_cpu_pct = 0;
@@ -20,25 +18,21 @@ private:
     unsigned long long m_prev_total = 0;
 };
 
-// Memory Usage
-class MemoryModuleView : public miqu::View {
+// Memory Usage Button
+class MemoryModuleView : public miqu::Button {
 public:
     MemoryModuleView();
     void update_metrics();
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
 
 private:
     int m_mem_pct = 0;
 };
 
-// Battery Status
-class BatteryModuleView : public miqu::View {
+// Battery Status Button
+class BatteryModuleView : public miqu::Button {
 public:
     BatteryModuleView();
     void update_metrics();
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
 
 private:
     int m_capacity = 100;
@@ -46,15 +40,12 @@ private:
     bool m_present = false;
 };
 
-// Volume Control
-class VolumeModuleView : public miqu::View {
+// Volume Control Button
+class VolumeModuleView : public miqu::Button {
 public:
-    VolumeModuleView(std::function<void()> on_open_quick_settings);
+    explicit VolumeModuleView(std::function<void()> on_open_quick_settings);
     void update_metrics();
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
 
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
     bool on_scroll(double delta) override;
 
@@ -64,41 +55,25 @@ public:
 private:
     int m_volume = 70;
     bool m_muted = false;
-    bool m_hovered = false;
     std::function<void()> m_on_open_quick_settings;
 };
 
-// Windows-style Stacked Clock & Date
-class ClockModuleView : public miqu::View {
+// Windows-style Stacked Clock & Date Button
+class ClockModuleView : public miqu::Button {
 public:
-    ClockModuleView(std::function<void()> on_open_calendar);
+    explicit ClockModuleView(std::function<void()> on_open_calendar);
     void update_time();
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
-
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
-    bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
 
 private:
-    std::string m_time_str = "12:00";
-    std::string m_date_str = "01/01/2026";
-    bool m_hovered = false;
+    std::string m_time_str;
+    std::string m_date_str;
     std::function<void()> m_on_open_calendar;
 };
 
 // Windows-style "Show Desktop" peek button on far right edge
-class PeekButtonView : public miqu::View {
+class PeekButtonView : public miqu::Button {
 public:
     PeekButtonView();
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
-
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
-    bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
-
-private:
-    bool m_hovered = false;
-    bool m_pressed = false;
 };
 
 } // namespace miqubar

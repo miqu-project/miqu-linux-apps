@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
 
     s_engine->add_theme_change_listener([&bar]() {
         miqubar::BarConfig::get().sync_defaults_from_toolkit();
-        bar->request_redraw();
+        bar->sync_theme();
     });
 
     if (!bar->init()) {

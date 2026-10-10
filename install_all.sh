@@ -26,13 +26,18 @@ APPS=(
     "miqutest"
 )
 
+TOTAL=${#APPS[@]}
+
 echo "================================================================"
-echo " Starting build & install for miqu-linux-apps"
+echo " Starting complete build & install for miqu-linux-apps"
 echo " Target directory: $ROOT_DIR"
+echo " Total applications: $TOTAL"
 echo " Applications: ${APPS[*]}"
 echo "================================================================"
 
+COUNT=0
 for app in "${APPS[@]}"; do
+    COUNT=$((COUNT + 1))
     app_dir="$ROOT_DIR/$app"
     if [ ! -d "$app_dir" ]; then
         echo "==> Error: Directory $app_dir not found! Skipping..." >&2
@@ -46,10 +51,16 @@ for app in "${APPS[@]}"; do
 
     echo ""
     echo "----------------------------------------------------------------"
-    echo "==> Processing [$app]..."
+    echo "==> [$COUNT/$TOTAL] Building & installing $app..."
     echo "----------------------------------------------------------------"
     (
         cd "$app_dir"
+        if [ -f "build/CMakeCache.txt" ]; then
+            if ! grep -q "$app_dir" "build/CMakeCache.txt" 2>/dev/null; then
+                echo "==> Stale CMakeCache detected for $app. Resetting build directory..."
+                rm -rf build
+            fi
+        fi
         chmod +x make.sh
         ./make.sh "$@"
     )
@@ -58,5 +69,5 @@ done
 
 echo ""
 echo "================================================================"
-echo " All miqu-linux-apps built & installed successfully!"
+echo " All $TOTAL miqu-linux-apps built & installed successfully!"
 echo "================================================================"

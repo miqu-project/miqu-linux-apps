@@ -28,10 +28,10 @@ add_library(miquoverview SHARED ${SOURCES})
 
 target_include_directories(miquoverview PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../miquland/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../miquland/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../miquland/subprojects/scenefx/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../miquland/build
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../miquland/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../miquland/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../miquland/subprojects/scenefx/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../miquland/build
 )
 
 if (MIQULAND_FOUND)
