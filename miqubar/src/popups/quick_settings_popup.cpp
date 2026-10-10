@@ -32,11 +32,14 @@ void QuickSettingsPopupView::setup_ui() {
     ));
     root_layout->set_padding(16, 16, 16, 16);
 
+    int base_font_size = config->metrics.font_size > 0 ? config->metrics.font_size : 11;
+    int h3_font_size = config->metrics.h3_size > 0 ? config->metrics.h3_size : 13;
+
     // 1. Header Title
     auto title = TextViewBuilder::create()
         ->text("Quick Settings")
         ->bold(true)
-        ->textSize(11)
+        ->textSize(h3_font_size)
         ->textColor(config->colors.on_surface)
         ->build();
     title->set_layout_params(LayoutParams(
@@ -54,7 +57,7 @@ void QuickSettingsPopupView::setup_ui() {
     ));
     row1->set_margin(0, 0, 0, 8);
 
-    m_wifi_btn = ButtonBuilder::create()->text("Wi-Fi")->textSize(10)->build();
+    m_wifi_btn = ButtonBuilder::create()->text("Wi-Fi")->textSize(base_font_size)->build();
     m_wifi_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
     m_wifi_btn->set_margin(0, 0, 4, 0);
     m_wifi_btn->set_on_click_listener([this]() {
@@ -63,7 +66,7 @@ void QuickSettingsPopupView::setup_ui() {
         request_redraw();
     });
 
-    m_bt_btn = ButtonBuilder::create()->text("Bluetooth")->textSize(10)->build();
+    m_bt_btn = ButtonBuilder::create()->text("Bluetooth")->textSize(base_font_size)->build();
     m_bt_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
     m_bt_btn->set_margin(4, 0, 0, 0);
     m_bt_btn->set_on_click_listener([this]() {
@@ -83,7 +86,7 @@ void QuickSettingsPopupView::setup_ui() {
     ));
     row2->set_margin(0, 0, 0, 14);
 
-    m_night_btn = ButtonBuilder::create()->text("Night Light")->textSize(10)->build();
+    m_night_btn = ButtonBuilder::create()->text("Night Light")->textSize(base_font_size)->build();
     m_night_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
     m_night_btn->set_margin(0, 0, 4, 0);
     m_night_btn->set_on_click_listener([this]() {
@@ -92,7 +95,7 @@ void QuickSettingsPopupView::setup_ui() {
         request_redraw();
     });
 
-    m_power_btn = ButtonBuilder::create()->text("Power Save")->textSize(10)->build();
+    m_power_btn = ButtonBuilder::create()->text("Power Save")->textSize(base_font_size)->build();
     m_power_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
     m_power_btn->set_margin(4, 0, 0, 0);
     m_power_btn->set_on_click_listener([this]() {

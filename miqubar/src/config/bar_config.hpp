@@ -58,13 +58,6 @@ public:
     int corner_radius = 8;
     int border_width = 1;
 
-    miqu::Color color_bg{19, 23, 34, 245};
-    miqu::Color color_surface{26, 32, 48, 255};
-    miqu::Color color_surface_hover{35, 44, 66, 255};
-    miqu::Color color_text{237, 242, 247, 255};
-    miqu::Color color_text_muted{140, 150, 168, 255};
-    miqu::Color color_accent{255, 87, 120, 255};
-    miqu::Color color_border{255, 255, 255, 20};
 
 private:
     BarConfig();

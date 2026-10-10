@@ -27,14 +27,6 @@ void BarConfig::sync_defaults_from_toolkit() {
     if (tk->metrics.font_size > 0) font_size = tk->metrics.font_size;
     if (tk->metrics.corner_radius >= 0) corner_radius = tk->metrics.corner_radius;
     if (tk->metrics.border_width >= 0) border_width = tk->metrics.border_width;
-
-    color_bg = tk->colors.background;
-    color_surface = tk->colors.surface;
-    color_surface_hover = tk->colors.surface_variant;
-    color_text = tk->colors.on_surface;
-    color_text_muted = tk->colors.on_surface_variant;
-    color_accent = tk->colors.primary;
-    color_border = tk->colors.outline;
 }
 
 static std::string trim(const std::string& str) {
