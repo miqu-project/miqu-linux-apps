@@ -16,6 +16,8 @@ public:
     WorkspaceButtonView();
     ~WorkspaceButtonView() override;
 
+    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
     bool on_scroll(double delta) override;
 
     void show_flyout();
@@ -28,6 +30,7 @@ private:
     size_t m_active_id = 1;
     std::vector<miqu::WorkspaceInfo> m_workspaces;
     std::shared_ptr<miqu::Window> m_flyout_window;
+    bool m_is_hovered = false;
 };
 
 } // namespace miqubar

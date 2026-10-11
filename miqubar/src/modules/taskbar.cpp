@@ -39,12 +39,7 @@ public:
         int isz = cfg.icon_size > 0 ? cfg.icon_size : 24;
         set_icon_size(isz);
         set_padding(2, 2);
-
-        if (m_win.is_active) {
-            set_selected(true);
-        } else {
-            set_flat(true);
-        }
+        set_flat(true);
 
         set_on_click_listener([this]() {
             if (m_win.is_active) {
@@ -53,6 +48,47 @@ public:
                 m_win.activate();
             }
         });
+    }
+
+    void draw(cairo_t* cr, const miqu::Rect& bounds) override {
+        if (!is_visible() || !cr || bounds.width <= 0 || bounds.height <= 0) return;
+
+        auto config = miqu::Config::get();
+        const auto& cfg = BarConfig::get();
+        int radius = config->metrics.corner_radius > 0 ? config->metrics.corner_radius : 8;
+
+        // If window is active, paint a subtle translucent background tile
+        if (m_win.is_active) {
+            miqu::CardView::draw_rounded_rect(cr, bounds.x, bounds.y, bounds.width, bounds.height, radius);
+            auto active_bg = config->colors.surface_variant.with_alpha(0.35f);
+            cairo_set_source_rgba(cr, active_bg.r, active_bg.g, active_bg.b, active_bg.a);
+            cairo_fill(cr);
+        }
+
+        // Draw standard flat button (icon, text, hover state)
+        miqu::Button::draw(cr, bounds);
+
+        // Draw bottom indicator (pill for active, dot for inactive)
+        if (cfg.show_active_underline) {
+            bool is_top = (cfg.position == "top");
+            int pill_h = 3;
+            int ind_y = is_top ? (bounds.y + 2) : (bounds.y + bounds.height - pill_h - 2);
+
+            if (m_win.is_active) {
+                int pill_w = cfg.icon_only ? 18 : std::min(36, bounds.width - 24);
+                int pill_x = bounds.x + (bounds.width - pill_w) / 2;
+                miqu::CardView::draw_rounded_rect(cr, pill_x, ind_y, pill_w, pill_h, 1.5);
+                cairo_set_source_rgba(cr, config->colors.primary.r, config->colors.primary.g, config->colors.primary.b, config->colors.primary.a);
+                cairo_fill(cr);
+            } else {
+                int dot_w = 6;
+                int dot_x = bounds.x + (bounds.width - dot_w) / 2;
+                miqu::CardView::draw_rounded_rect(cr, dot_x, ind_y, dot_w, pill_h, 1.5);
+                auto ind_col = config->colors.on_surface_variant.with_alpha(0.55f);
+                cairo_set_source_rgba(cr, ind_col.r, ind_col.g, ind_col.b, ind_col.a);
+                cairo_fill(cr);
+            }
+        }
     }
 
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override {
@@ -213,6 +249,7 @@ void TaskbarView::show_context_menu(const miqu::WindowInfo& win, miqu::View* anc
     m_menu_window = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-taskbar-menu")
+        ->anchors(1 | 2 | 4 | 8)
         ->contentSize(menu_w, menu_h)
         ->contentGravity(gravity)
         ->contentMargin(margin)

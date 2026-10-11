@@ -26,7 +26,7 @@ public:
 
     // Workspaces
     bool show_workspace_btn = true;
-    std::string workspace_display = "badge"; // "badge" or "strip"
+    std::string workspace_display = "icon"; // "icon", "dots", or "badge"
     bool hover_flyout = true;
     bool scroll_switch = true;
 

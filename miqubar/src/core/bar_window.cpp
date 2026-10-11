@@ -23,18 +23,9 @@ BarRootView::BarRootView() {
         static_cast<int>(miqu::LayoutDimension::MatchParent),
         miqu::Gravity::Left | miqu::Gravity::CenterVertical
     ));
-
-    if (cfg.show_workspace_btn) {
-        m_ws_btn = std::make_shared<WorkspaceButtonView>();
-        m_left_box->add_view(m_ws_btn);
-    }
-    if (cfg.show_search) {
-        m_search_btn = std::make_shared<SearchButtonView>();
-        m_left_box->add_view(m_search_btn);
-    }
     add_view(m_left_box);
 
-    // 2. Center container (centered dock)
+    // 2. Center container (centered dock: workspace, start, search, windows)
     m_center_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
     m_center_box->set_gravity(miqu::Gravity::CenterVertical);
     m_center_box->set_divider_spacing(4);
@@ -44,9 +35,17 @@ BarRootView::BarRootView() {
         miqu::Gravity::CenterHorizontal | miqu::Gravity::CenterVertical
     ));
 
+    if (cfg.show_workspace_btn) {
+        m_ws_btn = std::make_shared<WorkspaceButtonView>();
+        m_center_box->add_view(m_ws_btn);
+    }
     if (cfg.show_start) {
         m_start_btn = std::make_shared<StartButtonView>();
         m_center_box->add_view(m_start_btn);
+    }
+    if (cfg.show_search) {
+        m_search_btn = std::make_shared<SearchButtonView>();
+        m_center_box->add_view(m_search_btn);
     }
     if (cfg.show_taskbar) {
         m_taskbar = std::make_shared<TaskbarView>();
@@ -159,6 +158,7 @@ void BarRootView::toggle_quick_settings() {
     m_quick_settings_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-quicksettings")
+        ->anchors(1 | 2 | 4 | 8)
         ->contentSize(300, 260)
         ->contentGravity(gravity)
         ->contentMargin(margin)
@@ -212,6 +212,7 @@ void BarRootView::toggle_calendar() {
     m_calendar_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-calendar")
+        ->anchors(1 | 2 | 4 | 8)
         ->contentSize(310, 360)
         ->contentGravity(gravity)
         ->contentMargin(margin)
