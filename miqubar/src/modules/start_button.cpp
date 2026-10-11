@@ -14,8 +14,10 @@ StartButtonView::StartButtonView() {
 
     set_circle(false);
     set_corner_radius(config->metrics.corner_radius);
-    set_icon_size(cfg.icon_size);
-    set_padding(5);
+    // Make start button icon prominent and bold (32px or icon_size + 4)
+    int start_sz = std::max(cfg.icon_size + 4, 32);
+    set_icon_size(start_sz);
+    set_padding(4);
 
     // Subtle rounded tile background like Windows 11 start button
     set_background_color(config->colors.surface_variant.with_alpha(0.35f));

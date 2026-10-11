@@ -14,15 +14,15 @@ public:
 
     // General
     std::string position = "bottom";
-    int height = 42;
-    int exclusive_zone = 42;
+    int height = 48;
+    int exclusive_zone = 48;
     float opacity = 0.96f;
 
     // Start & Taskbar
     bool show_start = true;
     std::string launcher_cmd = "miqulauncher";
     std::string start_icon = "miquland";
-    int icon_size = 24;
+    int icon_size = 28;
 
     // Workspaces
     bool show_workspace_btn = true;
