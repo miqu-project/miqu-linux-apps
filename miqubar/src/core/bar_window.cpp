@@ -16,6 +16,7 @@ BarRootView::BarRootView() {
     // 1. Left container (pinned left)
     m_left_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
     m_left_box->set_gravity(miqu::Gravity::CenterVertical);
+    m_left_box->set_divider_spacing(6);
     m_left_box->set_margin(6, 0, 0, 0);
     m_left_box->set_layout_params(miqu::LayoutParams(
         static_cast<int>(miqu::LayoutDimension::WrapContent),
@@ -26,6 +27,10 @@ BarRootView::BarRootView() {
     if (cfg.show_workspace_btn) {
         m_ws_btn = std::make_shared<WorkspaceButtonView>();
         m_left_box->add_view(m_ws_btn);
+    }
+    if (cfg.show_search) {
+        m_search_btn = std::make_shared<SearchButtonView>();
+        m_left_box->add_view(m_search_btn);
     }
     add_view(m_left_box);
 
@@ -99,6 +104,7 @@ BarRootView::~BarRootView() {
 void BarRootView::sync_theme() {
     auto config = miqu::Config::get();
     set_background_color(config->colors.background);
+    if (m_search_btn) m_search_btn->sync_style();
     request_redraw();
 }
 

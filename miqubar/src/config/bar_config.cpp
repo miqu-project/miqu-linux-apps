@@ -86,12 +86,18 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "exclusive_zone") exclusive_zone = std::stoi(val);
         else if (key == "opacity") opacity = std::clamp(std::stof(val), 0.0f, 1.0f);
         else if (key == "show_start") show_start = parse_bool(val);
+        else if (key == "start_icon") start_icon = val;
         else if (key == "launcher_cmd") launcher_cmd = val;
         else if (key == "icon_size") icon_size = std::stoi(val);
         else if (key == "show_workspace_btn") show_workspace_btn = parse_bool(val);
         else if (key == "workspace_display") workspace_display = val;
         else if (key == "hover_flyout") hover_flyout = parse_bool(val);
         else if (key == "scroll_switch") scroll_switch = parse_bool(val);
+        else if (key == "show_search") show_search = parse_bool(val);
+        else if (key == "search_style") search_style = val;
+        else if (key == "search_cmd") search_cmd = val;
+        else if (key == "search_width") search_width = std::max(40, std::stoi(val));
+        else if (key == "search_placeholder") search_placeholder = val;
         else if (key == "show_taskbar") show_taskbar = parse_bool(val);
         else if (key == "icon_only") icon_only = parse_bool(val);
         else if (key == "max_title_chars") max_title_chars = std::stoi(val);

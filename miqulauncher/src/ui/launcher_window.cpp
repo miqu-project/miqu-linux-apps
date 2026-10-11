@@ -1,6 +1,9 @@
 #include "launcher_window.hpp"
 #include "grid_item_view.hpp"
 #include "system/binary_manager.hpp"
+#include <miqutoolkit/view/list_item_view.hpp>
+#include <miqutoolkit/view/relative_layout.hpp>
+#include <miqutoolkit/view/image_button.hpp>
 #include <xkbcommon/xkbcommon-keysyms.h>
 #include <thread>
 
@@ -31,24 +34,26 @@ bool LauncherWindow::init() {
     }).detach();
 
     // 3. GridView setup
+    m_is_list_view = (m_config.view_mode == "list");
     m_grid = GridViewBuilder::create()
-        ->autoFit(m_config.cell_size)
-        ->cellHeight(m_config.cell_size)
-        ->spacing(m_config.spacing, m_config.spacing)
+        ->selectionBorder(m_config.selection_border)
         ->onItemClick([this](size_t index, std::shared_ptr<View> view) {
             handle_item_click(index, view);
         })
         ->build();
+    apply_view_mode();
 
     const auto& init_mode = m_config.modes[m_active_mode_index];
 
     // 4. Search View setup
+    int search_v_pad = std::max(2, (m_config.search_height - 24) / 2);
     m_search = SearchViewBuilder::create()
         ->title(init_mode.display_label)
         ->hint(init_mode.hint)
         ->focused(true)
-        ->padding(18, 12)
-        ->margin(0, 0, 0, 12)
+        ->focusBorder(m_config.search_focus_border)
+        ->elevation(m_config.search_elevation)
+        ->padding(16, search_v_pad)
         ->onQueryTextListener(
             [this](const std::string& query) {
                 refresh_current_mode();
@@ -63,13 +68,77 @@ bool LauncherWindow::init() {
         m_search->set_query(m_config.initial_query);
     }
 
+    // Mode cycle button (Cycles through modes in combo mode)
+    if (m_config.allow_mode_switch && m_config.modes.size() > 1) {
+        m_mode_cycle_btn = ImageButtonBuilder::create()
+            ->icon("view-refresh")
+            ->iconSize(18)
+            ->cornerRadius(config->metrics.corner_radius)
+            ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
+            ->hoverColor(config->colors.surface_variant.with_alpha(0.70f))
+            ->circle(false)
+            ->onClick([this]() {
+                if (m_config.modes.size() > 1) {
+                    switch_mode((m_active_mode_index + 1) % m_config.modes.size());
+                }
+            })
+            ->build();
+        m_mode_cycle_btn->set_padding(6);
+    }
+
+    // View toggle button (Grid vs. List)
+    m_view_toggle_btn = ImageButtonBuilder::create()
+        ->icon(m_is_list_view ? "view-grid" : "view-list")
+        ->iconSize(18)
+        ->cornerRadius(config->metrics.corner_radius)
+        ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
+        ->hoverColor(config->colors.surface_variant.with_alpha(0.70f))
+        ->circle(false)
+        ->onClick([this]() {
+            toggle_view_mode();
+        })
+        ->build();
+    m_view_toggle_btn->set_padding(6);
+
     // 5. Populate initial mode BEFORE constructing the Wayland window
     switch_mode(m_active_mode_index);
 
     // 6. Layout assembly
+    int card_inner_w = std::max(200, m_config.width - (m_config.edge_padding * 2));
+    int search_percent = std::clamp(m_config.search_width_percent, 20, 100);
+    int search_w = std::clamp((card_inner_w * search_percent) / 100, 280, card_inner_w - 56);
+
+    LayoutParams search_lp;
+    search_lp.width = search_w;
+    search_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    search_lp.center_horizontal = true;
+    search_lp.center_vertical = true;
+
+    LayoutParams toggle_lp;
+    toggle_lp.width = 36;
+    toggle_lp.height = 36;
+    toggle_lp.align_parent_end = true;
+    toggle_lp.center_vertical = true;
+
+    auto header_builder = RelativeLayoutBuilder::create()
+        ->addView(m_search, search_lp)
+        ->addView(m_view_toggle_btn, toggle_lp)
+        ->margin(0, 0, 0, 12);
+
+    if (m_mode_cycle_btn) {
+        LayoutParams cycle_lp;
+        cycle_lp.width = 36;
+        cycle_lp.height = 36;
+        cycle_lp.align_parent_start = true;
+        cycle_lp.center_vertical = true;
+        header_builder->addView(m_mode_cycle_btn, cycle_lp);
+    }
+
+    m_header = header_builder->build();
+
     auto contentLayout = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
-        ->addView(m_search, LayoutParams(static_cast<int>(LayoutDimension::MatchParent), static_cast<int>(LayoutDimension::WrapContent)))
+        ->addView(m_header, LayoutParams(static_cast<int>(LayoutDimension::MatchParent), static_cast<int>(LayoutDimension::WrapContent)))
         ->addView(m_grid, LayoutParams(1.0f))
         ->build();
 
@@ -77,7 +146,7 @@ bool LauncherWindow::init() {
         ->backgroundColor(config->colors.background)
         ->stroke(config->metrics.border_width, config->colors.outline)
         ->cornerRadius(config->metrics.corner_radius)
-        ->padding(16)
+        ->padding(m_config.edge_padding)
         ->addView(contentLayout, LayoutParams(static_cast<int>(LayoutDimension::MatchParent), static_cast<int>(LayoutDimension::MatchParent)))
         ->build();
 
@@ -117,6 +186,10 @@ bool LauncherWindow::init() {
     m_window = builder
         ->onKey([this](const KeyPressEvent& event) {
             if (!event.pressed) return;
+            if (event.has_ctrl() && (event.keysym == XKB_KEY_v || event.keysym == XKB_KEY_V)) {
+                toggle_view_mode();
+                return;
+            }
             if (m_config.allow_mode_switch && m_config.modes.size() > 1) {
                 if (event.has_shift() && event.keysym == XKB_KEY_Right) {
                     switch_mode((m_active_mode_index + 1) % m_config.modes.size());
@@ -201,15 +274,10 @@ void LauncherWindow::refresh_current_mode() {
 
     m_view_cache.assign(m_current_items.size(), nullptr);
 
-    // Pre-warm visible items for Frame 0 instant draw (exact visible viewport)
-    int stride = std::max(1, m_config.cell_size + m_config.spacing);
-    int cols = std::max(1, m_config.width / stride);
-    int grid_h = std::max(1, m_config.height - 80);
-    int rows = std::max(1, grid_h / stride);
-    size_t visible_capacity = static_cast<size_t>(cols * rows);
-    size_t prewarm_count = std::min<size_t>(m_current_items.size(), std::max<size_t>(10, visible_capacity));
+    // Pre-warm visible items for Frame 0 instant draw
+    size_t prewarm_count = std::min<size_t>(m_current_items.size(), 12);
     for (size_t i = 0; i < prewarm_count; ++i) {
-        m_view_cache[i] = std::make_shared<LauncherGridItemView>(m_current_items[i]);
+        m_view_cache[i] = create_item_view(i);
     }
 
     m_grid->set_item_provider(m_current_items.size(), [this](size_t index) -> std::shared_ptr<View> {
@@ -218,7 +286,7 @@ void LauncherWindow::refresh_current_mode() {
             m_view_cache.resize(m_current_items.size(), nullptr);
         }
         if (!m_view_cache[index]) {
-            m_view_cache[index] = std::make_shared<LauncherGridItemView>(m_current_items[index]);
+            m_view_cache[index] = create_item_view(index);
         }
         return m_view_cache[index];
     });
@@ -293,6 +361,69 @@ void LauncherWindow::handle_submit(const std::string& query) {
 
     if (auto item = m_grid->get_selected_item()) {
         handle_item_click(m_grid->get_selected_index(), item);
+    }
+}
+
+void LauncherWindow::apply_view_mode() {
+    if (!m_grid) return;
+
+    if (m_is_list_view) {
+        m_grid->set_num_columns(1);
+        m_grid->set_stretch_mode(StretchMode::ColumnWidth);
+        m_grid->set_cell_height(48);
+        m_grid->set_horizontal_spacing(0);
+        m_grid->set_vertical_spacing(4);
+    } else {
+        m_grid->set_auto_fit(m_config.cell_size);
+        m_grid->set_stretch_mode(StretchMode::ColumnWidth);
+        m_grid->set_cell_height(m_config.cell_size);
+        m_grid->set_horizontal_spacing(m_config.spacing);
+        m_grid->set_vertical_spacing(m_config.spacing);
+    }
+
+    if (m_view_toggle_btn) {
+        m_view_toggle_btn->set_icon(m_is_list_view ? "view-grid" : "view-list");
+    }
+
+    m_view_cache.clear();
+    m_view_cache.assign(m_current_items.size(), nullptr);
+
+    size_t prewarm_count = std::min<size_t>(m_current_items.size(), 12);
+    for (size_t i = 0; i < prewarm_count; ++i) {
+        m_view_cache[i] = create_item_view(i);
+    }
+
+    if (m_window) {
+        m_window->schedule_redraw();
+    }
+}
+
+void LauncherWindow::toggle_view_mode() {
+    m_is_list_view = !m_is_list_view;
+    apply_view_mode();
+}
+
+std::shared_ptr<View> LauncherWindow::create_item_view(size_t index) const {
+    if (index >= m_current_items.size()) return nullptr;
+    const auto& item = m_current_items[index];
+
+    if (m_is_list_view) {
+        std::string icon_src = item.icon_path.empty() ? item.icon_name : item.icon_path;
+        auto builder = ListItemViewBuilder::create()
+            ->title(item.title)
+            ->subtitle(item.subtitle)
+            ->iconSource(icon_src)
+            ->iconSize(28)
+            ->isImage(item.is_image);
+        if (item.is_image) {
+            builder->qualityMode(ImageQuality::ThumbnailFast);
+        }
+        if (item.is_active || item.subtitle.find("Active") != std::string::npos) {
+            builder->highlightSubtitle(true);
+        }
+        return builder->build();
+    } else {
+        return std::make_shared<LauncherGridItemView>(item);
     }
 }
 

@@ -18,16 +18,24 @@ public:
     int exclusive_zone = 42;
     float opacity = 0.96f;
 
-    // Start
+    // Start & Taskbar
     bool show_start = true;
     std::string launcher_cmd = "miqulauncher";
-    int icon_size = 22;
+    std::string start_icon = "miquland";
+    int icon_size = 24;
 
     // Workspaces
     bool show_workspace_btn = true;
     std::string workspace_display = "badge"; // "badge" or "strip"
     bool hover_flyout = true;
     bool scroll_switch = true;
+
+    // Search
+    bool show_search = true;
+    std::string search_style = "pill"; // "pill" or "icon"
+    std::string search_cmd = "miqulauncher";
+    int search_width = 160;
+    std::string search_placeholder = "Search";
 
     // Taskbar
     bool show_taskbar = true;

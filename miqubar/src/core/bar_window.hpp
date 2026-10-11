@@ -5,6 +5,7 @@
 #include "miqutoolkit/core/window.hpp"
 #include "../modules/start_button.hpp"
 #include "../modules/workspace_button.hpp"
+#include "../modules/search_button.hpp"
 #include "../modules/taskbar.hpp"
 #include "../modules/sys_modules.hpp"
 #include "../popups/quick_settings_popup.hpp"
@@ -39,6 +40,7 @@ private:
 
     std::shared_ptr<StartButtonView> m_start_btn;
     std::shared_ptr<WorkspaceButtonView> m_ws_btn;
+    std::shared_ptr<SearchButtonView> m_search_btn;
     std::shared_ptr<TaskbarView> m_taskbar;
     std::shared_ptr<CpuModuleView> m_cpu;
     std::shared_ptr<MemoryModuleView> m_mem;

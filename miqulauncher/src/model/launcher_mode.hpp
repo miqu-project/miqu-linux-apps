@@ -34,8 +34,15 @@ struct LauncherConfig {
     int height = 460;
     int cell_size = 100;
     int spacing = 10;
+    int edge_padding = 16;
     bool dim_backdrop = false;
     bool show_subtitles = true;
+    bool selection_border = false;
+    bool search_focus_border = false;
+    int search_width_percent = 55;
+    int search_height = 36;
+    int search_elevation = 0;
+    std::string view_mode = "grid"; // "grid" or "list"
     std::string icon_theme = "";
     std::string config_path = "";
 };

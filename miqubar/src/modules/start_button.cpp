@@ -1,8 +1,10 @@
 #include "start_button.hpp"
 #include "../config/bar_config.hpp"
 #include "miqutoolkit/core/config.hpp"
+#include "miqutoolkit/view/image_view.hpp"
 #include <unistd.h>
 #include <sys/wait.h>
+#include <filesystem>
 
 namespace miqubar {
 
@@ -13,9 +15,28 @@ StartButtonView::StartButtonView() {
     set_circle(false);
     set_corner_radius(config->metrics.corner_radius);
     set_icon_size(cfg.icon_size);
-    // Use standard Freedesktop application icon (start-here) or miqu logo
-    set_icon("start-here");
-    set_padding(4);
+    set_padding(5);
+
+    // Subtle rounded tile background like Windows 11 start button
+    set_background_color(config->colors.surface_variant.with_alpha(0.35f));
+    set_hover_color(config->colors.surface_variant.with_alpha(0.70f));
+
+    // Resolve beautiful colorful Miqu logo or configured start icon
+    std::string icon_to_use = !cfg.start_icon.empty() ? cfg.start_icon : "miquland";
+    std::string resolved = miqu::ImageView::resolve_icon_path(icon_to_use);
+    if (resolved.empty()) {
+        if (std::filesystem::exists("/usr/share/icons/hicolor/256x256/apps/miquland.png")) {
+            resolved = "/usr/share/icons/hicolor/256x256/apps/miquland.png";
+        } else if (std::filesystem::exists("assets/miquland.png")) {
+            resolved = "assets/miquland.png";
+        }
+    }
+
+    if (!resolved.empty()) {
+        set_image_resource(resolved);
+    } else {
+        set_icon(icon_to_use);
+    }
 
     set_on_click_listener([this]() {
         launch_menu();

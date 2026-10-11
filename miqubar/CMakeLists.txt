@@ -18,6 +18,7 @@ add_executable(miqubar
     src/core/bar_window.cpp
     src/modules/start_button.cpp
     src/modules/workspace_button.cpp
+    src/modules/search_button.cpp
     src/modules/taskbar.cpp
     src/modules/sys_modules.cpp
     src/popups/quick_settings_popup.cpp
