@@ -109,6 +109,8 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "hover_delay_ms") hover_delay_ms = std::max(50, std::stoi(val));
         else if (key == "show_cpu") show_cpu = parse_bool(val);
         else if (key == "show_memory") show_memory = parse_bool(val);
+        else if (key == "show_network") show_network = parse_bool(val);
+        else if (key == "show_bluetooth") show_bluetooth = parse_bool(val);
         else if (key == "show_volume") show_volume = parse_bool(val);
         else if (key == "show_battery") show_battery = parse_bool(val);
         else if (key == "show_clock") show_clock = parse_bool(val);

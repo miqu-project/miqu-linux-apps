@@ -142,7 +142,7 @@ void TaskbarView::sync_windows() {
     }
 
     const auto& cfg = BarConfig::get();
-    int item_h = cfg.height - 4;
+    int item_h = std::max(28, cfg.height - 8);
     int item_w = cfg.icon_only ? item_h : cfg.item_max_width;
 
     for (const auto& win : m_windows) {

@@ -49,8 +49,10 @@ public:
     int hover_delay_ms = 300;
 
     // Modules
-    bool show_cpu = true;
-    bool show_memory = true;
+    bool show_cpu = false;
+    bool show_memory = false;
+    bool show_network = true;
+    bool show_bluetooth = true;
     bool show_volume = true;
     bool show_battery = true;
     bool show_clock = true;

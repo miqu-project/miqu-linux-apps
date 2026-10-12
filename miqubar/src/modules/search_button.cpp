@@ -25,21 +25,18 @@ void SearchButtonView::sync_style() {
     set_text_size(fs);
     set_radius(config->metrics.corner_radius);
 
+    int item_h = std::max(28, cfg.height - 8);
     if (cfg.search_style == "icon") {
         set_text("");
         set_flat(true);
         set_padding(6, 4);
-        set_layout_params(miqu::LayoutParams(
-            static_cast<int>(miqu::LayoutDimension::WrapContent),
-            static_cast<int>(miqu::LayoutDimension::WrapContent)
-        ));
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
     } else {
         // "pill" style: modern capsule with subtle outline and soft placeholder
         set_text(cfg.search_placeholder);
         set_style(miqu::ButtonStyle::Standard);
 
-        int pill_h = std::max(26, cfg.height - 14);
-        set_radius(pill_h / 2);
+        set_radius(item_h / 2);
 
         // Soft, non-prominent text color
         set_text_color(config->colors.on_surface_variant);
@@ -56,7 +53,7 @@ void SearchButtonView::sync_style() {
 
         set_layout_params(miqu::LayoutParams(
             cfg.search_width,
-            pill_h
+            item_h
         ));
     }
 

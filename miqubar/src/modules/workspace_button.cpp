@@ -16,7 +16,7 @@ WorkspaceButtonView::WorkspaceButtonView() {
     set_icon("");
 
     const auto& cfg = BarConfig::get();
-    int item_h = cfg.height - 4;
+    int item_h = std::max(28, cfg.height - 8);
     set_layout_params(miqu::LayoutParams(item_h, item_h));
 
     sync_workspaces();

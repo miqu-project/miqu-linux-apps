@@ -11,18 +11,18 @@ using namespace miqu;
 
 namespace miqubar {
 
-QuickSettingsPopupView::QuickSettingsPopupView(std::function<void()> on_close)
+SoundControlPopupView::SoundControlPopupView(std::function<void()> on_close)
     : m_on_close(std::move(on_close)) {
     update_audio_info();
     setup_ui();
 }
 
-void QuickSettingsPopupView::setup_ui() {
+void SoundControlPopupView::setup_ui() {
     auto config = Config::get();
 
     set_style(CardStyle::Outlined);
-    set_radius(config->metrics.corner_radius);
-    set_elevation(6);
+    set_radius(config->metrics.corner_radius > 0 ? config->metrics.corner_radius + 4 : 12);
+    set_elevation(8);
 
     // Root layout
     auto root_layout = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -30,87 +30,46 @@ void QuickSettingsPopupView::setup_ui() {
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
     ));
-    root_layout->set_padding(16, 16, 16, 16);
+    root_layout->set_padding(20, 20, 20, 20);
 
-    int base_font_size = config->metrics.font_size > 0 ? config->metrics.font_size : 11;
-    int h3_font_size = config->metrics.h3_size > 0 ? config->metrics.h3_size : 13;
+    int h2_font_size = config->metrics.h2_size > 0 ? config->metrics.h2_size : 15;
 
-    // 1. Header Title
+    // 1. Header Row (Title "Sound Output" + Dedicated Mute Button)
+    auto header_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    header_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    header_row->set_gravity(Gravity::CenterVertical);
+    header_row->set_margin(0, 0, 0, 14);
+
     auto title = TextViewBuilder::create()
-        ->text("Quick Settings")
+        ->text("Sound Output")
         ->bold(true)
-        ->textSize(h3_font_size)
+        ->textSize(h2_font_size)
         ->textColor(config->colors.on_surface)
         ->build();
-    title->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    title->set_margin(0, 0, 0, 12);
-    root_layout->add_view(title);
+    title->set_layout_params(LayoutParams(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+    header_row->add_view(title);
 
-    // 2. 2x2 Toggle Tiles
-    auto row1 = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    row1->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    row1->set_margin(0, 0, 0, 8);
-
-    m_wifi_btn = ButtonBuilder::create()->text("Wi-Fi")->textSize(base_font_size)->build();
-    m_wifi_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
-    m_wifi_btn->set_margin(0, 0, 4, 0);
-    m_wifi_btn->set_on_click_listener([this]() {
-        m_wifi_on = !m_wifi_on;
-        update_tile_styles();
-        request_redraw();
+    // Dedicated Mute button with dynamic icon only
+    m_mute_btn = ButtonBuilder::create()
+        ->text("")
+        ->icon(m_muted ? "audio-volume-muted" : "audio-volume-high")
+        ->iconSize(22)
+        ->build();
+    m_mute_btn->set_flat(!m_muted);
+    m_mute_btn->set_selected(m_muted);
+    m_mute_btn->set_padding(4);
+    m_mute_btn->set_layout_params(LayoutParams(34, 34));
+    m_mute_btn->set_on_click_listener([this]() {
+        toggle_mute();
     });
+    header_row->add_view(m_mute_btn);
 
-    m_bt_btn = ButtonBuilder::create()->text("Bluetooth")->textSize(base_font_size)->build();
-    m_bt_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
-    m_bt_btn->set_margin(4, 0, 0, 0);
-    m_bt_btn->set_on_click_listener([this]() {
-        m_bluetooth_on = !m_bluetooth_on;
-        update_tile_styles();
-        request_redraw();
-    });
+    root_layout->add_view(header_row);
 
-    row1->add_view(m_wifi_btn);
-    row1->add_view(m_bt_btn);
-    root_layout->add_view(row1);
-
-    auto row2 = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    row2->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    row2->set_margin(0, 0, 0, 14);
-
-    m_night_btn = ButtonBuilder::create()->text("Night Light")->textSize(base_font_size)->build();
-    m_night_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
-    m_night_btn->set_margin(0, 0, 4, 0);
-    m_night_btn->set_on_click_listener([this]() {
-        m_night_light_on = !m_night_light_on;
-        update_tile_styles();
-        request_redraw();
-    });
-
-    m_power_btn = ButtonBuilder::create()->text("Power Save")->textSize(base_font_size)->build();
-    m_power_btn->set_layout_params(LayoutParams(0, 38, 1.0f));
-    m_power_btn->set_margin(4, 0, 0, 0);
-    m_power_btn->set_on_click_listener([this]() {
-        m_power_save_on = !m_power_save_on;
-        update_tile_styles();
-        request_redraw();
-    });
-
-    row2->add_view(m_night_btn);
-    row2->add_view(m_power_btn);
-    root_layout->add_view(row2);
-
-    update_tile_styles();
-
-    // 3. Volume Section
+    // 2. Volume Label & Slider
     std::string vol_text = "Volume: " + std::to_string(m_volume) + "%";
     if (m_muted) vol_text += " [MUTED]";
     m_vol_label = TextViewBuilder::create()
@@ -122,13 +81,13 @@ void QuickSettingsPopupView::setup_ui() {
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_vol_label->set_margin(0, 0, 0, 6);
+    m_vol_label->set_margin(0, 0, 0, 10);
     root_layout->add_view(m_vol_label);
 
     m_vol_slider = SliderBuilder::create()
         ->progress(std::clamp(m_volume / 100.0f, 0.0f, 1.0f))
-        ->trackHeight(6)
-        ->thumbRadius(8)
+        ->trackHeight(8)
+        ->thumbRadius(9)
         ->progressColor(config->colors.primary)
         ->thumbColor(config->colors.primary)
         ->build();
@@ -136,7 +95,7 @@ void QuickSettingsPopupView::setup_ui() {
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    m_vol_slider->set_margin(2, 2, 2, 2);
+    m_vol_slider->set_margin(2, 4, 2, 4);
     m_vol_slider->set_on_value_changed_listener([this](float val, bool from_user) {
         int pct = static_cast<int>(std::round(val * 100.0f));
         pct = std::clamp(pct, 0, 100);
@@ -155,19 +114,7 @@ void QuickSettingsPopupView::setup_ui() {
     add_view(root_layout);
 }
 
-void QuickSettingsPopupView::update_tile_styles() {
-    auto apply = [](const std::shared_ptr<miqu::Button>& btn, bool active) {
-        if (!btn) return;
-        btn->set_selected(active);
-        btn->set_outlined(!active);
-    };
-    apply(m_wifi_btn, m_wifi_on);
-    apply(m_bt_btn, m_bluetooth_on);
-    apply(m_night_btn, m_night_light_on);
-    apply(m_power_btn, m_power_save_on);
-}
-
-void QuickSettingsPopupView::update_audio_info() {
+void SoundControlPopupView::update_audio_info() {
     FILE* fp = popen("wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null", "r");
     if (fp) {
         char buf[64];
@@ -184,15 +131,32 @@ void QuickSettingsPopupView::update_audio_info() {
     }
 }
 
-void QuickSettingsPopupView::set_volume(int pct) {
+void SoundControlPopupView::set_volume(int pct) {
     m_volume = std::clamp(pct, 0, 100);
     std::string cmd = "wpctl set-volume @DEFAULT_AUDIO_SINK@ " + std::to_string(m_volume / 100.0f) + " 2>/dev/null";
     std::system(cmd.c_str());
     request_redraw();
 }
 
-miqu::Size QuickSettingsPopupView::measure_size() const {
-    return {300, 260};
+void SoundControlPopupView::toggle_mute() {
+    std::system("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null || pactl set-sink-mute @DEFAULT_SINK@ toggle 2>/dev/null");
+    update_audio_info();
+    if (m_vol_label) {
+        std::string text = "Volume: " + std::to_string(m_volume) + "%";
+        if (m_muted) text += " [MUTED]";
+        m_vol_label->set_text(text);
+    }
+    if (m_mute_btn) {
+        m_mute_btn->set_text("");
+        m_mute_btn->set_icon(m_muted ? "audio-volume-muted" : "audio-volume-high");
+        m_mute_btn->set_flat(!m_muted);
+        m_mute_btn->set_selected(m_muted);
+    }
+    request_redraw();
+}
+
+miqu::Size SoundControlPopupView::measure_size() const {
+    return {340, 150};
 }
 
 } // namespace miqubar

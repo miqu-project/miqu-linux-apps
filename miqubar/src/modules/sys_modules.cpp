@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <pango/pangocairo.h>
 
 namespace miqubar {
 
@@ -24,10 +25,14 @@ static int get_toolkit_font_size() {
 // CPU Module
 // ==========================================
 CpuModuleView::CpuModuleView() {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
     set_flat(true);
     set_text_size(get_toolkit_font_size());
     set_padding(4, 2);
     set_icon("cpu");
+    set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
     update_metrics();
 }
 
@@ -58,10 +63,14 @@ void CpuModuleView::update_metrics() {
 // Memory Module
 // ==========================================
 MemoryModuleView::MemoryModuleView() {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
     set_flat(true);
     set_text_size(get_toolkit_font_size());
     set_padding(4, 2);
     set_icon("media-flash");
+    set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
     update_metrics();
 }
 
@@ -93,9 +102,15 @@ void MemoryModuleView::update_metrics() {
 // Battery Module
 // ==========================================
 BatteryModuleView::BatteryModuleView() {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
     set_flat(true);
     set_text_size(get_toolkit_font_size());
-    set_padding(4, 2);
+    set_icon_size(20);
+    set_padding(6, 2);
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
+    set_text(""); // no percentage text
     update_metrics();
 }
 
@@ -122,20 +137,275 @@ void BatteryModuleView::update_metrics() {
         m_charging = (stat == "Charging");
     }
 
-    set_icon(m_charging ? "battery-charging" : "battery");
-    set_text(std::to_string(m_capacity) + "%");
+    // Dynamic filling battery icon
+    if (m_charging) {
+        if (m_capacity < 15) {
+            set_icon("battery-empty-charging");
+        } else if (m_capacity < 35) {
+            set_icon("battery-low-charging");
+        } else if (m_capacity < 75) {
+            set_icon("battery-good-charging");
+        } else {
+            set_icon("battery-full-charging");
+        }
+    } else {
+        if (m_capacity < 10) {
+            set_icon("battery-empty");
+        } else if (m_capacity < 25) {
+            set_icon("battery-caution");
+        } else if (m_capacity < 45) {
+            set_icon("battery-low");
+        } else if (m_capacity < 80) {
+            set_icon("battery-good");
+        } else {
+            set_icon("battery-full");
+        }
+    }
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+    if (m_is_hovered) {
+        set_text(std::to_string(m_capacity) + "%");
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text(""); // icon-only when not hovered
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
+    }
     request_redraw();
+}
+
+bool BatteryModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    bool hovered = bounds.contains(miqu::Point(lx, ly));
+    if (hovered != m_is_hovered) {
+        m_is_hovered = hovered;
+        const auto& cfg = BarConfig::get();
+        int item_h = std::max(28, cfg.height - 8);
+        if (m_is_hovered) {
+            set_text(std::to_string(m_capacity) + "%");
+            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+        } else {
+            set_text("");
+            set_layout_params(miqu::LayoutParams(item_h, item_h));
+        }
+    }
+    return miqu::Button::on_mouse_move(lx, ly, bounds);
+}
+
+// ==========================================
+// Network Module (Wi-Fi / Ethernet)
+// ==========================================
+NetworkModuleView::NetworkModuleView(std::function<void()> on_open_network)
+    : m_on_open_network(std::move(on_open_network)) {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
+    set_flat(true);
+    set_text_size(get_toolkit_font_size());
+    set_icon_size(20);
+    set_padding(6, 2);
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
+    set_text(""); // icon-only
+    set_on_click_listener(m_on_open_network);
+    update_metrics();
+}
+
+void NetworkModuleView::update_metrics() {
+    m_connected = false;
+    m_is_wifi = false;
+    m_ssid.clear();
+    m_signal_strength = 0;
+
+    FILE* fp = popen("nmcli -t -f TYPE,STATE,CONNECTION dev 2>/dev/null", "r");
+    if (fp) {
+        char buf[256];
+        while (fgets(buf, sizeof(buf), fp)) {
+            std::string line(buf);
+            if (!line.empty() && line.back() == '\n') line.pop_back();
+
+            // e.g. "wifi:connected:MyWiFi" or "ethernet:connected:Wired"
+            size_t p1 = line.find(':');
+            if (p1 == std::string::npos) continue;
+            std::string type = line.substr(0, p1);
+            size_t p2 = line.find(':', p1 + 1);
+            if (p2 == std::string::npos) continue;
+            std::string state = line.substr(p1 + 1, p2 - p1 - 1);
+            std::string conn = line.substr(p2 + 1);
+
+            if (state == "connected") {
+                m_connected = true;
+                m_ssid = conn;
+                if (type == "wifi") {
+                    m_is_wifi = true;
+                    break;
+                } else if (type == "ethernet") {
+                    m_is_wifi = false;
+                    break;
+                }
+            }
+        }
+        pclose(fp);
+    }
+
+    if (m_connected) {
+        if (m_is_wifi) {
+            set_icon("network-wireless");
+        } else {
+            set_icon("network-wired");
+        }
+    } else {
+        set_icon("network-wireless-disconnected");
+    }
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+    if (m_is_hovered) {
+        set_text(m_connected ? (!m_ssid.empty() ? m_ssid : (m_is_wifi ? "Wi-Fi" : "Wired")) : "Disconnected");
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text(""); // icon-only when not hovered
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
+    }
+    request_redraw();
+}
+
+bool NetworkModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    bool hovered = bounds.contains(miqu::Point(lx, ly));
+    if (hovered != m_is_hovered) {
+        m_is_hovered = hovered;
+        const auto& cfg = BarConfig::get();
+        int item_h = std::max(28, cfg.height - 8);
+        if (m_is_hovered) {
+            set_text(m_connected ? (!m_ssid.empty() ? m_ssid : (m_is_wifi ? "Wi-Fi" : "Wired")) : "Disconnected");
+            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+        } else {
+            set_text("");
+            set_layout_params(miqu::LayoutParams(item_h, item_h));
+        }
+    }
+    return miqu::Button::on_mouse_move(lx, ly, bounds);
+}
+
+// ==========================================
+// Bluetooth Module
+// ==========================================
+BluetoothModuleView::BluetoothModuleView(std::function<void()> on_open_bluetooth)
+    : m_on_open_bluetooth(std::move(on_open_bluetooth)) {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
+    set_flat(true);
+    set_text_size(get_toolkit_font_size());
+    set_icon_size(20);
+    set_padding(6, 2);
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
+    set_text(""); // icon-only
+    set_on_click_listener(m_on_open_bluetooth);
+    update_metrics();
+}
+
+void BluetoothModuleView::update_metrics() {
+    m_powered = false;
+    m_connected = false;
+    m_connected_device.clear();
+
+    FILE* fp = popen("bluetoothctl show 2>/dev/null", "r");
+    if (fp) {
+        char buf[256];
+        while (fgets(buf, sizeof(buf), fp)) {
+            std::string line(buf);
+            if (line.find("Powered: yes") != std::string::npos) {
+                m_powered = true;
+                break;
+            }
+        }
+        pclose(fp);
+    }
+
+    if (m_powered) {
+        FILE* dev_fp = popen("bluetoothctl devices Connected 2>/dev/null", "r");
+        if (dev_fp) {
+            char buf[256];
+            if (fgets(buf, sizeof(buf), dev_fp)) {
+                std::string line(buf);
+                if (!line.empty() && line.back() == '\n') line.pop_back();
+                // Device XX:XX:XX:XX:XX:XX DeviceName
+                size_t p = line.find("Device ");
+                if (p != std::string::npos) {
+                    size_t p2 = line.find(' ', p + 7);
+                    if (p2 != std::string::npos) {
+                        m_connected_device = line.substr(p2 + 1);
+                        m_connected = true;
+                    }
+                }
+            }
+            pclose(dev_fp);
+        }
+    }
+
+    if (!m_powered) {
+        set_icon("bluetooth-disabled");
+    } else if (m_connected) {
+        set_icon("bluetooth-active");
+    } else {
+        set_icon("bluetooth");
+    }
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+    if (m_is_hovered) {
+        if (!m_powered) {
+            set_text("Off");
+        } else if (m_connected) {
+            set_text(!m_connected_device.empty() ? m_connected_device : "Connected");
+        } else {
+            set_text("On");
+        }
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text(""); // icon-only when not hovered
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
+    }
+    request_redraw();
+}
+
+bool BluetoothModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    bool hovered = bounds.contains(miqu::Point(lx, ly));
+    if (hovered != m_is_hovered) {
+        m_is_hovered = hovered;
+        const auto& cfg = BarConfig::get();
+        int item_h = std::max(28, cfg.height - 8);
+        if (m_is_hovered) {
+            if (!m_powered) {
+                set_text("Off");
+            } else if (m_connected) {
+                set_text(!m_connected_device.empty() ? m_connected_device : "Connected");
+            } else {
+                set_text("On");
+            }
+            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+        } else {
+            set_text("");
+            set_layout_params(miqu::LayoutParams(item_h, item_h));
+        }
+    }
+    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 // ==========================================
 // Volume Module
 // ==========================================
-VolumeModuleView::VolumeModuleView(std::function<void()> on_open_quick_settings)
-    : m_on_open_quick_settings(std::move(on_open_quick_settings)) {
+VolumeModuleView::VolumeModuleView(std::function<void()> on_open_sound)
+    : m_on_open_sound(std::move(on_open_sound)) {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
     set_flat(true);
     set_text_size(get_toolkit_font_size());
-    set_padding(4, 2);
-    set_on_click_listener(m_on_open_quick_settings);
+    set_icon_size(20);
+    set_padding(6, 2);
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
+    set_text(""); // icon-only
+    set_on_click_listener(m_on_open_sound);
     update_metrics();
 }
 
@@ -157,18 +427,41 @@ void VolumeModuleView::update_metrics() {
 
     if (m_muted || m_volume == 0) {
         set_icon("audio-volume-muted");
-        set_text("Mute");
     } else if (m_volume < 33) {
         set_icon("audio-volume-low");
-        set_text(std::to_string(m_volume) + "%");
-    } else if (m_volume < 66) {
+    } else if (m_volume < 67) {
         set_icon("audio-volume-medium");
-        set_text(std::to_string(m_volume) + "%");
     } else {
         set_icon("audio-volume-high");
-        set_text(std::to_string(m_volume) + "%");
+    }
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+    if (m_is_hovered) {
+        set_text(m_muted ? "Muted" : (std::to_string(m_volume) + "%"));
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text(""); // icon-only when not hovered
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
     }
     request_redraw();
+}
+
+bool VolumeModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    bool hovered = bounds.contains(miqu::Point(lx, ly));
+    if (hovered != m_is_hovered) {
+        m_is_hovered = hovered;
+        const auto& cfg = BarConfig::get();
+        int item_h = std::max(28, cfg.height - 8);
+        if (m_is_hovered) {
+            set_text(m_muted ? "Muted" : (std::to_string(m_volume) + "%"));
+            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+        } else {
+            set_text("");
+            set_layout_params(miqu::LayoutParams(item_h, item_h));
+        }
+    }
+    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 bool VolumeModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) {
@@ -180,28 +473,19 @@ bool VolumeModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button,
     return miqu::Button::on_mouse_button(lx, ly, button, pressed, bounds);
 }
 
-bool VolumeModuleView::on_scroll(double delta) {
-    if (std::abs(delta) > 0.05) {
-        if (delta > 0) {
-            std::system("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+ 2>/dev/null || pactl set-sink-volume @DEFAULT_SINK@ +5% 2>/dev/null");
-        } else {
-            std::system("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- 2>/dev/null || pactl set-sink-volume @DEFAULT_SINK@ -5% 2>/dev/null");
-        }
-        update_metrics();
-        return true;
-    }
-    return false;
-}
-
 // ==========================================
 // Clock Module
 // ==========================================
 ClockModuleView::ClockModuleView(std::function<void()> on_open_calendar)
     : m_on_open_calendar(std::move(on_open_calendar)) {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
     set_flat(true);
-    set_text_size(get_toolkit_font_size());
     set_padding(8, 2);
+    set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
     set_on_click_listener(m_on_open_calendar);
+    set_text(""); // Drawn via custom draw with Pango horizontal center alignment
     update_time();
 }
 
@@ -220,21 +504,85 @@ void ClockModuleView::update_time() {
     m_time_str = time_buf;
     m_date_str = date_buf;
 
-    if (cfg.clock_stacked) {
-        set_text(m_time_str + "\n" + m_date_str);
-    } else {
-        set_text(m_time_str + "  " + m_date_str);
-    }
     request_redraw();
+}
+
+miqu::Size ClockModuleView::measure_size() const {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
+    cairo_surface_t* temp_surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+    cairo_t* cr = cairo_create(temp_surf);
+    PangoLayout* layout = pango_cairo_create_layout(cr);
+
+    std::string text = cfg.clock_stacked ? (m_time_str + "\n" + m_date_str)
+                                         : (m_time_str + "  " + m_date_str);
+    pango_layout_set_text(layout, text.c_str(), -1);
+    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+
+    auto config = miqu::Config::get();
+    std::string font_family = config->metrics.font_family.empty() ? "Sans" : config->metrics.font_family;
+    int font_size = get_toolkit_font_size();
+    std::string font_desc_str = font_family + " " + std::to_string(font_size);
+    PangoFontDescription* desc = pango_font_description_from_string(font_desc_str.c_str());
+    pango_layout_set_font_description(layout, desc);
+    pango_font_description_free(desc);
+
+    int text_w = 0, text_h = 0;
+    pango_layout_get_pixel_size(layout, &text_w, &text_h);
+
+    g_object_unref(layout);
+    cairo_destroy(cr);
+    cairo_surface_destroy(temp_surf);
+
+    return miqu::Size(text_w + 16, item_h);
+}
+
+void ClockModuleView::draw(cairo_t* cr, const miqu::Rect& bounds) {
+    if (!is_visible() || !cr || bounds.width <= 0 || bounds.height <= 0) return;
+
+    // Draw button background, rounded corners, hover/pressed feedback
+    miqu::Button::draw(cr, bounds);
+
+    const auto& cfg = BarConfig::get();
+    auto config = miqu::Config::get();
+
+    PangoLayout* layout = pango_cairo_create_layout(cr);
+    std::string text = cfg.clock_stacked ? (m_time_str + "\n" + m_date_str)
+                                         : (m_time_str + "  " + m_date_str);
+    pango_layout_set_text(layout, text.c_str(), -1);
+    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+
+    std::string font_family = config->metrics.font_family.empty() ? "Sans" : config->metrics.font_family;
+    int font_size = get_toolkit_font_size();
+    std::string font_desc_str = font_family + " " + std::to_string(font_size);
+    PangoFontDescription* desc = pango_font_description_from_string(font_desc_str.c_str());
+    pango_layout_set_font_description(layout, desc);
+    pango_font_description_free(desc);
+
+    int text_w = 0, text_h = 0;
+    pango_layout_get_pixel_size(layout, &text_w, &text_h);
+
+    double text_x = bounds.x + (bounds.width - text_w) / 2.0;
+    double text_y = bounds.y + (bounds.height - text_h) / 2.0;
+
+    cairo_move_to(cr, text_x, text_y);
+    auto fg = config->colors.on_surface;
+    cairo_set_source_rgba(cr, fg.r, fg.g, fg.b, fg.a);
+    pango_cairo_show_layout(cr, layout);
+    g_object_unref(layout);
 }
 
 // ==========================================
 // Peek Button ("Show Desktop")
 // ==========================================
 PeekButtonView::PeekButtonView() {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
     set_flat(true);
     set_padding(2, 0);
-    set_layout_params(miqu::LayoutParams(10, BarConfig::get().height));
+    set_layout_params(miqu::LayoutParams(8, item_h));
     set_on_click_listener([]() {
         auto mgr = miqu::WindowManager::get();
         if (mgr) {

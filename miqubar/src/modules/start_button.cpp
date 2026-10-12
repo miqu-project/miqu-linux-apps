@@ -12,12 +12,14 @@ StartButtonView::StartButtonView() {
     const auto& cfg = BarConfig::get();
     auto config = miqu::Config::get();
 
+    int item_h = std::max(28, cfg.height - 8);
     set_circle(false);
     set_corner_radius(config->metrics.corner_radius);
-    // Make start button icon prominent and bold (32px or icon_size + 4)
-    int start_sz = std::max(cfg.icon_size + 4, 32);
+    // Make start button icon prominent and bold (24px or item_h - 16)
+    int start_sz = std::max(20, std::min(cfg.icon_size, item_h - 8));
     set_icon_size(start_sz);
     set_padding(4);
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
 
     // Subtle rounded tile background like Windows 11 start button
     set_background_color(config->colors.surface_variant.with_alpha(0.35f));

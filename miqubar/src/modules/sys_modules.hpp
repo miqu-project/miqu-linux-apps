@@ -34,20 +34,63 @@ public:
     BatteryModuleView();
     void update_metrics();
 
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
+
 private:
     int m_capacity = 100;
     bool m_charging = false;
     bool m_present = false;
+    bool m_is_hovered = false;
+};
+
+// Network Status Button (Wi-Fi / Ethernet)
+class NetworkModuleView : public miqu::Button {
+public:
+    explicit NetworkModuleView(std::function<void()> on_open_network);
+    void update_metrics();
+
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
+
+    bool is_connected() const { return m_connected; }
+    const std::string& get_ssid() const { return m_ssid; }
+
+private:
+    bool m_connected = false;
+    bool m_is_wifi = false;
+    int m_signal_strength = 0; // 0 - 100
+    std::string m_ssid;
+    bool m_is_hovered = false;
+    std::function<void()> m_on_open_network;
+};
+
+// Bluetooth Status Button
+class BluetoothModuleView : public miqu::Button {
+public:
+    explicit BluetoothModuleView(std::function<void()> on_open_bluetooth);
+    void update_metrics();
+
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
+
+    bool is_powered() const { return m_powered; }
+    bool is_connected() const { return m_connected; }
+    const std::string& get_connected_device() const { return m_connected_device; }
+
+private:
+    bool m_powered = false;
+    bool m_connected = false;
+    std::string m_connected_device;
+    bool m_is_hovered = false;
+    std::function<void()> m_on_open_bluetooth;
 };
 
 // Volume Control Button
 class VolumeModuleView : public miqu::Button {
 public:
-    explicit VolumeModuleView(std::function<void()> on_open_quick_settings);
+    explicit VolumeModuleView(std::function<void()> on_open_sound);
     void update_metrics();
 
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
-    bool on_scroll(double delta) override;
 
     int get_volume() const { return m_volume; }
     bool is_muted() const { return m_muted; }
@@ -55,7 +98,8 @@ public:
 private:
     int m_volume = 70;
     bool m_muted = false;
-    std::function<void()> m_on_open_quick_settings;
+    bool m_is_hovered = false;
+    std::function<void()> m_on_open_sound;
 };
 
 // Windows-style Stacked Clock & Date Button
@@ -63,6 +107,9 @@ class ClockModuleView : public miqu::Button {
 public:
     explicit ClockModuleView(std::function<void()> on_open_calendar);
     void update_time();
+
+    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
+    miqu::Size measure_size() const override;
 
 private:
     std::string m_time_str;

@@ -72,15 +72,27 @@ BarRootView::BarRootView() {
         m_mem = std::make_shared<MemoryModuleView>();
         m_right_box->add_view(m_mem);
     }
-    if (cfg.show_battery) {
-        m_battery = std::make_shared<BatteryModuleView>();
-        m_right_box->add_view(m_battery);
+    if (cfg.show_network) {
+        m_network = std::make_shared<NetworkModuleView>([this]() {
+            toggle_network();
+        });
+        m_right_box->add_view(m_network);
+    }
+    if (cfg.show_bluetooth) {
+        m_bluetooth = std::make_shared<BluetoothModuleView>([this]() {
+            toggle_bluetooth();
+        });
+        m_right_box->add_view(m_bluetooth);
     }
     if (cfg.show_volume) {
         m_volume = std::make_shared<VolumeModuleView>([this]() {
-            toggle_quick_settings();
+            toggle_sound();
         });
         m_right_box->add_view(m_volume);
+    }
+    if (cfg.show_battery) {
+        m_battery = std::make_shared<BatteryModuleView>();
+        m_right_box->add_view(m_battery);
     }
     if (cfg.show_clock) {
         m_clock = std::make_shared<ClockModuleView>([this]() {
@@ -96,7 +108,9 @@ BarRootView::BarRootView() {
 }
 
 BarRootView::~BarRootView() {
-    if (m_quick_settings_win) m_quick_settings_win->close();
+    if (m_network_win) m_network_win->close();
+    if (m_bluetooth_win) m_bluetooth_win->close();
+    if (m_sound_win) m_sound_win->close();
     if (m_calendar_win) m_calendar_win->close();
 }
 
@@ -117,28 +131,24 @@ bool BarRootView::on_scroll(double delta) {
     if (m_ws_btn && m_ws_btn->is_visible() && m_ws_btn->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
         return m_ws_btn->on_scroll(delta);
     }
-    if (m_volume && m_volume->is_visible() && m_volume->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
-        return m_volume->on_scroll(delta);
-    }
     return miqu::FrameLayout::on_scroll(delta);
 }
 
-void BarRootView::toggle_quick_settings() {
-    if (m_quick_settings_win) {
-        m_quick_settings_win->close();
-        m_quick_settings_win = nullptr;
+void BarRootView::toggle_network() {
+    if (m_network_win) {
+        m_network_win->close();
+        m_network_win = nullptr;
         request_redraw();
         return;
     }
-    if (m_calendar_win) {
-        m_calendar_win->close();
-        m_calendar_win = nullptr;
-    }
+    if (m_bluetooth_win) { m_bluetooth_win->close(); m_bluetooth_win = nullptr; }
+    if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
+    if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
 
-    auto content = std::make_shared<QuickSettingsPopupView>([this]() {
-        if (m_quick_settings_win) {
-            m_quick_settings_win->close();
-            m_quick_settings_win = nullptr;
+    auto content = std::make_shared<NetworkPopupView>([this]() {
+        if (m_network_win) {
+            m_network_win->close();
+            m_network_win = nullptr;
             request_redraw();
         }
     });
@@ -148,18 +158,15 @@ void BarRootView::toggle_quick_settings() {
     miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
                                    : (miqu::Gravity::Bottom | miqu::Gravity::Right);
     miqu::Margin margin;
-    margin.right = 12;
-    if (is_top) {
-        margin.top = cfg.height + 8;
-    } else {
-        margin.bottom = cfg.height + 8;
-    }
+    margin.right = 60;
+    if (is_top) margin.top = cfg.height + 8;
+    else margin.bottom = cfg.height + 8;
 
-    m_quick_settings_win = miqu::WindowBuilder::create()
+    m_network_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
-        ->layerNamespace("miqubar-quicksettings")
+        ->layerNamespace("miqubar-network")
         ->anchors(1 | 2 | 4 | 8)
-        ->contentSize(300, 260)
+        ->contentSize(340, 320)
         ->contentGravity(gravity)
         ->contentMargin(margin)
         ->dimBackdrop(false)
@@ -169,12 +176,116 @@ void BarRootView::toggle_quick_settings() {
         ->closeOnEscape(true)
         ->contentView(content)
         ->onClose([this]() {
-            m_quick_settings_win = nullptr;
+            m_network_win = nullptr;
             request_redraw();
         })
         ->build();
 
-    if (m_quick_settings_win) m_quick_settings_win->show();
+    if (m_network_win) m_network_win->show();
+}
+
+void BarRootView::toggle_bluetooth() {
+    if (m_bluetooth_win) {
+        m_bluetooth_win->close();
+        m_bluetooth_win = nullptr;
+        request_redraw();
+        return;
+    }
+    if (m_network_win) { m_network_win->close(); m_network_win = nullptr; }
+    if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
+    if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
+
+    auto content = std::make_shared<BluetoothPopupView>([this]() {
+        if (m_bluetooth_win) {
+            m_bluetooth_win->close();
+            m_bluetooth_win = nullptr;
+            request_redraw();
+        }
+    });
+
+    const auto& cfg = BarConfig::get();
+    bool is_top = (cfg.position == "top");
+    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
+                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    miqu::Margin margin;
+    margin.right = 40;
+    if (is_top) margin.top = cfg.height + 8;
+    else margin.bottom = cfg.height + 8;
+
+    m_bluetooth_win = miqu::WindowBuilder::create()
+        ->role(miqu::WindowRole::LayerOverlay)
+        ->layerNamespace("miqubar-bluetooth")
+        ->anchors(1 | 2 | 4 | 8)
+        ->contentSize(340, 300)
+        ->contentGravity(gravity)
+        ->contentMargin(margin)
+        ->dimBackdrop(false)
+        ->transparent(true)
+        ->exclusiveZone(-1)
+        ->closeOnClickOutside(true)
+        ->closeOnEscape(true)
+        ->contentView(content)
+        ->onClose([this]() {
+            m_bluetooth_win = nullptr;
+            request_redraw();
+        })
+        ->build();
+
+    if (m_bluetooth_win) m_bluetooth_win->show();
+}
+
+void BarRootView::toggle_sound() {
+    if (m_sound_win) {
+        m_sound_win->close();
+        m_sound_win = nullptr;
+        request_redraw();
+        return;
+    }
+    if (m_network_win) { m_network_win->close(); m_network_win = nullptr; }
+    if (m_bluetooth_win) { m_bluetooth_win->close(); m_bluetooth_win = nullptr; }
+    if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
+
+    auto content = std::make_shared<SoundControlPopupView>([this]() {
+        if (m_sound_win) {
+            m_sound_win->close();
+            m_sound_win = nullptr;
+            request_redraw();
+        }
+    });
+
+    const auto& cfg = BarConfig::get();
+    bool is_top = (cfg.position == "top");
+    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
+                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    miqu::Margin margin;
+    margin.right = 24;
+    if (is_top) margin.top = cfg.height + 8;
+    else margin.bottom = cfg.height + 8;
+
+    m_sound_win = miqu::WindowBuilder::create()
+        ->role(miqu::WindowRole::LayerOverlay)
+        ->layerNamespace("miqubar-sound")
+        ->anchors(1 | 2 | 4 | 8)
+        ->contentSize(340, 150)
+        ->contentGravity(gravity)
+        ->contentMargin(margin)
+        ->dimBackdrop(false)
+        ->transparent(true)
+        ->exclusiveZone(-1)
+        ->closeOnClickOutside(true)
+        ->closeOnEscape(true)
+        ->contentView(content)
+        ->onClose([this]() {
+            m_sound_win = nullptr;
+            request_redraw();
+        })
+        ->build();
+
+    if (m_sound_win) m_sound_win->show();
+}
+
+void BarRootView::toggle_quick_settings() {
+    toggle_sound();
 }
 
 void BarRootView::toggle_calendar() {
@@ -184,10 +295,9 @@ void BarRootView::toggle_calendar() {
         request_redraw();
         return;
     }
-    if (m_quick_settings_win) {
-        m_quick_settings_win->close();
-        m_quick_settings_win = nullptr;
-    }
+    if (m_network_win) { m_network_win->close(); m_network_win = nullptr; }
+    if (m_bluetooth_win) { m_bluetooth_win->close(); m_bluetooth_win = nullptr; }
+    if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
 
     auto content = std::make_shared<CalendarPopupView>([this]() {
         if (m_calendar_win) {
@@ -234,6 +344,8 @@ void BarRootView::toggle_calendar() {
 void BarRootView::update_telemetry() {
     if (m_cpu) m_cpu->update_metrics();
     if (m_mem) m_mem->update_metrics();
+    if (m_network) m_network->update_metrics();
+    if (m_bluetooth) m_bluetooth->update_metrics();
     if (m_battery) m_battery->update_metrics();
     if (m_volume) m_volume->update_metrics();
     request_redraw();
