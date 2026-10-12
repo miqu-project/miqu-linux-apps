@@ -51,6 +51,27 @@ void StartButtonView::launch_menu() {
     const auto& cmd = BarConfig::get().launcher_cmd;
     if (cmd.empty()) return;
 
+    // Extract binary name from cmd (e.g. "miqulauncher" from "miqulauncher -show drun")
+    std::string bin_name = cmd;
+    size_t space_pos = bin_name.find(' ');
+    if (space_pos != std::string::npos) {
+        bin_name = bin_name.substr(0, space_pos);
+    }
+    size_t slash_pos = bin_name.find_last_of('/');
+    if (slash_pos != std::string::npos) {
+        bin_name = bin_name.substr(slash_pos + 1);
+    }
+
+    // Check if process is already running via pgrep -x
+    std::string check_cmd = "pgrep -x " + bin_name + " >/dev/null 2>&1";
+    if (std::system(check_cmd.c_str()) == 0) {
+        // Already running: kill/toggle close it
+        std::string kill_cmd = "pkill -x " + bin_name + " 2>/dev/null";
+        std::system(kill_cmd.c_str());
+        return;
+    }
+
+    // Not running: launch it cleanly in background
     pid_t pid = fork();
     if (pid == 0) {
         setsid();

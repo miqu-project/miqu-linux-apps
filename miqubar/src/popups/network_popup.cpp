@@ -37,8 +37,8 @@ void NetworkPopupView::scan_networks() {
 
     if (!m_wifi_enabled) return;
 
-    // List Wi-Fi networks via nmcli
-    FILE* fp = popen("nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list 2>/dev/null", "r");
+    // List Wi-Fi networks via nmcli without forcing a slow hardware rescan
+    FILE* fp = popen("nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan no 2>/dev/null", "r");
     if (fp) {
         char buf[256];
         while (fgets(buf, sizeof(buf), fp)) {

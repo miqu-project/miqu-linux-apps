@@ -64,6 +64,23 @@ void SearchButtonView::launch_search() {
     const auto& cmd = BarConfig::get().search_cmd;
     if (cmd.empty()) return;
 
+    std::string bin_name = cmd;
+    size_t space_pos = bin_name.find(' ');
+    if (space_pos != std::string::npos) {
+        bin_name = bin_name.substr(0, space_pos);
+    }
+    size_t slash_pos = bin_name.find_last_of('/');
+    if (slash_pos != std::string::npos) {
+        bin_name = bin_name.substr(slash_pos + 1);
+    }
+
+    std::string check_cmd = "pgrep -x " + bin_name + " >/dev/null 2>&1";
+    if (std::system(check_cmd.c_str()) == 0) {
+        std::string kill_cmd = "pkill -x " + bin_name + " 2>/dev/null";
+        std::system(kill_cmd.c_str());
+        return;
+    }
+
     miqu::AppManager::launch_command(cmd);
 }
 
