@@ -27,8 +27,12 @@ int main(int argc, char** argv) {
             std::cout << "Usage: miqutheme [OPTIONS]\n\n"
                       << "Modern native theme & wallpaper manager built with miqutoolkit.\n\n"
                       << "Options:\n"
-                      << "  -h, --help         Show this help message and exit\n"
-                      << "  --init-config      Generate default user configuration file\n";
+                      << "  -h, --help            Show this help message and exit\n"
+                      << "  --init-config         Generate default user configuration file\n"
+                      << "  -r, --restore         Restore active wallpaper and theme colors on startup\n"
+                      << "  --refresh, --apply    Alias for --restore\n"
+                      << "  -t, --toggle-mode     Toggle between dark and light mode headless\n"
+                      << "  --mode <dark|light>   Set theme mode headless\n";
             return 0;
         } else if (arg == "--init-config") {
             std::string res = Config::init_user_config("miqutheme", "miqutheme.conf");
@@ -37,6 +41,36 @@ int main(int argc, char** argv) {
             } else {
                 std::cout << "[miqutheme] Configuration file already exists or could not be created.\n";
             }
+            return 0;
+        } else if (arg == "--restore" || arg == "-r" || arg == "--refresh" || arg == "--apply" || arg == "-a") {
+            auto backend = std::make_shared<ThemeBackend>();
+            ThemeMode mode = backend->get_current_mode();
+            std::string wp = backend->get_active_wallpaper(mode);
+            std::string fit = backend->get_wallpaper_fit();
+            if (!wp.empty()) {
+                backend->apply_wallpaper(wp, fit);
+            }
+            std::string scheme = backend->get_current_scheme(mode);
+            backend->apply_scheme(scheme, backend->get_matugen_type());
+            std::cout << "[miqutheme] Restored " << (mode == ThemeMode::Dark ? "dark" : "light")
+                      << " theme ('" << scheme << "') and wallpaper.\n";
+            return 0;
+        } else if (arg == "--toggle-mode" || arg == "-t") {
+            auto backend = std::make_shared<ThemeBackend>();
+            ThemeMode current = backend->get_current_mode();
+            ThemeMode next = (current == ThemeMode::Dark) ? ThemeMode::Light : ThemeMode::Dark;
+            backend->set_mode(next);
+            std::cout << "[miqutheme] Toggled mode to " << (next == ThemeMode::Dark ? "dark" : "light") << ".\n";
+            return 0;
+        } else if (arg == "--mode" && i + 1 < argc) {
+            std::string target_m = argv[++i];
+            auto backend = std::make_shared<ThemeBackend>();
+            if (target_m == "light") {
+                backend->set_mode(ThemeMode::Light);
+            } else {
+                backend->set_mode(ThemeMode::Dark);
+            }
+            std::cout << "[miqutheme] Set mode to " << target_m << ".\n";
             return 0;
         }
     }
