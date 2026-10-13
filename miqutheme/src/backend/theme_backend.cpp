@@ -553,10 +553,23 @@ void ThemeBackend::update_gtk_theme(ThemeMode mode) {
     std::string gtk_theme = (mode == ThemeMode::Dark) ? "Adwaita-dark" : "Adwaita";
     std::string icon_theme = (mode == ThemeMode::Dark) ? "Papirus-Dark" : "Papirus-Light";
     std::string scheme = (mode == ThemeMode::Dark) ? "prefer-dark" : "prefer-light";
+    std::string opp_scheme = (mode == ThemeMode::Dark) ? "prefer-light" : "prefer-dark";
 
     run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", gtk_theme});
     run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "icon-theme", icon_theme});
+
+    // Pulse opposite color-scheme briefly so Libadwaita / GTK4 apps re-parse colors.css
+    run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "color-scheme", opp_scheme});
+    usleep(30000); // 30ms
     run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "color-scheme", scheme});
+
+    const char* home = getenv("HOME");
+    if (home) {
+        fs::path h(home);
+        std::error_code ec;
+        fs::last_write_time(h / ".config/gtk-3.0/colors.css", fs::file_time_type::clock::now(), ec);
+        fs::last_write_time(h / ".config/gtk-4.0/colors.css", fs::file_time_type::clock::now(), ec);
+    }
 }
 
 void ThemeBackend::sync_symlinks() {
