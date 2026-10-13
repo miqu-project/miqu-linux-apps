@@ -102,6 +102,24 @@ private:
     std::function<void()> m_on_open_sound;
 };
 
+// Notification Status & History Toggle Button
+class NotificationModuleView : public miqu::Button {
+public:
+    NotificationModuleView();
+    void update_metrics();
+
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
+    bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
+
+    int get_unread_count() const { return m_unread_count; }
+    bool is_dnd() const { return m_dnd; }
+
+private:
+    int m_unread_count = 0;
+    bool m_dnd = false;
+    bool m_is_hovered = false;
+};
+
 // Windows-style Stacked Clock & Date Button
 class ClockModuleView : public miqu::Button {
 public:

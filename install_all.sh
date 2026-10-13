@@ -21,6 +21,7 @@ APPS=(
     "miqugallery"
     "miqusecure"
     "miquoverview"
+    "miqunotify"
     "miqubar"
     "miqudm"
     "miqutest"

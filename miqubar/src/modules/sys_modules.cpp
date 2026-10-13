@@ -2,6 +2,7 @@
 #include "../config/bar_config.hpp"
 #include "miqutoolkit/core/config.hpp"
 #include "miqutoolkit/system/window_manager.hpp"
+#include "miqutoolkit/system/app_manager.hpp"
 #include <fstream>
 #include <sstream>
 #include <ctime>
@@ -571,6 +572,88 @@ void ClockModuleView::draw(cairo_t* cr, const miqu::Rect& bounds) {
     cairo_set_source_rgba(cr, fg.r, fg.g, fg.b, fg.a);
     pango_cairo_show_layout(cr, layout);
     g_object_unref(layout);
+}
+
+// ==========================================
+// Notification Module
+// ==========================================
+NotificationModuleView::NotificationModuleView() {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
+    set_flat(true);
+    set_text_size(get_toolkit_font_size());
+    set_padding(6, 2);
+    set_icon_size(20);
+    set_icon("bell");
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
+    update_metrics();
+}
+
+void NotificationModuleView::update_metrics() {
+    std::string state_path;
+    const char* runtime_dir = getenv("XDG_RUNTIME_DIR");
+    if (runtime_dir && *runtime_dir) {
+        state_path = std::string(runtime_dir) + "/miqunotify_state";
+    } else {
+        const char* home = getenv("HOME");
+        if (home) {
+            state_path = std::string(home) + "/.cache/miqunotify/state";
+        }
+    }
+
+    int unread = 0;
+    int dnd_int = 0;
+
+    if (!state_path.empty() && fs::exists(state_path)) {
+        std::ifstream file(state_path);
+        if (file.is_open()) {
+            file >> unread >> dnd_int;
+        }
+    }
+
+    m_unread_count = std::max(0, unread);
+    m_dnd = (dnd_int != 0);
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
+    if (m_dnd) {
+        set_icon("notifications-disabled");
+    } else {
+        set_icon("bell");
+    }
+
+    if (m_unread_count > 0) {
+        set_text(std::to_string(m_unread_count));
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text("");
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
+    }
+
+    request_redraw();
+}
+
+bool NotificationModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    bool hovered = bounds.contains(miqu::Point(lx, ly));
+    if (hovered != m_is_hovered) {
+        m_is_hovered = hovered;
+    }
+    return miqu::Button::on_mouse_move(lx, ly, bounds);
+}
+
+bool NotificationModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) {
+    if (pressed) {
+        if (button == miqu::MouseButton::Left) {
+            miqu::AppManager::launch_command("miqunotify -t");
+            return true;
+        } else if (button == miqu::MouseButton::Middle || button == miqu::MouseButton::Right) {
+            miqu::AppManager::launch_command("miqunotify --dnd");
+            return true;
+        }
+    }
+    return miqu::Button::on_mouse_button(lx, ly, button, pressed, bounds);
 }
 
 // ==========================================

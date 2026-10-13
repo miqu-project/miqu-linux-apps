@@ -94,6 +94,10 @@ BarRootView::BarRootView() {
         m_battery = std::make_shared<BatteryModuleView>();
         m_right_box->add_view(m_battery);
     }
+    if (cfg.show_notifications) {
+        m_notifications = std::make_shared<NotificationModuleView>();
+        m_right_box->add_view(m_notifications);
+    }
     if (cfg.show_clock) {
         m_clock = std::make_shared<ClockModuleView>([this]() {
             toggle_calendar();
@@ -348,6 +352,7 @@ void BarRootView::update_telemetry() {
     if (m_bluetooth) m_bluetooth->update_metrics();
     if (m_battery) m_battery->update_metrics();
     if (m_volume) m_volume->update_metrics();
+    if (m_notifications) m_notifications->update_metrics();
     request_redraw();
 }
 

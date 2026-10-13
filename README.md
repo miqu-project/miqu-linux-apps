@@ -13,6 +13,8 @@ This repository contains the integrated first-party desktop applications for the
 | [**`miqudesk`**](./miqudesk) | Interactive desktop canvas & widget layer bringing familiar desktop ergonomics to Wayland tiling. |
 | [**`miqusecure`**](./miqusecure) | Privacy, security, and firewall management utility (Tor, OpenSnitch, LUKS, audit policies). |
 | [**`miqumusic`**](./miqumusic) | Lightweight, fast native MPD client and audio player. |
+| [**`miqubar`**](./miqubar) | Native desktop taskbar, workspace switcher, system tray, and module bar. |
+| [**`miqunotify`**](./miqunotify) | Native notification daemon and slide-out notification center. |
 | [**`miqulauncher`**](./miqulauncher) | Application launcher, dmenu alternative, and workspace/window switcher. |
 | [**`miquoverview`**](./miquoverview) | GPU-accelerated live workspace expose and overview plugin for `miquland`. |
 | [**`miqugallery`**](./miqugallery) | Image viewer and media gallery application. |

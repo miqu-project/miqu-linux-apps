@@ -53,6 +53,7 @@ private:
     std::shared_ptr<BluetoothModuleView> m_bluetooth;
     std::shared_ptr<VolumeModuleView> m_volume;
     std::shared_ptr<BatteryModuleView> m_battery;
+    std::shared_ptr<NotificationModuleView> m_notifications;
     std::shared_ptr<ClockModuleView> m_clock;
     std::shared_ptr<PeekButtonView> m_peek;
 
