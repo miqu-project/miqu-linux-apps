@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Theme Manager
+Name=Theme
 GenericName=Color Schemes • Wallpapers • Material You • Transparency
 Comment=Modern native Wayland theme and wallpaper manager built with miqutoolkit
 Exec=miqutheme

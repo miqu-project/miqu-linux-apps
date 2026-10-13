@@ -161,7 +161,7 @@ int main(int argc, char** argv) {
 
     // 1. TOP TOOLBAR
     toolbar = ToolbarBuilder::create()
-        ->title("Theme Manager")
+        ->title("Theme")
         ->subtitle(SECTION_SUBTITLES[default_tab])
         ->titleAlignment(TitleAlignment::Center)
         ->onRefresh(refresh_all)
@@ -217,7 +217,7 @@ int main(int argc, char** argv) {
 
     // 4. WAYLAND WINDOW
     window = WindowBuilder::create()
-        ->title("Theme Manager - miquland")
+        ->title("Theme - miquland")
         ->appId("miqutheme")
         ->role(WindowRole::Toplevel)
         ->preferredSize(650, 720)
