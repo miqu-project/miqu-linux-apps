@@ -16,9 +16,26 @@ Start daemon:
 miqunotify
 ```
 
+Start daemon with verbose debug logging:
+```bash
+miqunotify --debug
+```
+
 Toggle Notification Center drawer:
 ```bash
 miqunotify --toggle
+```
+
+Print notification history log to stdout:
+```bash
+miqunotify --history
+# or JSON format:
+miqunotify --history --json
+```
+
+Re-show most recent notification banner:
+```bash
+miqunotify --pop
 ```
 
 Generate default user configuration:

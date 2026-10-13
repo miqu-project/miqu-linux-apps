@@ -26,10 +26,15 @@ public:
     void set_dnd(bool enabled);
 
     void toggle_center();
+    void open_center();
+    void mark_all_read();
+    void pop_history();
+    std::string get_history_json() const;
 
 private:
     void update_state_file();
     std::string get_state_file_path();
+    void log_debug(const std::string& msg) const;
 
     uint32_t m_next_id = 1;
     bool m_dnd_active = false;

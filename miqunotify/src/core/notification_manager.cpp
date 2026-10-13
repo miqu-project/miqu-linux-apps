@@ -3,6 +3,7 @@
 #include <miqutoolkit/core/app_engine.hpp>
 #include <miqutoolkit/core/fs_utils.hpp>
 #include <fstream>
+#include <iostream>
 #include <filesystem>
 #include <algorithm>
 #include <unistd.h>
@@ -38,6 +39,9 @@ NotificationManager::NotificationManager()
                 update_state_file();
                 m_center_window.refresh_history(m_history, m_dnd_active);
             }
+        },
+        [this]() {
+            mark_all_read();
         }
     ) {
     m_dnd_active = NotifyConfig::get().dnd_enabled;
@@ -73,8 +77,16 @@ void NotificationManager::update_state_file() {
     std::ofstream file(path);
     if (!file.is_open()) return;
 
-    size_t unread = m_history.size();
+    size_t unread = std::count_if(m_history.begin(), m_history.end(), [](const auto& n) {
+        return !n.is_read;
+    });
     file << unread << " " << (m_dnd_active ? 1 : 0) << "\n";
+}
+
+void NotificationManager::log_debug(const std::string& msg) const {
+    if (NotifyConfig::get().debug) {
+        std::cout << "[miqunotify] " << msg << std::endl;
+    }
 }
 
 bool NotificationManager::init() {
@@ -108,15 +120,25 @@ bool NotificationManager::init() {
                     on_control(action);
                 });
             }
+        },
+        [this]() {
+            return get_history_json();
         }
     );
 
+    log_debug("Daemon initialized. Listening on org.freedesktop.Notifications.");
     update_state_file();
     return ok;
 }
 
 uint32_t NotificationManager::on_notify(Notification notif) {
     const auto& cfg = NotifyConfig::get();
+
+    log_debug("[NOTIFY] id=" + std::to_string(notif.id) +
+              " app='" + notif.app_name + "'" +
+              " summary='" + notif.summary + "'" +
+              " urgency=" + std::to_string(static_cast<int>(notif.urgency)) +
+              " transient=" + (notif.transient ? "true" : "false"));
 
     // Check if replacing existing notification
     if (notif.replaces_id > 0) {
@@ -125,11 +147,15 @@ uint32_t NotificationManager::on_notify(Notification notif) {
             return n.id == notif.replaces_id;
         });
         if (it != m_history.end()) {
-            *it = notif;
-        } else {
+            if (notif.transient) {
+                m_history.erase(it);
+            } else {
+                *it = notif;
+            }
+        } else if (!notif.transient) {
             m_history.push_back(notif);
         }
-    } else {
+    } else if (!notif.transient) {
         m_history.push_back(notif);
     }
 
@@ -144,10 +170,12 @@ uint32_t NotificationManager::on_notify(Notification notif) {
             notif,
             cfg.timeout_ms,
             [this](uint32_t id, uint32_t reason) {
+                log_debug("[CLOSE] id=" + std::to_string(id) + " reason=" + std::to_string(reason));
                 m_toast_window.remove_toast(id);
                 if (m_dbus) m_dbus->emit_notification_closed(id, reason);
             },
             [this](uint32_t id, const std::string& key) {
+                log_debug("[ACTION] id=" + std::to_string(id) + " key='" + key + "'");
                 m_toast_window.remove_toast(id);
                 if (m_dbus) {
                     m_dbus->emit_action_invoked(id, key);
@@ -168,6 +196,7 @@ uint32_t NotificationManager::on_notify(Notification notif) {
 }
 
 void NotificationManager::on_close_notification(uint32_t id) {
+    log_debug("[CLOSE] id=" + std::to_string(id) + " (by close call)");
     m_toast_window.remove_toast(id);
     if (m_dbus) {
         m_dbus->emit_notification_closed(id, 3); // 3 = closed by call
@@ -175,28 +204,87 @@ void NotificationManager::on_close_notification(uint32_t id) {
 }
 
 void NotificationManager::on_control(const std::string& action) {
+    log_debug("[CONTROL] command='" + action + "'");
     if (action == "ToggleCenter") {
         toggle_center();
     } else if (action == "OpenCenter") {
-        m_center_window.open();
-        m_center_window.refresh_history(m_history, m_dnd_active);
+        open_center();
     } else if (action == "CloseCenter") {
         m_center_window.close();
     } else if (action == "ClearAll") {
         clear_all();
     } else if (action == "ToggleDnd") {
         toggle_dnd();
+    } else if (action == "PopHistory") {
+        pop_history();
     }
+}
+
+void NotificationManager::open_center() {
+    m_center_window.open();
+    mark_all_read();
+    m_center_window.refresh_history(m_history, m_dnd_active);
 }
 
 void NotificationManager::toggle_center() {
     m_center_window.toggle();
     if (m_center_window.is_open()) {
+        mark_all_read();
         m_center_window.refresh_history(m_history, m_dnd_active);
     }
 }
 
+void NotificationManager::mark_all_read() {
+    bool changed = false;
+    for (auto& n : m_history) {
+        if (!n.is_read) {
+            n.is_read = true;
+            changed = true;
+        }
+    }
+    if (changed) {
+        update_state_file();
+    }
+}
+
+void NotificationManager::pop_history() {
+    if (m_history.empty()) return;
+    const auto& notif = m_history.back();
+    const auto& cfg = NotifyConfig::get();
+    log_debug("[POP] Re-showing notification id=" + std::to_string(notif.id));
+
+    auto toast = std::make_shared<ToastView>(
+        notif,
+        cfg.timeout_ms,
+        [this](uint32_t id, uint32_t reason) {
+            log_debug("[CLOSE] id=" + std::to_string(id) + " reason=" + std::to_string(reason));
+            m_toast_window.remove_toast(id);
+            if (m_dbus) m_dbus->emit_notification_closed(id, reason);
+        },
+        [this](uint32_t id, const std::string& key) {
+            log_debug("[ACTION] id=" + std::to_string(id) + " key='" + key + "'");
+            m_toast_window.remove_toast(id);
+            if (m_dbus) {
+                m_dbus->emit_action_invoked(id, key);
+                m_dbus->emit_notification_closed(id, 2);
+            }
+        }
+    );
+    m_toast_window.add_toast(toast);
+}
+
+std::string NotificationManager::get_history_json() const {
+    std::string json = "[";
+    for (size_t i = 0; i < m_history.size(); ++i) {
+        if (i > 0) json += ",";
+        json += m_history[i].to_json();
+    }
+    json += "]";
+    return json;
+}
+
 void NotificationManager::clear_all() {
+    log_debug("[CLEAR] Clearing all notifications");
     m_toast_window.close();
     m_history.clear();
     update_state_file();
@@ -211,6 +299,7 @@ void NotificationManager::toggle_dnd() {
 
 void NotificationManager::set_dnd(bool enabled) {
     m_dnd_active = enabled;
+    log_debug(std::string("[DND] ") + (m_dnd_active ? "Enabled" : "Disabled"));
     if (m_dnd_active) {
         // Close any currently visible toast banners
         m_toast_window.close();

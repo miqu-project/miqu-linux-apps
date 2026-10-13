@@ -19,12 +19,14 @@ public:
     using OnToggleDndCb = std::function<void(bool enabled)>;
     using OnDismissCb = std::function<void(uint32_t id)>;
     using OnActionCb = std::function<void(uint32_t id, const std::string& key)>;
+    using OnOpenCb = std::function<void()>;
 
     NotificationCenterWindow(
         OnClearAllCb on_clear_all,
         OnToggleDndCb on_toggle_dnd,
         OnDismissCb on_dismiss,
-        OnActionCb on_action
+        OnActionCb on_action,
+        OnOpenCb on_open = nullptr
     );
     ~NotificationCenterWindow();
 
@@ -43,6 +45,7 @@ private:
     OnToggleDndCb m_on_toggle_dnd;
     OnDismissCb m_on_dismiss;
     OnActionCb m_on_action;
+    OnOpenCb m_on_open;
 
     std::shared_ptr<miqu::Window> m_window;
     std::shared_ptr<miqu::CardView> m_root_card;

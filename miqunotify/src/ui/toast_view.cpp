@@ -54,7 +54,7 @@ ToastView::ToastView(
     app_title->set_text_size(tk->metrics.caption_size > 0 ? tk->metrics.caption_size : 10);
     app_title->set_text_color(tk->colors.on_surface_variant);
     app_title->set_bold(true);
-    header_layout->add_view(app_title, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+    header_layout->add_view(app_title, miqu::LayoutParams(0, static_cast<int>(miqu::LayoutDimension::WrapContent), 1.0f));
 
     // Close button (✕)
     m_close_btn = std::make_shared<miqu::Button>("✕");

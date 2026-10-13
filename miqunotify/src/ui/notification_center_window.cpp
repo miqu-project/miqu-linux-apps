@@ -5,6 +5,7 @@
 #include <miqutoolkit/view/image_view.hpp>
 #include <chrono>
 #include <algorithm>
+#include <unordered_map>
 
 namespace miqunotify {
 
@@ -23,11 +24,13 @@ NotificationCenterWindow::NotificationCenterWindow(
     OnClearAllCb on_clear_all,
     OnToggleDndCb on_toggle_dnd,
     OnDismissCb on_dismiss,
-    OnActionCb on_action
+    OnActionCb on_action,
+    OnOpenCb on_open
 ) : m_on_clear_all(std::move(on_clear_all)),
     m_on_toggle_dnd(std::move(on_toggle_dnd)),
     m_on_dismiss(std::move(on_dismiss)),
-    m_on_action(std::move(on_action)) {}
+    m_on_action(std::move(on_action)),
+    m_on_open(std::move(on_open)) {}
 
 NotificationCenterWindow::~NotificationCenterWindow() {
     close();
@@ -44,6 +47,9 @@ void NotificationCenterWindow::toggle() {
 void NotificationCenterWindow::open() {
     if (is_open()) return;
     create_window();
+    if (m_on_open) {
+        m_on_open();
+    }
 }
 
 void NotificationCenterWindow::close() {
@@ -68,8 +74,17 @@ void NotificationCenterWindow::refresh_history(const std::vector<Notification>& 
 
     // Update unread count badge
     if (m_badge_text) {
-        size_t count = m_cached_history.size();
-        m_badge_text->set_text(count == 0 ? "0 notifications" : std::to_string(count) + " unread");
+        size_t total = m_cached_history.size();
+        size_t unread = std::count_if(m_cached_history.begin(), m_cached_history.end(), [](const auto& n) {
+            return !n.is_read;
+        });
+        if (total == 0) {
+            m_badge_text->set_text("0 notifications");
+        } else if (unread > 0) {
+            m_badge_text->set_text(std::to_string(total) + " notifications (" + std::to_string(unread) + " unread)");
+        } else {
+            m_badge_text->set_text(std::to_string(total) + " notifications");
+        }
     }
 
     // Update DND button state
@@ -110,6 +125,28 @@ void NotificationCenterWindow::refresh_history(const std::vector<Notification>& 
             empty_box->add_view(empty_sub, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
 
             m_history_list->add_view(empty_box, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::MatchParent)));
+        } else if (NotifyConfig::get().group_by_app) {
+            std::vector<std::string> app_order;
+            std::unordered_map<std::string, std::vector<Notification>> app_groups;
+            for (auto it = m_cached_history.rbegin(); it != m_cached_history.rend(); ++it) {
+                std::string name = !it->app_name.empty() ? it->app_name : "Other";
+                if (app_groups.find(name) == app_groups.end()) {
+                    app_order.push_back(name);
+                }
+                app_groups[name].push_back(*it);
+            }
+            for (const auto& app_name : app_order) {
+                auto group_header = std::make_shared<miqu::TextView>(app_name + " (" + std::to_string(app_groups[app_name].size()) + ")");
+                group_header->set_text_size(tk->metrics.caption_size > 0 ? tk->metrics.caption_size : 10);
+                group_header->set_bold(true);
+                group_header->set_text_color(tk->colors.primary);
+                group_header->set_margin(4, 4, 4, 0);
+                m_history_list->add_view(group_header, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+
+                for (const auto& notif : app_groups[app_name]) {
+                    m_history_list->add_view(create_history_item_view(notif), miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+                }
+            }
         } else {
             // Newest on top
             for (auto it = m_cached_history.rbegin(); it != m_cached_history.rend(); ++it) {
@@ -128,8 +165,13 @@ std::shared_ptr<miqu::View> NotificationCenterWindow::create_history_item_view(c
 
     auto card = std::make_shared<miqu::CardView>();
     card->set_radius(tk->metrics.corner_radius > 0 ? tk->metrics.corner_radius : 10);
-    card->set_card_background_color(tk->colors.surface_variant.with_alpha(0.5f));
-    card->set_stroke(1, tk->colors.outline.with_alpha(0.2f));
+    if (!notif.is_read) {
+        card->set_card_background_color(tk->colors.surface_variant.with_alpha(0.8f));
+        card->set_stroke(1, tk->colors.primary.with_alpha(0.4f));
+    } else {
+        card->set_card_background_color(tk->colors.surface_variant.with_alpha(0.45f));
+        card->set_stroke(1, tk->colors.outline.with_alpha(0.15f));
+    }
     card->set_padding(12);
 
     auto box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
@@ -146,11 +188,14 @@ std::shared_ptr<miqu::View> NotificationCenterWindow::create_history_item_view(c
     header->add_view(icon_view, miqu::LayoutParams(20, 20));
 
     std::string title_str = !notif.app_name.empty() ? notif.app_name : "Notification";
+    if (!notif.is_read) {
+        title_str += "  ●";
+    }
     auto app_title = std::make_shared<miqu::TextView>(title_str);
     app_title->set_text_size(tk->metrics.caption_size > 0 ? tk->metrics.caption_size : 10);
     app_title->set_bold(true);
-    app_title->set_text_color(tk->colors.on_surface);
-    header->add_view(app_title, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+    app_title->set_text_color(!notif.is_read ? tk->colors.primary : tk->colors.on_surface);
+    header->add_view(app_title, miqu::LayoutParams(0, static_cast<int>(miqu::LayoutDimension::WrapContent), 1.0f));
 
     auto time_text = std::make_shared<miqu::TextView>(format_relative_time(notif.timestamp_sec));
     time_text->set_text_size(tk->metrics.caption_size > 0 ? tk->metrics.caption_size : 9);
@@ -240,7 +285,7 @@ void NotificationCenterWindow::create_window() {
     title->set_text_size(tk->metrics.h2_size > 0 ? tk->metrics.h2_size : 16);
     title->set_bold(true);
     title->set_text_color(tk->colors.on_surface);
-    top_header->add_view(title, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+    top_header->add_view(title, miqu::LayoutParams(0, static_cast<int>(miqu::LayoutDimension::WrapContent), 1.0f));
 
     // DND Toggle Button
     m_dnd_btn = std::make_shared<miqu::Button>(m_dnd_active ? "DND: ON" : "DND: OFF");

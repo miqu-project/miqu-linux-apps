@@ -16,6 +16,8 @@ struct NotifyConfig {
     bool dnd_enabled = false;
     int history_limit = 100;
     int center_width = 400;
+    bool debug = false;
+    bool group_by_app = true;
 
     static NotifyConfig& get();
     void sync_defaults_from_toolkit();
