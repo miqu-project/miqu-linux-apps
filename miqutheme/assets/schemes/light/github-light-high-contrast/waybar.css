@@ -1,0 +1,4 @@
+@define-color bg-color alpha(#ffffff, 0.30);
+@define-color fg-color #010409;
+@define-color accent-color #0969da;
+@define-color border-color #d0d7de;

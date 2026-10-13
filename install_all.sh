@@ -24,6 +24,7 @@ APPS=(
     "miqunotify"
     "miqubar"
     "miqudm"
+    "miqutheme"
     "miqutest"
 )
 

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Theme Manager
+GenericName=Color Schemes • Wallpapers • Material You • Transparency
+Comment=Modern native Wayland theme and wallpaper manager built with miqutoolkit
+Exec=miqutheme
+Icon=miqutheme
+Terminal=false
+Categories=System;Settings;DesktopSettings;
+Keywords=theme;wallpaper;color;material;matugen;transparency;dark;light;
+StartupNotify=true
+StartupWMClass=miqutheme

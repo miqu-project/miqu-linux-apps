@@ -1,0 +1,48 @@
+/* GTK 3 & GTK 4 Theme Palette */
+@define-color accent_color #268BD2;
+@define-color accent_bg_color #268BD2;
+@define-color accent_fg_color #ffffff;
+
+@define-color window_bg_color alpha(#FDF6E3, 0.80);
+@define-color window_fg_color #657B83;
+
+@define-color view_bg_color alpha(#073642, 0.80);
+@define-color view_fg_color #657B83;
+
+@define-color headerbar_bg_color alpha(#073642, 0.80);
+@define-color headerbar_fg_color #657B83;
+@define-color headerbar_border_color alpha(#657B83, 0.15);
+@define-color headerbar_backdrop_color alpha(#FDF6E3, 0.80);
+
+@define-color sidebar_bg_color alpha(#073642, 0.80);
+@define-color sidebar_fg_color #657B83;
+@define-color sidebar_border_color alpha(#657B83, 0.15);
+@define-color sidebar_backdrop_color alpha(#FDF6E3, 0.80);
+
+@define-color popover_bg_color alpha(#002B36, 0.90);
+@define-color popover_fg_color #657B83;
+
+@define-color card_bg_color alpha(#073642, 0.80);
+@define-color card_fg_color #657B83;
+@define-color card_border_color alpha(#657B83, 0.15);
+
+@define-color dialog_bg_color alpha(#002B36, 0.90);
+@define-color dialog_fg_color #657B83;
+
+@define-color success_color #859900;
+@define-color warning_color #B58900;
+@define-color error_color #DC322F;
+@define-color destructive_bg_color #DC322F;
+@define-color destructive_fg_color #ffffff;
+
+@define-color borders alpha(#657B83, 0.15);
+
+@define-color theme_bg_color alpha(#FDF6E3, 0.80);
+@define-color theme_fg_color #657B83;
+@define-color theme_base_color alpha(#073642, 0.80);
+@define-color theme_text_color #657B83;
+@define-color theme_selected_bg_color #268BD2;
+@define-color theme_selected_fg_color #ffffff;
+@define-color theme_unfocused_fg_color alpha(#657B83, 0.70);
+@define-color theme_tooltip_bg_color alpha(#002B36, 0.90);
+@define-color theme_tooltip_fg_color #657B83;

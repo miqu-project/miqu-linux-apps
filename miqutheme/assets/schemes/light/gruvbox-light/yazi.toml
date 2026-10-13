@@ -1,0 +1,71 @@
+[manager]
+cwd = { fg = "#076678" }
+hovered = { bg = "#f2e5bc", fg = "#3c3836" }
+preview_hovered = { bg = "#ebdbb2" }
+
+find_keyword = { fg = "#b57614", bold = true }
+find_position = { fg = "#8f3f71", italic = true }
+
+marker_copied = { fg = "#79740e", bg = "#e5c07b" }
+marker_cut = { fg = "#9d0006", bg = "#fabd2f" }
+marker_marked = { fg = "#076678", bg = "#d5c4a1" }
+marker_selected = { fg = "#b57614", bg = "#ebdbb2" }
+
+tab_active = { bg = "#076678", fg = "#fbf1c7", bold = true }
+tab_inactive = { bg = "#ebdbb2", fg = "#7c6f64" }
+
+count_copied = { fg = "#79740e", bg = "#e5c07b" }
+count_cut = { fg = "#9d0006", bg = "#fabd2f" }
+count_selected = { fg = "#076678", bg = "#d5c4a1" }
+
+border_symbol = "│"
+border_style = { fg = "#bdae93" }
+
+[status]
+normal = { bg = "#076678", fg = "#fbf1c7", bold = true }
+select = { bg = "#8f3f71", fg = "#fbf1c7", bold = true }
+unset = { bg = "#9d0006", fg = "#fbf1c7", bold = true }
+progress_label = { fg = "#3c3836", bold = true }
+progress_normal = { fg = "#076678", bg = "#fbf1c7" }
+progress_error = { fg = "#9d0006", bg = "#fbf1c7" }
+
+[mode]
+normal_main = { bg = "#076678", fg = "#fbf1c7", bold = true }
+normal_alt = { bg = "#f2e5bc", fg = "#076678" }
+select_main = { bg = "#8f3f71", fg = "#fbf1c7", bold = true }
+select_alt = { bg = "#f2e5bc", fg = "#8f3f71" }
+unset_main = { bg = "#9d0006", fg = "#fbf1c7", bold = true }
+unset_alt = { bg = "#f2e5bc", fg = "#9d0006" }
+
+[input]
+border = { fg = "#076678" }
+title = { fg = "#076678" }
+value = { fg = "#3c3836" }
+selected = { bg = "#d5c4a1" }
+
+[select]
+border = { fg = "#076678" }
+active = { fg = "#076678", bold = true }
+inactive = { fg = "#7c6f64" }
+
+[tasks]
+border = { fg = "#076678" }
+title = { fg = "#076678" }
+hovered = { bg = "#f2e5bc", fg = "#3c3836" }
+
+[which]
+mask = { bg = "#ebdbb2" }
+cand = { fg = "#076678" }
+rest = { fg = "#7c6f64" }
+desc = { fg = "#3c3836" }
+separator_style = { fg = "#bdae93" }
+
+[help]
+on = { fg = "#076678" }
+exec = { fg = "#8f3f71" }
+desc = { fg = "#3c3836" }
+hovered = { bg = "#f2e5bc", bold = true }
+footer = { bg = "#fbf1c7", fg = "#3c3836" }
+
+[filetree]
+folder = { fg = "#076678" }
