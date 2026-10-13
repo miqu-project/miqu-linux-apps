@@ -4,6 +4,17 @@
 
 namespace miqu {
 
+enum class ItemCategory {
+    Default,
+    App,
+    Window,
+    Workspace,
+    Run,
+    File,
+    Calc,
+    Web
+};
+
 struct LauncherItem {
     std::string id;
     std::string title;
@@ -15,6 +26,7 @@ struct LauncherItem {
     std::string return_value;
     std::string meta_tags;
     std::string keywords;
+    ItemCategory category = ItemCategory::Default;
     bool is_image = false;
     bool non_selectable = false;
     bool terminal = false;

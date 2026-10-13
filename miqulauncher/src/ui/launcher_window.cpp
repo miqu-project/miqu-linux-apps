@@ -33,8 +33,23 @@ bool LauncherWindow::init() {
         BinaryManager::get_binary_entries();
     }).detach();
 
-    // 3. GridView setup
-    m_is_list_view = (m_config.view_mode == "list");
+    // 3. Initialize universal search aggregator
+    m_search_aggregator = std::make_unique<SearchAggregator>(
+        &m_app_provider,
+        &m_window_provider,
+        &m_workspace_provider,
+        &m_run_provider
+    );
+
+    const auto& init_mode = m_config.modes[m_active_mode_index];
+
+    // 4. GridView setup
+    if (!m_config.allow_mode_switch && init_mode.type == ModeType::Search && m_config.search_view_mode != "inherit") {
+        m_is_list_view = (m_config.search_view_mode == "list");
+    } else {
+        m_is_list_view = (m_config.view_mode == "list");
+    }
+
     m_grid = GridViewBuilder::create()
         ->selectionBorder(m_config.selection_border)
         ->onItemClick([this](size_t index, std::shared_ptr<View> view) {
@@ -42,8 +57,6 @@ bool LauncherWindow::init() {
         })
         ->build();
     apply_view_mode();
-
-    const auto& init_mode = m_config.modes[m_active_mode_index];
 
     // 4. Search View setup
     int search_v_pad = std::max(2, (m_config.search_height - 24) / 2);
@@ -264,6 +277,12 @@ void LauncherWindow::refresh_current_mode() {
             m_current_items = m_dmenu_provider.query(query);
             break;
         }
+        case ModeType::Search: {
+            if (m_search_aggregator) {
+                m_current_items = m_search_aggregator->query(query);
+            }
+            break;
+        }
     }
 
     if (!m_config.show_subtitles) {
@@ -335,6 +354,11 @@ void LauncherWindow::handle_item_click(size_t index, std::shared_ptr<View> view)
         case ModeType::Dmenu:
             m_dmenu_provider.activate(data);
             break;
+        case ModeType::Search:
+            if (m_search_aggregator) {
+                m_search_aggregator->activate(data);
+            }
+            break;
     }
 
     m_engine->quit();
@@ -354,6 +378,16 @@ void LauncherWindow::handle_submit(const std::string& query) {
             handle_item_click(m_grid->get_selected_index(), item);
         } else if (!query.empty()) {
             m_dmenu_provider.submit(query);
+            m_engine->quit();
+        }
+        return;
+    }
+
+    if (mode.type == ModeType::Search) {
+        if (auto item = m_grid->get_selected_item()) {
+            handle_item_click(m_grid->get_selected_index(), item);
+        } else if (m_search_aggregator && !m_current_items.empty()) {
+            m_search_aggregator->activate(m_current_items[0]);
             m_engine->quit();
         }
         return;
@@ -412,9 +446,13 @@ std::shared_ptr<View> LauncherWindow::create_item_view(size_t index) const {
         auto builder = ListItemViewBuilder::create()
             ->title(item.title)
             ->subtitle(item.subtitle)
+            ->trailingText(item.badge)
             ->iconSource(icon_src)
             ->iconSize(28)
             ->isImage(item.is_image);
+        if (!item.badge.empty()) {
+            builder->highlightTrailing(true);
+        }
         if (item.is_image) {
             builder->qualityMode(ImageQuality::ThumbnailFast);
         }

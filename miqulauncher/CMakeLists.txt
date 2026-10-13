@@ -24,6 +24,10 @@ add_executable(miqulauncher
     src/providers/run_provider.cpp
     src/providers/script_provider.cpp
     src/providers/dmenu_provider.cpp
+    src/providers/calc_provider.cpp
+    src/providers/web_provider.cpp
+    src/providers/file_provider.cpp
+    src/providers/search_aggregator.cpp
     src/ui/grid_item_view.cpp
     src/ui/launcher_window.cpp
 )

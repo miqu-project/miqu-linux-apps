@@ -8,6 +8,7 @@
 #include "providers/run_provider.hpp"
 #include "providers/script_provider.hpp"
 #include "providers/dmenu_provider.hpp"
+#include "providers/search_aggregator.hpp"
 #include <memory>
 #include <vector>
 
@@ -52,6 +53,7 @@ private:
     RunProvider m_run_provider;
     std::unique_ptr<ScriptProvider> m_script_provider;
     DmenuProvider m_dmenu_provider;
+    std::unique_ptr<SearchAggregator> m_search_aggregator;
 };
 
 } // namespace miqu

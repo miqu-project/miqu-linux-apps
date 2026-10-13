@@ -11,7 +11,8 @@ enum class ModeType {
     Workspace,
     Run,
     Script,
-    Dmenu
+    Dmenu,
+    Search
 };
 
 struct ModeSpec {
@@ -43,6 +44,7 @@ struct LauncherConfig {
     int search_height = 36;
     int search_elevation = 0;
     std::string view_mode = "grid"; // "grid" or "list"
+    std::string search_view_mode = "inherit"; // "inherit", "list", or "grid"
     std::string icon_theme = "";
     std::string config_path = "";
 };

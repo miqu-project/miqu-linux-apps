@@ -33,7 +33,7 @@ public:
     // Search
     bool show_search = true;
     std::string search_style = "pill"; // "pill" or "icon"
-    std::string search_cmd = "miqulauncher";
+    std::string search_cmd = "miqulauncher -show search";
     int search_width = 160;
     std::string search_placeholder = "Search";
 

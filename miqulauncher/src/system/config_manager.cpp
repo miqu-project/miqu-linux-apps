@@ -102,6 +102,12 @@ void ConfigManager::load(LauncherConfig& config) {
             if (lower_val == "list" || lower_val == "grid") {
                 config.view_mode = lower_val;
             }
+        } else if (key == "search_view_mode") {
+            std::string lower_val = val;
+            std::transform(lower_val.begin(), lower_val.end(), lower_val.begin(), ::tolower);
+            if (lower_val == "list" || lower_val == "grid" || lower_val == "inherit") {
+                config.search_view_mode = lower_val;
+            }
         } else if (key == "icon_theme") {
             config.icon_theme = val;
             Config::get()->metrics.icon_theme = val;

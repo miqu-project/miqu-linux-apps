@@ -23,6 +23,9 @@ static ModeSpec create_builtin_mode(const std::string& name) {
     if (lower == "run") {
         return ModeSpec{ ModeType::Run, "run", "run", "Run command line or binary...", "" };
     }
+    if (lower == "search" || lower == "find" || lower == "everything") {
+        return ModeSpec{ ModeType::Search, "search", "search", "Search everything (apps, files, math, web)...", "" };
+    }
 
     // Default to app if unknown builtin
     return ModeSpec{ ModeType::App, lower, lower, "Search...", "" };
@@ -42,7 +45,7 @@ void CliParser::print_help(const char* prog_name) {
     std::cout << "Usage: " << prog_name << " [options]\n\n"
               << "A modern, minimalist application launcher and dmenu runner.\n\n"
               << "Options:\n"
-              << "  -show <mode>         Run in dedicated mode (drun, window, workspaces, run)\n"
+              << "  -show <mode>         Run in dedicated mode (drun, window, workspaces, run, search)\n"
               << "  -modes <list>        Comma-separated list of enabled modes (e.g. 'drun,run' or 'drun,power:~/bin/power.sh')\n"
               << "  -dmenu               Run in dmenu mode (read items from stdin, write choice to stdout)\n"
               << "                       Supports Rofi metadata: label\\0icon\\x1f<path>\\x1finfo\\x1f<val>\\x1fmeta\\x1f<tags>\n"
@@ -157,12 +160,13 @@ CliParser::ParseResult CliParser::parse(int argc, char* argv[], LauncherConfig& 
         return ParseResult::Success;
     }
 
-    // If no modes specified yet, default to all 4 standard modes
+    // If no modes specified yet, default to all 5 standard modes
     if (out_config.modes.empty()) {
         out_config.modes.push_back(ModeSpec{ ModeType::App, "drun", "apps", "Search applications...", "" });
         out_config.modes.push_back(ModeSpec{ ModeType::Window, "window", "window", "Switch to open window...", "" });
         out_config.modes.push_back(ModeSpec{ ModeType::Workspace, "workspaces", "workspaces", "Switch workspace...", "" });
         out_config.modes.push_back(ModeSpec{ ModeType::Run, "run", "run", "Run command line or binary...", "" });
+        out_config.modes.push_back(ModeSpec{ ModeType::Search, "search", "search", "Search everything (apps, files, math, web)...", "" });
     }
 
     // Find initial active mode if -show was specified with -modes or default
