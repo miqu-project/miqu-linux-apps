@@ -523,28 +523,126 @@ void ThemeBackend::regenerate_matugen(ThemeMode mode, const std::string& wp_path
 void ThemeBackend::update_ide_theme(ThemeMode mode, const std::string& miqutoolkit_conf) {
     const char* home = getenv("HOME");
     if (!home) return;
-    fs::path gemini_cfg = fs::path(home) / ".gemini/config/config.json";
-    if (!fs::exists(gemini_cfg)) return;
+    fs::path home_path(home);
+    fs::path gemini_cfg = home_path / ".gemini/config/config.json";
 
-    SchemeInfo info = parse_scheme_file(miqutoolkit_conf, "current");
+    std::string bg_hex = "#111318";
+    std::string primary_hex = "#a9c7ff";
+    std::string fg_hex = "#e2e2e9";
 
-    // Read config.json and patch fields
-    std::ifstream in(gemini_cfg);
-    if (!in.is_open()) return;
-    std::stringstream buf;
-    buf << in.rdbuf();
-    std::string content = buf.str();
+    if (fs::exists(miqutoolkit_conf)) {
+        std::ifstream f(miqutoolkit_conf);
+        std::string line;
+        while (std::getline(f, line)) {
+            std::string t = trim(line);
+            auto eq = t.find('=');
+            if (eq == std::string::npos) continue;
+            std::string k = trim(t.substr(0, eq));
+            std::string v = trim(t.substr(eq + 1));
+            if (v.length() >= 7 && v[0] == '#') v = v.substr(0, 7);
+            if (k == "background") bg_hex = v;
+            else if (k == "primary") primary_hex = v;
+            else if (k == "on_background" || k == "on_surface") fg_hex = v;
+        }
+    }
 
     std::string target_mode_str = (mode == ThemeMode::Dark) ? "THEME_MODE_DARK" : "THEME_MODE_LIGHT";
-    // Replace themeMode in userSettings
-    size_t pos = content.find("\"themeMode\"");
-    if (pos != std::string::npos) {
-        size_t colon = content.find(':', pos);
-        size_t quote1 = content.find('"', colon);
-        size_t quote2 = content.find('"', quote1 + 1);
-        if (quote1 != std::string::npos && quote2 != std::string::npos) {
-            content.replace(quote1 + 1, quote2 - quote1 - 1, target_mode_str);
+    std::string seed_key = (mode == ThemeMode::Dark) ? "customThemeSeedsDark" : "customThemeSeedsLight";
+
+    // 1. Update config.json on disk
+    if (fs::exists(gemini_cfg)) {
+        std::ifstream in(gemini_cfg);
+        if (in.is_open()) {
+            std::stringstream buf;
+            buf << in.rdbuf();
+            std::string content = buf.str();
+
+            // Patch themeMode
+            size_t pos = content.find("\"themeMode\"");
+            if (pos != std::string::npos) {
+                size_t colon = content.find(':', pos);
+                size_t q1 = content.find('"', colon);
+                size_t q2 = content.find('"', q1 + 1);
+                if (q1 != std::string::npos && q2 != std::string::npos) {
+                    content.replace(q1 + 1, q2 - q1 - 1, target_mode_str);
+                }
+            }
+
+            // Patch seed_key values
+            size_t s_pos = content.find("\"" + seed_key + "\"");
+            if (s_pos != std::string::npos) {
+                auto patch_field = [&](const std::string& field, const std::string& val) {
+                    size_t f_pos = content.find("\"" + field + "\"", s_pos);
+                    if (f_pos != std::string::npos && f_pos < s_pos + 200) {
+                        size_t col = content.find(':', f_pos);
+                        size_t val_q1 = content.find('"', col);
+                        size_t val_q2 = content.find('"', val_q1 + 1);
+                        if (val_q1 != std::string::npos && val_q2 != std::string::npos) {
+                            content.replace(val_q1 + 1, val_q2 - val_q1 - 1, val);
+                        }
+                    }
+                };
+                patch_field("background", bg_hex);
+                patch_field("primary", primary_hex);
+                patch_field("foregroundOverride", fg_hex);
+            }
             write_file_string(gemini_cfg, content);
+        }
+    }
+
+    // 2. Live update running Antigravity instance via Connect-RPC
+    fs::path log_path = home_path / ".config/Antigravity/logs/main.log";
+    if (fs::exists(log_path)) {
+        std::ifstream lf(log_path);
+        std::string line;
+        std::vector<std::string> lines;
+        while (std::getline(lf, line)) {
+            lines.push_back(line);
+        }
+
+        std::string port, token;
+        for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+            if (port.empty()) {
+                size_t p_found = it->find("Port changed! Reloading all windows with URL: https://127.0.0.1:");
+                if (p_found != std::string::npos) {
+                    size_t colon = it->find("127.0.0.1:", p_found);
+                    if (colon != std::string::npos) {
+                        size_t start = colon + 10;
+                        size_t slash = it->find('/', start);
+                        if (slash != std::string::npos) {
+                            port = it->substr(start, slash - start);
+                        }
+                    }
+                }
+            }
+            if (token.empty()) {
+                size_t t_found = it->find("--csrf_token");
+                if (t_found != std::string::npos) {
+                    size_t start = t_found + 12;
+                    while (start < it->length() && (it->at(start) == ' ' || it->at(start) == '\t')) start++;
+                    size_t end = start;
+                    while (end < it->length() && it->at(end) != ' ' && it->at(end) != '\t' && it->at(end) != '\r' && it->at(end) != '\n') end++;
+                    token = it->substr(start, end - start);
+                }
+            }
+            if (!port.empty() && !token.empty()) break;
+        }
+
+        if (!port.empty() && !token.empty()) {
+            std::string rpc_url = "https://127.0.0.1:" + port + "/exa.language_server_pb.LanguageServerService/JetboxWriteState";
+            std::string payload = "{\"userConfig\":{\"userSettings\":{\"themeMode\":\"" + target_mode_str +
+                                  "\",\"" + seed_key + "\":{\"background\":\"" + bg_hex +
+                                  "\",\"primary\":\"" + primary_hex +
+                                  "\",\"foregroundOverride\":\"" + fg_hex + "\"}}}}";
+
+            run_command_async({
+                "curl", "-k", "-s", "--connect-timeout", "1", "-m", "2",
+                "-X", "POST", rpc_url,
+                "-H", "Content-Type: application/json",
+                "-H", "Connect-Protocol-Version: 1",
+                "-H", "X-Codeium-Csrf-Token: " + token,
+                "-d", payload
+            });
         }
     }
 }
