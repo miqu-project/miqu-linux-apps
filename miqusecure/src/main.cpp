@@ -69,7 +69,6 @@ int main(int argc, char** argv) {
     if (!target_conf.empty()) {
         // Overlay any toolkit appearance overrides (colors, fonts, metrics, icon_theme)
         Config::get()->load_from_file(target_conf);
-        engine->setup_config_watcher();
 
         std::ifstream file(target_conf);
         std::string line;
@@ -88,6 +87,9 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+    // Register config and theme watcher unconditionally
+    engine->setup_config_watcher();
 
     FirewallInfo initial_fw = SecurityBackend::read_firewall();
 

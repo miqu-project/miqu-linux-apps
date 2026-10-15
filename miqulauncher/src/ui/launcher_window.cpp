@@ -155,10 +155,14 @@ bool LauncherWindow::init() {
         ->addView(m_grid, LayoutParams(1.0f))
         ->build();
 
+    // Since layer surface drop shadow and blur are handled by miquland.conf layer rules,
+    // and rootCard fills the window bounds, disable CardView internal software elevation
+    // to prevent unwanted shadow rendering in the transparent corner margins.
     auto rootCard = CardViewBuilder::create()
         ->backgroundColor(config->colors.background)
         ->stroke(config->metrics.border_width, config->colors.outline)
         ->cornerRadius(config->metrics.corner_radius)
+        ->elevation(0)
         ->padding(m_config.edge_padding)
         ->addView(contentLayout, LayoutParams(static_cast<int>(LayoutDimension::MatchParent), static_cast<int>(LayoutDimension::MatchParent)))
         ->build();

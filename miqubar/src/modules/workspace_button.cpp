@@ -225,7 +225,9 @@ void WorkspaceButtonView::show_flyout() {
     auto card = std::make_shared<miqu::CardView>();
     card->set_style(miqu::CardStyle::Outlined);
     card->set_radius(config->metrics.corner_radius);
-    card->set_elevation(6);
+    const auto& cfg = BarConfig::get();
+    // Since popup elevation is handled by miquland.conf layer rule and CardView is tightly packed to edge, we don't need any elevation of CardView.
+    card->set_elevation(0);
 
     auto row = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
     row->set_divider_spacing(6);
@@ -263,10 +265,8 @@ void WorkspaceButtonView::show_flyout() {
     int flyout_w = count * 40 + 16;
     int flyout_h = 50;
 
-    const auto& cfg = BarConfig::get();
     bool is_top = (cfg.position == "top");
-    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Left)
-                                   : (miqu::Gravity::Bottom | miqu::Gravity::Left);
+    uint32_t anchors = (is_top ? 1 : 2) | 4;
     miqu::Margin margin;
     miqu::Rect bounds = get_bounds();
     int win_w = get_window() ? get_window()->get_width() : 1920;
@@ -283,9 +283,9 @@ void WorkspaceButtonView::show_flyout() {
     m_flyout_window = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-workspaces")
-        ->anchors(1 | 2 | 4 | 8)
+        ->anchors(anchors)
+        ->preferredSize(flyout_w, flyout_h)
         ->contentSize(flyout_w, flyout_h)
-        ->contentGravity(gravity)
         ->contentMargin(margin)
         ->dimBackdrop(false)
         ->transparent(true)

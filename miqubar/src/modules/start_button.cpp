@@ -21,9 +21,8 @@ StartButtonView::StartButtonView() {
     set_padding(4);
     set_layout_params(miqu::LayoutParams(item_h, item_h));
 
-    // Subtle rounded tile background like Windows 11 start button
-    set_background_color(config->colors.surface_variant.with_alpha(0.35f));
-    set_hover_color(config->colors.surface_variant.with_alpha(0.70f));
+    // Transparent idle background, matching workspace button flat style and hover tile
+    sync_style();
 
     // Resolve beautiful colorful Miqu logo or configured start icon
     std::string icon_to_use = !cfg.start_icon.empty() ? cfg.start_icon : "miquland";
@@ -84,6 +83,13 @@ void StartButtonView::launch_menu() {
     } else if (pid > 0) {
         waitpid(pid, nullptr, 0);
     }
+}
+
+void StartButtonView::sync_style() {
+    auto config = miqu::Config::get();
+    set_corner_radius(config->metrics.corner_radius);
+    set_hover_color(config->colors.surface_variant.with_alpha(0.60f));
+    request_redraw();
 }
 
 } // namespace miqubar

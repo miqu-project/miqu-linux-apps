@@ -170,7 +170,8 @@ void TaskbarView::show_context_menu(const miqu::WindowInfo& win, miqu::View* anc
     auto card = std::make_shared<miqu::CardView>();
     card->set_style(miqu::CardStyle::Elevated);
     card->set_radius(config->metrics.corner_radius > 0 ? config->metrics.corner_radius : 10);
-    card->set_elevation(6);
+    // Since popup elevation is handled by miquland.conf layer rule and CardView is tightly packed to edge, we don't need any elevation of CardView.
+    card->set_elevation(0);
     card->set_padding(4, 4);
 
     auto layout = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
@@ -230,8 +231,7 @@ void TaskbarView::show_context_menu(const miqu::WindowInfo& win, miqu::View* anc
 
     miqu::Rect anchor_bounds = anchor->get_bounds();
     bool is_top = (cfg.position == "top");
-    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Left)
-                                   : (miqu::Gravity::Bottom | miqu::Gravity::Left);
+    uint32_t anchors = (is_top ? 1 : 2) | 4;
     miqu::Margin margin;
     int win_w = anchor->get_window() ? anchor->get_window()->get_width() : 1920;
     int left_pos = anchor_bounds.x;
@@ -249,9 +249,9 @@ void TaskbarView::show_context_menu(const miqu::WindowInfo& win, miqu::View* anc
     m_menu_window = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-taskbar-menu")
-        ->anchors(1 | 2 | 4 | 8)
+        ->anchors(anchors)
+        ->preferredSize(menu_w, menu_h)
         ->contentSize(menu_w, menu_h)
-        ->contentGravity(gravity)
         ->contentMargin(margin)
         ->dimBackdrop(false)
         ->transparent(true)

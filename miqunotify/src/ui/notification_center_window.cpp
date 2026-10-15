@@ -267,13 +267,12 @@ void NotificationCenterWindow::create_window() {
     auto tk = miqu::Config::get();
 
     m_root_card = std::make_shared<miqu::CardView>();
-    m_root_card->set_radius(0);
-    m_root_card->set_card_background_color(tk->colors.surface);
-    m_root_card->set_stroke(1, tk->colors.outline.with_alpha(0.2f));
-    m_root_card->set_elevation(4);
-    m_root_card->set_padding(16);
+    m_root_card->set_style(miqu::CardStyle::Outlined);
+    m_root_card->set_radius(tk->metrics.corner_radius);
+    m_root_card->set_elevation(0);
 
     auto root_layout = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
+    root_layout->set_padding(16, 16, 16, 16);
     root_layout->set_divider_spacing(12);
 
     // Top Header
@@ -344,7 +343,7 @@ void NotificationCenterWindow::create_window() {
     m_history_list->set_divider_spacing(8);
 
     m_scroll_view = std::make_shared<miqu::ScrollView>(m_history_list);
-    root_layout->add_view(m_scroll_view, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::MatchParent)));
+    root_layout->add_view(m_scroll_view, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), 0, 1.0f));
 
     m_root_card->add_view(root_layout, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::MatchParent)));
 
@@ -356,6 +355,8 @@ void NotificationCenterWindow::create_window() {
         ->appId("miqunotify")
         ->layerNamespace("miqunotify-center")
         ->anchors(anchors)
+        ->exclusiveZone(0)
+        ->transparent(true)
         ->keyboardInteractive(true)
         ->closeOnClickOutside(true)
         ->closeOnEscape(true)

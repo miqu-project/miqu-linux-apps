@@ -121,6 +121,7 @@ BarRootView::~BarRootView() {
 void BarRootView::sync_theme() {
     auto config = miqu::Config::get();
     set_background_color(config->colors.background);
+    if (m_start_btn) m_start_btn->sync_style();
     if (m_search_btn) m_search_btn->sync_style();
     request_redraw();
 }
@@ -159,8 +160,7 @@ void BarRootView::toggle_network() {
 
     const auto& cfg = BarConfig::get();
     bool is_top = (cfg.position == "top");
-    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
-                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
     margin.right = 60;
     if (is_top) margin.top = cfg.height + 8;
@@ -169,9 +169,9 @@ void BarRootView::toggle_network() {
     m_network_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-network")
-        ->anchors(1 | 2 | 4 | 8)
+        ->anchors(anchors)
+        ->preferredSize(340, 320)
         ->contentSize(340, 320)
-        ->contentGravity(gravity)
         ->contentMargin(margin)
         ->dimBackdrop(false)
         ->transparent(true)
@@ -209,8 +209,7 @@ void BarRootView::toggle_bluetooth() {
 
     const auto& cfg = BarConfig::get();
     bool is_top = (cfg.position == "top");
-    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
-                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
     margin.right = 40;
     if (is_top) margin.top = cfg.height + 8;
@@ -219,9 +218,9 @@ void BarRootView::toggle_bluetooth() {
     m_bluetooth_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-bluetooth")
-        ->anchors(1 | 2 | 4 | 8)
+        ->anchors(anchors)
+        ->preferredSize(340, 300)
         ->contentSize(340, 300)
-        ->contentGravity(gravity)
         ->contentMargin(margin)
         ->dimBackdrop(false)
         ->transparent(true)
@@ -259,8 +258,7 @@ void BarRootView::toggle_sound() {
 
     const auto& cfg = BarConfig::get();
     bool is_top = (cfg.position == "top");
-    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
-                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
     margin.right = 24;
     if (is_top) margin.top = cfg.height + 8;
@@ -269,9 +267,9 @@ void BarRootView::toggle_sound() {
     m_sound_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-sound")
-        ->anchors(1 | 2 | 4 | 8)
+        ->anchors(anchors)
+        ->preferredSize(340, 150)
         ->contentSize(340, 150)
-        ->contentGravity(gravity)
         ->contentMargin(margin)
         ->dimBackdrop(false)
         ->transparent(true)
@@ -313,8 +311,7 @@ void BarRootView::toggle_calendar() {
 
     const auto& cfg = BarConfig::get();
     bool is_top = (cfg.position == "top");
-    miqu::Gravity gravity = is_top ? (miqu::Gravity::Top | miqu::Gravity::Right)
-                                   : (miqu::Gravity::Bottom | miqu::Gravity::Right);
+    uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
     margin.right = 12;
     if (is_top) {
@@ -326,9 +323,9 @@ void BarRootView::toggle_calendar() {
     m_calendar_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
         ->layerNamespace("miqubar-calendar")
-        ->anchors(1 | 2 | 4 | 8)
+        ->anchors(anchors)
+        ->preferredSize(310, 360)
         ->contentSize(310, 360)
-        ->contentGravity(gravity)
         ->contentMargin(margin)
         ->dimBackdrop(false)
         ->transparent(true)
@@ -378,15 +375,12 @@ bool BarWindow::init() {
     m_root_view = std::make_shared<BarRootView>();
 
     uint32_t anchors = 2 | 4 | 8; // Bottom | Left | Right
-    miqu::WindowRole role = miqu::WindowRole::LayerBottom;
-
     if (cfg.position == "top") {
         anchors = 1 | 4 | 8; // Top | Left | Right
-        role = miqu::WindowRole::LayerTop;
     }
 
     m_window = miqu::WindowBuilder::create()
-        ->role(role)
+        ->role(miqu::WindowRole::LayerTop)
         ->title("miqubar")
         ->appId("miqubar")
         ->layerNamespace("miqubar")

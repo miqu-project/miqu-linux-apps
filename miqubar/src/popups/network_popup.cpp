@@ -96,7 +96,8 @@ void NetworkPopupView::setup_ui() {
 
     set_style(CardStyle::Outlined);
     set_radius(config->metrics.corner_radius > 0 ? config->metrics.corner_radius + 4 : 12);
-    set_elevation(8);
+    // Since popup elevation is handled by miquland.conf layer rule and CardView is tightly packed to edge, we don't need any elevation of CardView.
+    set_elevation(0);
 
     auto root = std::make_shared<LinearLayout>(Orientation::Vertical);
     root->set_layout_params(LayoutParams(

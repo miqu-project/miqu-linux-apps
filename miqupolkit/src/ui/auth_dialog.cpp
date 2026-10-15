@@ -170,10 +170,14 @@ void AuthDialogManager::show_dialog(
     int identity_h = polkit_cfg.show_user_identity ? (26 + 10) : 0;
     int card_h = pad_t + pad_b + icon_sz + 10 + 22 + 10 + msg_h + identity_h + 10 + 16 + 10 + 40 + 10 + 38;
 
+    // Since layer surface drop shadow and blur are handled by miquland.conf layer rules,
+    // and rootCard fills the window bounds, disable CardView internal software elevation
+    // to prevent unwanted shadow rendering in the transparent corner margins.
     auto rootCard = CardViewBuilder::create()
         ->backgroundColor(config->colors.background)
         ->stroke(config->metrics.border_width, config->colors.outline)
         ->cornerRadius(config->metrics.corner_radius > 0 ? config->metrics.corner_radius : 16)
+        ->elevation(0)
         ->padding(pad_h, pad_t, pad_h, pad_b)
         ->addView(contentLayout, LayoutParams(static_cast<int>(LayoutDimension::MatchParent), static_cast<int>(LayoutDimension::MatchParent)))
         ->build();

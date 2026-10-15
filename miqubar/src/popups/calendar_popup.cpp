@@ -16,7 +16,8 @@ CalendarPopupView::CalendarPopupView(std::function<void()> on_close)
     auto config = miqu::Config::get();
     set_style(miqu::CardStyle::Outlined);
     set_radius(config->metrics.corner_radius);
-    set_elevation(6);
+    // Since popup elevation is handled by miquland.conf layer rule and CardView is tightly packed to edge, we don't need any elevation of CardView.
+    set_elevation(0);
 
     update_time();
     m_view_year = m_cur_year;

@@ -16,7 +16,6 @@ public:
     std::string position = "bottom";
     int height = 48;
     int exclusive_zone = 48;
-    float opacity = 0.96f;
 
     // Start & Taskbar
     bool show_start = true;

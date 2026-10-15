@@ -64,7 +64,6 @@ int main(int argc, char** argv) {
 
     if (!target_conf.empty()) {
         Config::get()->load_from_file(target_conf);
-        engine->setup_config_watcher();
 
         std::ifstream file(target_conf);
         if (file.is_open()) {
@@ -90,6 +89,9 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+    // Register config and theme watcher unconditionally
+    engine->setup_config_watcher();
 
     // Check optional CLI search path or direct file target
     if (!positional_target.empty()) {

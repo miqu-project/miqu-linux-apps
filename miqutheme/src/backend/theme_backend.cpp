@@ -449,14 +449,6 @@ void ThemeBackend::apply_transparency(int percentage, bool notify_listeners) {
             out << line << "\n";
         }
         write_file_string(miqu_conf, out.str());
-
-        // Copy to ~/.config/miqutoolkit/miqutoolkit.conf
-        const char* home = getenv("HOME");
-        if (home) {
-            fs::path dest = fs::path(home) / ".config/miqutoolkit/miqutoolkit.conf";
-            std::error_code ec;
-            fs::copy_file(miqu_conf, dest, fs::copy_options::overwrite_existing, ec);
-        }
     }
 
     // 2. Update kitty.conf
@@ -693,10 +685,6 @@ void ThemeBackend::sync_symlinks() {
     fs::create_directories(home_path / ".config/yazi");
     fs::remove(home_path / ".config/yazi/theme.toml", ec);
     fs::create_symlink(current_dir_ / "yazi.toml", home_path / ".config/yazi/theme.toml", ec);
-
-    // miqutoolkit
-    fs::create_directories(home_path / ".config/miqutoolkit");
-    fs::copy_file(current_dir_ / "miqutoolkit.conf", home_path / ".config/miqutoolkit/miqutoolkit.conf", fs::copy_options::overwrite_existing, ec);
 }
 
 void ThemeBackend::reload_daemons() {

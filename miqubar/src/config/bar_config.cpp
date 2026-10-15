@@ -43,8 +43,6 @@ static bool parse_bool(const std::string& val) {
 }
 
 void BarConfig::load(const std::string& custom_path) {
-    sync_defaults_from_toolkit();
-
     std::string path_to_load = custom_path;
     if (path_to_load.empty()) {
         const char* xdg_config = getenv("XDG_CONFIG_HOME");
@@ -61,6 +59,12 @@ void BarConfig::load(const std::string& custom_path) {
             path_to_load = "/usr/share/miqubar/miqubar.conf";
         }
     }
+
+    if (!path_to_load.empty() && fs::exists(path_to_load)) {
+        miqu::Config::get()->load_from_file(path_to_load);
+    }
+
+    sync_defaults_from_toolkit();
 
     if (path_to_load.empty() || !fs::exists(path_to_load)) {
         return;
@@ -84,7 +88,6 @@ void BarConfig::load(const std::string& custom_path) {
         if (key == "position") position = val;
         else if (key == "height") height = std::max(24, std::stoi(val));
         else if (key == "exclusive_zone") exclusive_zone = std::stoi(val);
-        else if (key == "opacity") opacity = std::clamp(std::stof(val), 0.0f, 1.0f);
         else if (key == "show_start") show_start = parse_bool(val);
         else if (key == "start_icon") start_icon = val;
         else if (key == "launcher_cmd") launcher_cmd = val;

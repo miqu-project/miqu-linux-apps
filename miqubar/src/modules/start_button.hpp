@@ -9,6 +9,8 @@ public:
     StartButtonView();
     ~StartButtonView() override = default;
 
+    void sync_style();
+
 private:
     void launch_menu();
 };

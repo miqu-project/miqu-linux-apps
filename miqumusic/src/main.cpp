@@ -59,7 +59,6 @@ int main(int argc, char** argv) {
     if (!target_conf.empty()) {
         // Overlay any toolkit appearance overrides (colors, fonts, metrics, icon_theme)
         Config::get()->load_from_file(target_conf);
-        engine->setup_config_watcher();
 
         // Read MPD connection options
         std::ifstream file(target_conf);
@@ -81,6 +80,9 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+    // Register config and theme watcher unconditionally
+    engine->setup_config_watcher();
 
     // Environment variables override config file
     const char* env_host = getenv("MPD_HOST");
