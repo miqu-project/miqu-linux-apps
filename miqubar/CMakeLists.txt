@@ -56,12 +56,4 @@ target_compile_options(miqubar PRIVATE
 
 include(GNUInstallDirs)
 install(TARGETS miqubar RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES assets/miqubar.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES assets/miqubar.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/miqubar)
-install(FILES assets/miqubar.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps)
-install(FILES assets/miqubar-256.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps RENAME miqubar.png)
-install(FILES assets/miqubar-128.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/128x128/apps RENAME miqubar.png)
-install(FILES assets/miqubar-64.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/64x64/apps RENAME miqubar.png)
-install(FILES assets/miqubar-48.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/48x48/apps RENAME miqubar.png)
-install(FILES assets/miqubar-32.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/32x32/apps RENAME miqubar.png)
-install(FILES assets/miqubar-16.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/16x16/apps RENAME miqubar.png)
