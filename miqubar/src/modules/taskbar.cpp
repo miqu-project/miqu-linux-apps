@@ -9,11 +9,164 @@
 #include "miqutoolkit/view/text_view.hpp"
 #include "miqutoolkit/core/window.hpp"
 #include "miqutoolkit/system/app_manager.hpp"
+#include "miqutoolkit/view/divider_view.hpp"
 #include <algorithm>
 #include <cctype>
 #include <iostream>
 
 namespace miqubar {
+
+class WindowRowView : public miqu::LinearLayout {
+public:
+    WindowRowView(int index,
+                  miqu::WindowInfo win,
+                  std::function<void()> on_activate,
+                  std::function<void()> on_close)
+        : LinearLayout(miqu::Orientation::Horizontal),
+          m_index(index),
+          m_win(std::move(win)),
+          m_on_activate(std::move(on_activate)),
+          m_on_close(std::move(on_close)) {
+
+        set_gravity(miqu::Gravity::CenterVertical);
+        set_padding(8, 4, 6, 4);
+        set_divider_spacing(8);
+        set_layout_params(miqu::LayoutParams(
+            static_cast<int>(miqu::LayoutDimension::MatchParent),
+            34
+        ));
+
+        update_style();
+        setup_views();
+    }
+
+    void update_style() {
+        auto config = miqu::Config::get();
+        int radius = config->metrics.corner_radius > 0 ? std::min(8, config->metrics.corner_radius - 2) : 6;
+        set_corner_radius(radius);
+
+        if (m_win.is_active) {
+            set_background_color(config->colors.primary.with_alpha(0.16f));
+            set_stroke(1, config->colors.primary.with_alpha(0.40f));
+        } else if (m_hovered) {
+            set_background_color(config->colors.surface_variant.with_alpha(0.55f));
+            set_stroke(0, miqu::Color::transparent());
+        } else {
+            set_background_color(miqu::Color::transparent());
+            set_stroke(0, miqu::Color::transparent());
+        }
+    }
+
+    void setup_views() {
+        auto config = miqu::Config::get();
+        int base_font_size = config->metrics.font_size > 0 ? config->metrics.font_size : 11;
+
+        // 1. Number Badge (using flat toolkit Button with centered text & pill shape)
+        auto badge_bg = m_win.is_active
+            ? config->colors.primary.with_alpha(0.25f)
+            : config->colors.surface_variant.with_alpha(0.85f);
+        auto badge_fg = m_win.is_active
+            ? config->colors.primary
+            : config->colors.on_surface_variant;
+
+        auto badge = miqu::ButtonBuilder::create()
+            ->text(std::to_string(m_index))
+            ->bold(true)
+            ->textSize(base_font_size - 1)
+            ->flat(true)
+            ->padding(0, 0)
+            ->cornerRadius(5)
+            ->customColors(badge_bg, badge_fg)
+            ->build();
+        badge->set_layout_params(miqu::LayoutParams(22, 20));
+        add_view(badge);
+
+        // 2. Status Dot (using 6x6 toolkit Button with corner radius 3)
+        miqu::Color dot_color;
+        if (m_win.is_active) {
+            dot_color = config->colors.primary;
+        } else if (m_win.is_minimized) {
+            dot_color = config->colors.outline;
+        } else {
+            dot_color = config->colors.on_surface_variant.with_alpha(0.40f);
+        }
+
+        auto dot = miqu::ButtonBuilder::create()
+            ->text("")
+            ->flat(true)
+            ->padding(0, 0)
+            ->cornerRadius(3)
+            ->customColors(dot_color, miqu::Color::transparent())
+            ->build();
+        dot->set_layout_params(miqu::LayoutParams(6, 6));
+        add_view(dot);
+
+        // 3. Title TextView
+        std::string title_text = !m_win.title.empty() ? m_win.title : (!m_win.app_id.empty() ? m_win.app_id : "Window");
+        if (m_win.is_minimized) {
+            title_text += " (minimized)";
+        }
+        auto title_color = m_win.is_active
+            ? config->colors.on_surface
+            : config->colors.on_surface.with_alpha(m_win.is_minimized ? 0.65f : 0.88f);
+
+        auto title = miqu::TextViewBuilder::create()
+            ->text(title_text)
+            ->textSize(base_font_size)
+            ->bold(m_win.is_active)
+            ->textColor(title_color)
+            ->ellipsize(true)
+            ->ellipsizeMode(miqu::EllipsizeMode::End)
+            ->build();
+        title->set_layout_params(miqu::LayoutParams(0, static_cast<int>(miqu::LayoutDimension::WrapContent), 1.0f));
+        add_view(title);
+
+        // 4. Close Button [✕]
+        auto close_btn = miqu::ButtonBuilder::create()
+            ->text("")
+            ->icon("window-close")
+            ->iconSize(14)
+            ->flat(true)
+            ->padding(4, 4)
+            ->customColors(miqu::Color(0, 0, 0, 0), config->colors.on_surface_variant.with_alpha(0.6f))
+            ->onClick([this]() {
+                if (m_on_close) m_on_close();
+            })
+            ->build();
+        close_btn->set_layout_params(miqu::LayoutParams(24, 24));
+        add_view(close_btn);
+    }
+
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override {
+        bool inside = bounds.contains(miqu::Point(lx, ly));
+        if (inside != m_hovered) {
+            m_hovered = inside;
+            update_style();
+            request_redraw();
+        }
+        return miqu::LinearLayout::on_mouse_move(lx, ly, bounds);
+    }
+
+    bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override {
+        if (miqu::LinearLayout::on_mouse_button(lx, ly, button, pressed, bounds)) {
+            return true;
+        }
+        if (button == miqu::MouseButton::Left && !pressed) {
+            if (bounds.contains(miqu::Point(lx, ly))) {
+                if (m_on_activate) m_on_activate();
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    int m_index = 1;
+    miqu::WindowInfo m_win;
+    std::function<void()> m_on_activate;
+    std::function<void()> m_on_close;
+    bool m_hovered = false;
+};
 
 class GroupPreviewCardView : public miqu::CardView {
 public:
@@ -437,13 +590,13 @@ void TaskbarView::show_group_popup(TaskbarItemButton* anchor) {
     });
 
     card->set_style(miqu::CardStyle::Elevated);
-    int radius = config->metrics.corner_radius > 0 ? config->metrics.corner_radius + 2 : 10;
+    int radius = config->metrics.corner_radius > 0 ? config->metrics.corner_radius + 2 : 12;
     card->set_radius(radius);
     card->set_elevation(0);
     card->set_padding(8, 8);
 
     auto root_layout = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
-    root_layout->set_divider_spacing(4);
+    root_layout->set_divider_spacing(3);
     root_layout->set_layout_params(miqu::LayoutParams(
         static_cast<int>(miqu::LayoutDimension::MatchParent),
         static_cast<int>(miqu::LayoutDimension::MatchParent)
@@ -451,21 +604,21 @@ void TaskbarView::show_group_popup(TaskbarItemButton* anchor) {
 
     int base_font_size = config->metrics.font_size > 0 ? config->metrics.font_size : 11;
 
-    // 1. Header Row (App Icon + App Name + Count Badge)
+    // 1. Header Row (App Icon + App Name + Count Badge + Close All Action)
     auto header = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
     header->set_gravity(miqu::Gravity::CenterVertical);
-    header->set_padding(4, 2, 4, 6);
+    header->set_padding(4, 2, 4, 4);
     header->set_layout_params(miqu::LayoutParams(
         static_cast<int>(miqu::LayoutDimension::MatchParent),
-        26
+        28
     ));
+    header->set_divider_spacing(8);
 
     std::string icon_path = resolve_window_icon(windows.front());
     if (!icon_path.empty()) {
         auto icon_view = std::make_shared<miqu::ImageView>(icon_path);
-        icon_view->set_target_size(18);
-        icon_view->set_layout_params(miqu::LayoutParams(18, 18));
-        icon_view->set_margin(0, 0, 6, 0);
+        icon_view->set_target_size(20);
+        icon_view->set_layout_params(miqu::LayoutParams(20, 20));
         header->add_view(icon_view);
     }
 
@@ -477,86 +630,94 @@ void TaskbarView::show_group_popup(TaskbarItemButton* anchor) {
     auto title_lbl = miqu::TextViewBuilder::create()
         ->text(app_display)
         ->bold(true)
-        ->textSize(base_font_size)
+        ->textSize(base_font_size + 1)
         ->textColor(config->colors.on_surface)
         ->build();
-    title_lbl->set_layout_params(miqu::LayoutParams(0, static_cast<int>(miqu::LayoutDimension::WrapContent), 1.0f));
+    title_lbl->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::WrapContent),
+        static_cast<int>(miqu::LayoutDimension::WrapContent)
+    ));
     header->add_view(title_lbl);
 
-    std::string count_str = std::to_string(windows.size()) + " windows";
-    auto count_lbl = miqu::TextViewBuilder::create()
+    std::string count_str = std::to_string(windows.size()) + " Windows";
+    auto count_btn = miqu::ButtonBuilder::create()
         ->text(count_str)
-        ->textSize(base_font_size - 1)
-        ->textColor(config->colors.on_surface_variant)
+        ->textSize(base_font_size - 2)
+        ->flat(true)
+        ->padding(6, 2)
+        ->customColors(
+            config->colors.primary.with_alpha(0.15f),
+            config->colors.primary
+        )
         ->build();
-    header->add_view(count_lbl);
+    count_btn->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::WrapContent),
+        22
+    ));
+    header->add_view(count_btn);
+
+    auto spacer = std::make_shared<miqu::FrameLayout>();
+    spacer->set_layout_params(miqu::LayoutParams(0, 0, 1.0f));
+    header->add_view(spacer);
+
+    auto close_all_btn = miqu::ButtonBuilder::create()
+        ->text("Close All")
+        ->textSize(base_font_size - 2)
+        ->flat(true)
+        ->padding(6, 2)
+        ->customColors(
+            miqu::Color(0, 0, 0, 0),
+            config->colors.on_surface_variant.with_alpha(0.7f)
+        )
+        ->onClick([this, wins = windows]() mutable {
+            hide_group_popup();
+            for (auto& w : wins) {
+                w.close();
+            }
+        })
+        ->build();
+    close_all_btn->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::WrapContent),
+        22
+    ));
+    header->add_view(close_all_btn);
 
     root_layout->add_view(header);
 
-    // 2. Window entries list
+    // Subtle divider line using miqutoolkit::DividerView
+    auto divider = miqu::DividerViewBuilder::create()
+        ->thickness(1)
+        ->color(config->colors.outline_variant.with_alpha(0.35f))
+        ->margin(0, 2, 0, 4)
+        ->build();
+    divider->set_layout_params(miqu::LayoutParams(
+        static_cast<int>(miqu::LayoutDimension::MatchParent),
+        1
+    ));
+    root_layout->add_view(divider);
+
+    // 2. Table rows (WindowRowView)
+    int row_idx = 1;
     for (const auto& win : windows) {
-        auto row = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
-        row->set_gravity(miqu::Gravity::CenterVertical);
-        row->set_layout_params(miqu::LayoutParams(
-            static_cast<int>(miqu::LayoutDimension::MatchParent),
-            32
-        ));
-        row->set_padding(2, 2);
-
-        // Window selection button
-        std::string wtitle = win.title.empty() ? app_display : win.title;
-        if (win.is_minimized) {
-            wtitle += " (minimized)";
-        }
-
-        std::string win_icon = win.is_active ? "radio-checked" : (win.is_minimized ? "window-minimize" : "radio-unchecked");
-
-        auto btn_builder = miqu::ButtonBuilder::create()
-            ->text(wtitle)
-            ->icon(win_icon)
-            ->iconSize(14)
-            ->flat(true)
-            ->textSize(base_font_size)
-            ->padding(6, 4)
-            ->onClick([this, w = win]() mutable {
+        auto row = std::make_shared<WindowRowView>(
+            row_idx++,
+            win,
+            [this, w = win]() mutable {
                 hide_group_popup();
                 w.activate();
-            });
-
-        if (win.is_active) {
-            btn_builder->customColors(
-                config->colors.surface_variant.with_alpha(0.60f),
-                config->colors.primary
-            );
-        }
-
-        auto item_btn = btn_builder->build();
-        item_btn->set_layout_params(miqu::LayoutParams(0, 30, 1.0f));
-        row->add_view(item_btn);
-
-        // Dedicated close button per window
-        auto close_btn = miqu::ButtonBuilder::create()
-            ->text("")
-            ->icon("window-close")
-            ->iconSize(14)
-            ->flat(true)
-            ->padding(4, 4)
-            ->customColors(miqu::Color(0, 0, 0, 0), config->colors.on_surface_variant)
-            ->onClick([this, w = win]() mutable {
+            },
+            [this, w = win]() mutable {
                 w.close();
                 hide_group_popup();
-            })
-            ->build();
-        close_btn->set_layout_params(miqu::LayoutParams(28, 28));
-        row->add_view(close_btn);
-
+            }
+        );
         root_layout->add_view(row);
     }
 
     card->add_view(root_layout);
 
-    int popup_w = std::clamp(cfg.hover_popup_max_width, 240, 360);
-    int popup_h = 36 + static_cast<int>(windows.size()) * 36 + 12;
+    int popup_w = std::clamp(cfg.hover_popup_max_width > 0 ? cfg.hover_popup_max_width : 340, 280, 420);
+    int popup_h = 36 + 6 + static_cast<int>(windows.size()) * 38 + 16;
 
     miqu::Rect anchor_bounds = anchor->get_bounds();
     bool is_top = (cfg.position == "top");
