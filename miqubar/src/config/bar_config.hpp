@@ -41,6 +41,7 @@ public:
 
     // Taskbar
     bool show_taskbar = true;
+    bool group_apps = true;
     bool icon_only = true;
     int max_title_chars = 24;
     int item_max_width = 200;

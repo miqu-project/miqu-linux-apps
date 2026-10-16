@@ -120,6 +120,7 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "search_width") search_width = std::max(40, std::stoi(val));
         else if (key == "search_placeholder") search_placeholder = val;
         else if (key == "show_taskbar") show_taskbar = parse_bool(val);
+        else if (key == "group_apps") group_apps = parse_bool(val);
         else if (key == "icon_only") icon_only = parse_bool(val);
         else if (key == "max_title_chars") max_title_chars = std::stoi(val);
         else if (key == "item_max_width") item_max_width = std::stoi(val);
