@@ -170,7 +170,7 @@ void WorkspaceButtonView::draw(cairo_t* cr, const miqu::Rect& bounds) {
 
     // Occlude rear card behind front card
     miqu::CardView::draw_rounded_rect(cr, fx, fy, fw, fh, 2.0);
-    auto bg = m_is_hovered ? config->colors.surface_variant : config->colors.background;
+    auto bg = m_is_hovered ? config->colors.surface_variant : config->colors.surface;
     cairo_set_source_rgba(cr, bg.r, bg.g, bg.b, bg.a);
     cairo_fill(cr);
 

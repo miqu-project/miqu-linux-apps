@@ -25,7 +25,12 @@ void BarConfig::sync_defaults_from_toolkit() {
 
     if (!tk->metrics.font_family.empty()) font_family = tk->metrics.font_family;
     if (tk->metrics.font_size > 0) font_size = tk->metrics.font_size;
-    if (tk->metrics.corner_radius >= 0) corner_radius = tk->metrics.corner_radius;
+    if (tk->metrics.corner_radius >= 0) {
+        corner_radius = tk->metrics.corner_radius;
+        if (!custom_bar_corner_radius) {
+            bar_corner_radius = corner_radius;
+        }
+    }
     if (tk->metrics.border_width >= 0) border_width = tk->metrics.border_width;
 }
 
@@ -43,6 +48,8 @@ static bool parse_bool(const std::string& val) {
 }
 
 void BarConfig::load(const std::string& custom_path) {
+    custom_bar_corner_radius = false;
+    miqubar_outline = false;
     std::string path_to_load = custom_path;
     if (path_to_load.empty()) {
         const char* xdg_config = getenv("XDG_CONFIG_HOME");
@@ -88,6 +95,17 @@ void BarConfig::load(const std::string& custom_path) {
         if (key == "position") position = val;
         else if (key == "height") height = std::max(24, std::stoi(val));
         else if (key == "exclusive_zone") exclusive_zone = std::stoi(val);
+        else if (key == "bar_corner_radius") {
+            if (!val.empty()) {
+                try {
+                    bar_corner_radius = std::max(0, std::stoi(val));
+                    custom_bar_corner_radius = true;
+                } catch (const std::exception& e) {
+                    std::cerr << "[miqubar] Invalid bar_corner_radius value: " << val << std::endl;
+                }
+            }
+        }
+        else if (key == "miqubar_outline") miqubar_outline = parse_bool(val);
         else if (key == "show_start") show_start = parse_bool(val);
         else if (key == "start_icon") start_icon = val;
         else if (key == "launcher_cmd") launcher_cmd = val;

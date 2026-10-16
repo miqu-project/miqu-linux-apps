@@ -11,7 +11,9 @@ BarRootView::BarRootView() {
     const auto& cfg = BarConfig::get();
     auto config = miqu::Config::get();
 
-    set_background_color(config->colors.background);
+    set_style(cfg.miqubar_outline ? miqu::CardStyle::Outlined : miqu::CardStyle::Filled);
+    set_radius(cfg.bar_corner_radius);
+    set_elevation(0);
 
     // 1. Left container (pinned left)
     m_left_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
@@ -119,8 +121,9 @@ BarRootView::~BarRootView() {
 }
 
 void BarRootView::sync_theme() {
-    auto config = miqu::Config::get();
-    set_background_color(config->colors.background);
+    const auto& cfg = BarConfig::get();
+    set_style(cfg.miqubar_outline ? miqu::CardStyle::Outlined : miqu::CardStyle::Filled);
+    set_radius(cfg.bar_corner_radius);
     if (m_start_btn) m_start_btn->sync_style();
     if (m_search_btn) m_search_btn->sync_style();
     request_redraw();
@@ -129,14 +132,14 @@ void BarRootView::sync_theme() {
 bool BarRootView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
     m_last_mouse_x = lx;
     m_last_mouse_y = ly;
-    return miqu::FrameLayout::on_mouse_move(lx, ly, bounds);
+    return miqu::CardView::on_mouse_move(lx, ly, bounds);
 }
 
 bool BarRootView::on_scroll(double delta) {
     if (m_ws_btn && m_ws_btn->is_visible() && m_ws_btn->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
         return m_ws_btn->on_scroll(delta);
     }
-    return miqu::FrameLayout::on_scroll(delta);
+    return miqu::CardView::on_scroll(delta);
 }
 
 void BarRootView::toggle_network() {

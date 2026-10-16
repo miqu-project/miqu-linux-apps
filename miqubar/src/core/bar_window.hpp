@@ -2,6 +2,7 @@
 
 #include "miqutoolkit/view/frame_layout.hpp"
 #include "miqutoolkit/view/linear_layout.hpp"
+#include "miqutoolkit/view/card_view.hpp"
 #include "miqutoolkit/core/window.hpp"
 #include "../modules/start_button.hpp"
 #include "../modules/workspace_button.hpp"
@@ -20,10 +21,15 @@
 
 namespace miqubar {
 
-class BarRootView : public miqu::FrameLayout {
+class BarRootView : public miqu::CardView {
 public:
     BarRootView();
     ~BarRootView() override;
+
+    using miqu::FrameLayout::add_view;
+    void add_view(std::shared_ptr<miqu::View> child) override {
+        miqu::FrameLayout::add_view(std::move(child));
+    }
 
     void sync_theme();
     bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;

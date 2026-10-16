@@ -16,6 +16,9 @@ public:
     std::string position = "bottom";
     int height = 48;
     int exclusive_zone = 48;
+    int bar_corner_radius = 8;
+    bool custom_bar_corner_radius = false;
+    bool miqubar_outline = false;
 
     // Start & Taskbar
     bool show_start = true;
