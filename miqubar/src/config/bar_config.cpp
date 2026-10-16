@@ -133,7 +133,9 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "show_network") show_network = parse_bool(val);
         else if (key == "show_bluetooth") show_bluetooth = parse_bool(val);
         else if (key == "show_volume") show_volume = parse_bool(val);
+        else if (key == "show_brightness") show_brightness = parse_bool(val);
         else if (key == "show_battery") show_battery = parse_bool(val);
+        else if (key == "show_dark_mode") show_dark_mode = parse_bool(val);
         else if (key == "show_notifications") show_notifications = parse_bool(val);
         else if (key == "show_clock") show_clock = parse_bool(val);
         else if (key == "show_peek") show_peek = parse_bool(val);

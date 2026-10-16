@@ -134,7 +134,7 @@ void SoundControlPopupView::update_audio_info() {
 
 void SoundControlPopupView::set_volume(int pct) {
     m_volume = std::clamp(pct, 0, 100);
-    std::string cmd = "wpctl set-volume @DEFAULT_AUDIO_SINK@ " + std::to_string(m_volume / 100.0f) + " 2>/dev/null";
+    std::string cmd = "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ " + std::to_string(m_volume / 100.0f) + " 2>/dev/null";
     std::system(cmd.c_str());
     request_redraw();
 }

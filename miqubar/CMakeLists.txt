@@ -22,6 +22,7 @@ add_executable(miqubar
     src/modules/taskbar.cpp
     src/modules/sys_modules.cpp
     src/popups/quick_settings_popup.cpp
+    src/popups/brightness_popup.cpp
     src/popups/network_popup.cpp
     src/popups/bluetooth_popup.cpp
     src/popups/calendar_popup.cpp

@@ -474,6 +474,237 @@ bool VolumeModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button,
     return miqu::Button::on_mouse_button(lx, ly, button, pressed, bounds);
 }
 
+bool VolumeModuleView::on_scroll(double delta) {
+    if (std::abs(delta) > 0.05) {
+        int diff = (delta < 0) ? 5 : -5;
+        int next_vol = std::clamp(m_volume + diff, 0, 100);
+        std::string cmd = "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ " + std::to_string(next_vol / 100.0f) + " 2>/dev/null";
+        std::system(cmd.c_str());
+        update_metrics();
+        return true;
+    }
+    return false;
+}
+
+// ==========================================
+// Brightness Module
+// ==========================================
+BrightnessModuleView::BrightnessModuleView(std::function<void()> on_open_brightness)
+    : m_on_open_brightness(std::move(on_open_brightness)) {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
+    set_flat(true);
+    set_text_size(get_toolkit_font_size());
+    set_icon_size(20);
+    set_padding(6, 2);
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
+    set_text(""); // icon-only by default
+    set_on_click_listener(m_on_open_brightness);
+    update_metrics();
+}
+
+void BrightnessModuleView::update_metrics() {
+    // 1. Try reading directly from sysfs backlight
+    const fs::path sysfs_backlight("/sys/class/backlight");
+    bool found_sysfs = false;
+    if (fs::exists(sysfs_backlight) && fs::is_directory(sysfs_backlight)) {
+        for (const auto& entry : fs::directory_iterator(sysfs_backlight)) {
+            if (entry.is_directory() || entry.is_symlink()) {
+                fs::path cur_p = entry.path() / "brightness";
+                fs::path max_p = entry.path() / "max_brightness";
+                if (fs::exists(cur_p) && fs::exists(max_p)) {
+                    std::ifstream cur_f(cur_p);
+                    std::ifstream max_f(max_p);
+                    long cur_val = 0, max_val = 0;
+                    if (cur_f >> cur_val && max_f >> max_val && max_val > 0) {
+                        m_backlight_path = entry.path().string();
+                        m_brightness = std::clamp(static_cast<int>(std::round((cur_val * 100.0) / max_val)), 0, 100);
+                        found_sysfs = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Fallback to brightnessctl -m
+    if (!found_sysfs) {
+        FILE* fp = popen("brightnessctl -m 2>/dev/null", "r");
+        if (fp) {
+            char buf[256];
+            if (fgets(buf, sizeof(buf), fp)) {
+                std::string line(buf);
+                size_t p = line.find('%');
+                if (p != std::string::npos) {
+                    size_t start = line.rfind(',', p);
+                    if (start != std::string::npos) {
+                        try {
+                            m_brightness = std::clamp(std::stoi(line.substr(start + 1, p - start - 1)), 0, 100);
+                        } catch (...) {}
+                    }
+                }
+            }
+            pclose(fp);
+        }
+    }
+
+    if (m_brightness < 30) {
+        set_icon("notification-display-brightness-low");
+    } else if (m_brightness < 70) {
+        set_icon("notification-display-brightness-medium");
+    } else if (m_brightness < 95) {
+        set_icon("notification-display-brightness-high");
+    } else {
+        set_icon("notification-display-brightness-full");
+    }
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+    if (m_is_hovered) {
+        set_text(std::to_string(m_brightness) + "%");
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text("");
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
+    }
+    request_redraw();
+}
+
+void BrightnessModuleView::set_brightness(int pct) {
+    m_brightness = std::clamp(pct, 5, 100);
+    std::string cmd = "brightnessctl set " + std::to_string(m_brightness) + "% -q 2>/dev/null &";
+    std::system(cmd.c_str());
+
+    if (m_brightness < 30) {
+        set_icon("notification-display-brightness-low");
+    } else if (m_brightness < 70) {
+        set_icon("notification-display-brightness-medium");
+    } else if (m_brightness < 95) {
+        set_icon("notification-display-brightness-high");
+    } else {
+        set_icon("notification-display-brightness-full");
+    }
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+    if (m_is_hovered) {
+        set_text(std::to_string(m_brightness) + "%");
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text("");
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
+    }
+    request_redraw();
+}
+
+bool BrightnessModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    bool hovered = bounds.contains(miqu::Point(lx, ly));
+    if (hovered != m_is_hovered) {
+        m_is_hovered = hovered;
+        const auto& cfg = BarConfig::get();
+        int item_h = std::max(28, cfg.height - 8);
+        if (m_is_hovered) {
+            set_text(std::to_string(m_brightness) + "%");
+            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+        } else {
+            set_text("");
+            set_layout_params(miqu::LayoutParams(item_h, item_h));
+        }
+    }
+    return miqu::Button::on_mouse_move(lx, ly, bounds);
+}
+
+bool BrightnessModuleView::on_scroll(double delta) {
+    if (std::abs(delta) > 0.05) {
+        int diff = (delta < 0) ? 5 : -5;
+        set_brightness(m_brightness + diff);
+        return true;
+    }
+    return false;
+}
+
+// ==========================================
+// Dark Mode Toggle Button
+// ==========================================
+DarkModeModuleView::DarkModeModuleView() {
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+
+    set_flat(true);
+    set_text_size(get_toolkit_font_size());
+    set_icon_size(20);
+    set_padding(6, 2);
+    set_layout_params(miqu::LayoutParams(item_h, item_h));
+    set_text(""); // icon-only by default
+    set_on_click_listener([this]() {
+        toggle_mode();
+    });
+    sync_theme_state();
+}
+
+void DarkModeModuleView::sync_theme_state() {
+    // 1. Check user theme preference file from miqutheme
+    const char* home = getenv("HOME");
+    std::string mode_path = home ? std::string(home) + "/.config/miqutheme/mode" : ".config/miqutheme/mode";
+    if (fs::exists(mode_path)) {
+        std::ifstream f(mode_path);
+        std::string mode_str;
+        if (f >> mode_str) {
+            m_is_dark = (mode_str != "light");
+        }
+    } else {
+        // Fallback to active toolkit surface color luminance
+        auto tk = miqu::Config::get();
+        if (tk) {
+            float lum = 0.299f * tk->colors.surface.r + 0.587f * tk->colors.surface.g + 0.114f * tk->colors.surface.b;
+            m_is_dark = (lum < 0.5f);
+        }
+    }
+
+    set_icon(m_is_dark ? "weather-clear-night" : "weather-clear");
+
+    const auto& cfg = BarConfig::get();
+    int item_h = std::max(28, cfg.height - 8);
+    if (m_is_hovered) {
+        set_text(m_is_dark ? "Dark" : "Light");
+        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    } else {
+        set_text("");
+        set_layout_params(miqu::LayoutParams(item_h, item_h));
+    }
+    request_redraw();
+}
+
+bool DarkModeModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
+    bool hovered = bounds.contains(miqu::Point(lx, ly));
+    if (hovered != m_is_hovered) {
+        m_is_hovered = hovered;
+        const auto& cfg = BarConfig::get();
+        int item_h = std::max(28, cfg.height - 8);
+        if (m_is_hovered) {
+            set_text(m_is_dark ? "Dark" : "Light");
+            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+        } else {
+            set_text("");
+            set_layout_params(miqu::LayoutParams(item_h, item_h));
+        }
+    }
+    return miqu::Button::on_mouse_move(lx, ly, bounds);
+}
+
+void DarkModeModuleView::toggle_mode() {
+    // Launch headless toggle asynchronously
+    std::system("miqutheme -t &");
+    // Optimistically toggle icon state immediately for responsive feedback
+    m_is_dark = !m_is_dark;
+    set_icon(m_is_dark ? "weather-clear-night" : "weather-clear");
+    if (m_is_hovered) {
+        set_text(m_is_dark ? "Dark" : "Light");
+    }
+    request_redraw();
+}
+
 // ==========================================
 // Clock Module
 // ==========================================

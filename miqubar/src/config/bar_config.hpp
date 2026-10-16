@@ -56,7 +56,9 @@ public:
     bool show_network = true;
     bool show_bluetooth = true;
     bool show_volume = true;
+    bool show_brightness = true;
     bool show_battery = true;
+    bool show_dark_mode = true;
     bool show_notifications = true;
     bool show_clock = true;
     bool show_peek = true;

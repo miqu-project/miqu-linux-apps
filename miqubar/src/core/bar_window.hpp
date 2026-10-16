@@ -10,6 +10,7 @@
 #include "../modules/taskbar.hpp"
 #include "../modules/sys_modules.hpp"
 #include "../popups/quick_settings_popup.hpp"
+#include "../popups/brightness_popup.hpp"
 #include "../popups/network_popup.hpp"
 #include "../popups/bluetooth_popup.hpp"
 #include "../popups/calendar_popup.hpp"
@@ -41,6 +42,7 @@ public:
     void toggle_network();
     void toggle_bluetooth();
     void toggle_sound();
+    void toggle_brightness();
     void toggle_quick_settings();
     void toggle_calendar();
 
@@ -58,7 +60,9 @@ private:
     std::shared_ptr<NetworkModuleView> m_network;
     std::shared_ptr<BluetoothModuleView> m_bluetooth;
     std::shared_ptr<VolumeModuleView> m_volume;
+    std::shared_ptr<BrightnessModuleView> m_brightness;
     std::shared_ptr<BatteryModuleView> m_battery;
+    std::shared_ptr<DarkModeModuleView> m_dark_mode;
     std::shared_ptr<NotificationModuleView> m_notifications;
     std::shared_ptr<ClockModuleView> m_clock;
     std::shared_ptr<PeekButtonView> m_peek;
@@ -66,6 +70,7 @@ private:
     std::shared_ptr<miqu::Window> m_network_win;
     std::shared_ptr<miqu::Window> m_bluetooth_win;
     std::shared_ptr<miqu::Window> m_sound_win;
+    std::shared_ptr<miqu::Window> m_brightness_win;
     std::shared_ptr<miqu::Window> m_calendar_win;
 
     int m_last_mouse_x = -1;

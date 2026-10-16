@@ -91,6 +91,7 @@ public:
 
     bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
+    bool on_scroll(double delta) override;
 
     int get_volume() const { return m_volume; }
     bool is_muted() const { return m_muted; }
@@ -100,6 +101,42 @@ private:
     bool m_muted = false;
     bool m_is_hovered = false;
     std::function<void()> m_on_open_sound;
+};
+
+// Brightness Control Button
+class BrightnessModuleView : public miqu::Button {
+public:
+    explicit BrightnessModuleView(std::function<void()> on_open_brightness);
+    void update_metrics();
+
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
+    bool on_scroll(double delta) override;
+
+    int get_brightness() const { return m_brightness; }
+    void set_brightness(int pct);
+
+private:
+    int m_brightness = 100;
+    bool m_is_hovered = false;
+    std::string m_backlight_path;
+    std::function<void()> m_on_open_brightness;
+};
+
+// Dark Mode Toggle Button (Triggers miqutheme headless toggle)
+class DarkModeModuleView : public miqu::Button {
+public:
+    DarkModeModuleView();
+    void sync_theme_state();
+
+    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
+
+    bool is_dark() const { return m_is_dark; }
+
+private:
+    void toggle_mode();
+
+    bool m_is_dark = true;
+    bool m_is_hovered = false;
 };
 
 // Notification Status & History Toggle Button
