@@ -74,10 +74,6 @@ void ConfigManager::load(LauncherConfig& config) {
             try { config.spacing = std::max(0, std::stoi(val)); } catch (...) {}
         } else if (key == "edge_padding" || key == "padding") {
             try { config.edge_padding = std::clamp(std::stoi(val), 0, 80); } catch (...) {}
-        } else if (key == "dim_backdrop" || key == "dim") {
-            std::string lower_val = val;
-            std::transform(lower_val.begin(), lower_val.end(), lower_val.begin(), ::tolower);
-            config.dim_backdrop = (lower_val == "true" || lower_val == "1" || lower_val == "yes" || lower_val == "on");
         } else if (key == "show_subtitles") {
             std::string lower_val = val;
             std::transform(lower_val.begin(), lower_val.end(), lower_val.begin(), ::tolower);

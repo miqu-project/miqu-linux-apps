@@ -36,7 +36,6 @@ struct LauncherConfig {
     int cell_size = 100;
     int spacing = 10;
     int edge_padding = 16;
-    bool dim_backdrop = false;
     bool show_subtitles = true;
     bool selection_border = false;
     bool search_focus_border = false;

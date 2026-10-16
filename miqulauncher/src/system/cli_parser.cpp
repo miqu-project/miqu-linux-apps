@@ -107,10 +107,6 @@ CliParser::ParseResult CliParser::parse(int argc, char* argv[], LauncherConfig& 
             try { out_config.width = std::max(200, std::stoi(argv[++i])); } catch (...) {}
         } else if ((arg == "-height" || arg == "--height") && i + 1 < argc) {
             try { out_config.height = std::max(150, std::stoi(argv[++i])); } catch (...) {}
-        } else if (arg == "--dim" || arg == "-dim") {
-            out_config.dim_backdrop = true;
-        } else if (arg == "--no-dim" || arg == "-no-dim") {
-            out_config.dim_backdrop = false;
         } else if (arg == "--show-subtitles") {
             out_config.show_subtitles = true;
         } else if (arg == "--no-subtitles") {

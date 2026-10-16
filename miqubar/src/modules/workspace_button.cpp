@@ -287,7 +287,6 @@ void WorkspaceButtonView::show_flyout() {
         ->preferredSize(flyout_w, flyout_h)
         ->contentSize(flyout_w, flyout_h)
         ->contentMargin(margin)
-        ->dimBackdrop(false)
         ->transparent(true)
         ->exclusiveZone(-1)
         ->closeOnClickOutside(true)

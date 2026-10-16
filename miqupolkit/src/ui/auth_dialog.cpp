@@ -203,13 +203,9 @@ void AuthDialogManager::show_dialog(
             cancel_current();
         });
 
-    if (!polkit_cfg.dim_backdrop) {
-        builder->anchors(0)->dimBackdrop(false);
-    } else {
-        builder->dimBackdrop(true);
-    }
-
     m_window = builder
+        ->anchors(0)
+        ->transparent(true)
         ->onKey([this](const KeyPressEvent& event) {
             if (!event.pressed) return;
             if (event.keysym == XKB_KEY_Escape) {

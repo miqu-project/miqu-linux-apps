@@ -181,26 +181,20 @@ bool LauncherWindow::init() {
     });
 
     // 8. Layer overlay Window (Frame 0 is 100% pre-warmed & ready to draw)
-    auto builder = WindowBuilder::create()
+    m_window = WindowBuilder::create()
         ->role(WindowRole::LayerOverlay)
         ->appId("miqulauncher")
         ->keyboardInteractive(true)
         ->preferredSize(m_config.width, m_config.height)
         ->contentSize(m_config.width, m_config.height)
+        ->anchors(0)
+        ->transparent(true)
         ->closeOnClickOutside(true)
         ->closeOnEscape(true)
         ->contentView(rootCard)
         ->onClose([this]() {
             m_engine->quit();
-        });
-
-    if (!m_config.dim_backdrop) {
-        builder->anchors(0)->dimBackdrop(false);
-    } else {
-        builder->dimBackdrop(true);
-    }
-
-    m_window = builder
+        })
         ->onKey([this](const KeyPressEvent& event) {
             if (!event.pressed) return;
             if (event.has_ctrl() && (event.keysym == XKB_KEY_v || event.keysym == XKB_KEY_V)) {
