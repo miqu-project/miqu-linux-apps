@@ -62,6 +62,7 @@ ToastView::ToastView(
     m_close_btn->set_padding(4, 2);
     m_close_btn->set_text_size(11);
     m_close_btn->set_text_color(tk->colors.on_surface_variant);
+    m_close_btn->set_tooltip("Dismiss");
     m_close_btn->set_on_click_listener([this]() {
         if (m_on_dismiss) {
             m_on_dismiss(m_notif.id, 2); // 2 = dismissed by user

@@ -96,6 +96,7 @@ void NotificationCenterWindow::refresh_history(const std::vector<Notification>& 
     // Update DND button state
     if (m_dnd_btn) {
         m_dnd_btn->set_icon(m_dnd_active ? "notifications-disabled-symbolic" : "notifications-symbolic");
+        m_dnd_btn->set_tooltip(m_dnd_active ? "Turn Off Do Not Disturb" : "Turn On Do Not Disturb");
         if (m_dnd_active) {
             m_dnd_btn->set_style(miqu::ButtonStyle::Standard);
             m_dnd_btn->set_background_color(tk->colors.primary.with_alpha(0.25f));
@@ -259,6 +260,7 @@ std::shared_ptr<miqu::View> NotificationCenterWindow::create_history_item_view(c
         dismiss_btn->set_padding(2, 2);
         dismiss_btn->set_text_size(9);
         dismiss_btn->set_text_color(tk->colors.on_surface_variant);
+        dismiss_btn->set_tooltip("Dismiss");
         dismiss_btn->set_on_click_listener([this, notif_id]() {
             if (m_on_dismiss) m_on_dismiss(notif_id);
         });
@@ -300,6 +302,7 @@ std::shared_ptr<miqu::View> NotificationCenterWindow::create_history_item_view(c
         dismiss_btn->set_padding(2, 2);
         dismiss_btn->set_text_size(9);
         dismiss_btn->set_text_color(tk->colors.on_surface_variant);
+        dismiss_btn->set_tooltip("Dismiss");
         dismiss_btn->set_on_click_listener([this, notif_id]() {
             if (m_on_dismiss) m_on_dismiss(notif_id);
         });
@@ -409,6 +412,7 @@ void NotificationCenterWindow::create_window() {
     m_dnd_btn->set_icon_size(18);
     m_dnd_btn->set_radius(tk->metrics.corner_radius > 0 ? tk->metrics.corner_radius / 2 : 8);
     m_dnd_btn->set_padding(6, 6);
+    m_dnd_btn->set_tooltip(m_dnd_active ? "Turn Off Do Not Disturb" : "Turn On Do Not Disturb");
     if (m_dnd_active) {
         m_dnd_btn->set_style(miqu::ButtonStyle::Standard);
         m_dnd_btn->set_background_color(tk->colors.primary.with_alpha(0.25f));
@@ -445,6 +449,7 @@ void NotificationCenterWindow::create_window() {
     m_clear_btn->set_radius(tk->metrics.corner_radius > 0 ? tk->metrics.corner_radius / 2 : 8);
     m_clear_btn->set_padding(6, 6);
     m_clear_btn->set_text_color(tk->colors.on_surface_variant);
+    m_clear_btn->set_tooltip("Clear All");
     m_clear_btn->set_on_click_listener([this]() {
         if (m_on_clear_all) m_on_clear_all();
     });
@@ -458,6 +463,8 @@ void NotificationCenterWindow::create_window() {
     close_btn->set_radius(tk->metrics.corner_radius > 0 ? tk->metrics.corner_radius / 2 : 8);
     close_btn->set_padding(6, 6);
     close_btn->set_text_color(tk->colors.on_surface_variant);
+    close_btn->set_tooltip("Close");
+    close_btn->set_tooltip_shortcut("Esc");
     close_btn->set_on_click_listener([this]() {
         close();
     });
