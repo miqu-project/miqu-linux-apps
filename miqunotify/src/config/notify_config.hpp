@@ -16,6 +16,8 @@ struct NotifyConfig {
     bool dnd_enabled = false;
     int history_limit = 100;
     int center_width = 400;
+    int center_margin_x = 10;
+    int center_margin_y = 10;
     bool debug = false;
     bool group_by_app = true;
 

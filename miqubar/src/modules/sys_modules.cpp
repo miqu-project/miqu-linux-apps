@@ -57,6 +57,7 @@ void CpuModuleView::update_metrics() {
         m_prev_total = current_total;
     }
     set_text(std::to_string(m_cpu_pct) + "%");
+    set_tooltip("CPU: " + std::to_string(m_cpu_pct) + "%");
     request_redraw();
 }
 
@@ -96,6 +97,7 @@ void MemoryModuleView::update_metrics() {
         m_mem_pct = static_cast<int>(100.0 * (total - avail) / total);
     }
     set_text(std::to_string(m_mem_pct) + "%");
+    set_tooltip("Memory: " + std::to_string(m_mem_pct) + "%");
     request_redraw();
 }
 
@@ -111,7 +113,7 @@ BatteryModuleView::BatteryModuleView() {
     set_icon_size(20);
     set_padding(6, 2);
     set_layout_params(miqu::LayoutParams(item_h, item_h));
-    set_text(""); // no percentage text
+    set_text(""); // icon-only
     update_metrics();
 }
 
@@ -163,33 +165,13 @@ void BatteryModuleView::update_metrics() {
         }
     }
 
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-    if (m_is_hovered) {
-        set_text(std::to_string(m_capacity) + "%");
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    if (!m_present) {
+        set_tooltip("No Battery");
     } else {
-        set_text(""); // icon-only when not hovered
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
+        set_tooltip("Battery: " + std::to_string(m_capacity) + "%" + (m_charging ? " (Charging)" : ""));
     }
-    request_redraw();
-}
 
-bool BatteryModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hovered = bounds.contains(miqu::Point(lx, ly));
-    if (hovered != m_is_hovered) {
-        m_is_hovered = hovered;
-        const auto& cfg = BarConfig::get();
-        int item_h = std::max(28, cfg.height - 8);
-        if (m_is_hovered) {
-            set_text(std::to_string(m_capacity) + "%");
-            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-        } else {
-            set_text("");
-            set_layout_params(miqu::LayoutParams(item_h, item_h));
-        }
-    }
-    return miqu::Button::on_mouse_move(lx, ly, bounds);
+    request_redraw();
 }
 
 // ==========================================
@@ -250,40 +232,17 @@ void NetworkModuleView::update_metrics() {
     if (m_connected) {
         if (m_is_wifi) {
             set_icon("network-wireless");
+            set_tooltip(!m_ssid.empty() ? ("Wi-Fi: " + m_ssid) : "Wi-Fi: Connected");
         } else {
             set_icon("network-wired");
+            set_tooltip(!m_ssid.empty() ? ("Ethernet: " + m_ssid) : "Ethernet: Connected");
         }
     } else {
         set_icon("network-wireless-disconnected");
+        set_tooltip("Network: Disconnected");
     }
 
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-    if (m_is_hovered) {
-        set_text(m_connected ? (!m_ssid.empty() ? m_ssid : (m_is_wifi ? "Wi-Fi" : "Wired")) : "Disconnected");
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-    } else {
-        set_text(""); // icon-only when not hovered
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
-    }
     request_redraw();
-}
-
-bool NetworkModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hovered = bounds.contains(miqu::Point(lx, ly));
-    if (hovered != m_is_hovered) {
-        m_is_hovered = hovered;
-        const auto& cfg = BarConfig::get();
-        int item_h = std::max(28, cfg.height - 8);
-        if (m_is_hovered) {
-            set_text(m_connected ? (!m_ssid.empty() ? m_ssid : (m_is_wifi ? "Wi-Fi" : "Wired")) : "Disconnected");
-            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-        } else {
-            set_text("");
-            set_layout_params(miqu::LayoutParams(item_h, item_h));
-        }
-    }
-    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 // ==========================================
@@ -345,51 +304,16 @@ void BluetoothModuleView::update_metrics() {
 
     if (!m_powered) {
         set_icon("bluetooth-disabled");
+        set_tooltip("Bluetooth: Off");
     } else if (m_connected) {
         set_icon("bluetooth-active");
+        set_tooltip(!m_connected_device.empty() ? ("Bluetooth: " + m_connected_device) : "Bluetooth: Connected");
     } else {
         set_icon("bluetooth");
+        set_tooltip("Bluetooth: On");
     }
 
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-    if (m_is_hovered) {
-        if (!m_powered) {
-            set_text("Off");
-        } else if (m_connected) {
-            set_text(!m_connected_device.empty() ? m_connected_device : "Connected");
-        } else {
-            set_text("On");
-        }
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-    } else {
-        set_text(""); // icon-only when not hovered
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
-    }
     request_redraw();
-}
-
-bool BluetoothModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hovered = bounds.contains(miqu::Point(lx, ly));
-    if (hovered != m_is_hovered) {
-        m_is_hovered = hovered;
-        const auto& cfg = BarConfig::get();
-        int item_h = std::max(28, cfg.height - 8);
-        if (m_is_hovered) {
-            if (!m_powered) {
-                set_text("Off");
-            } else if (m_connected) {
-                set_text(!m_connected_device.empty() ? m_connected_device : "Connected");
-            } else {
-                set_text("On");
-            }
-            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-        } else {
-            set_text("");
-            set_layout_params(miqu::LayoutParams(item_h, item_h));
-        }
-    }
-    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 // ==========================================
@@ -419,7 +343,7 @@ void VolumeModuleView::update_metrics() {
             size_t pos = str.find("Volume:");
             if (pos != std::string::npos) {
                 float v = std::stof(str.substr(pos + 7));
-                m_volume = static_cast<int>(v * 100.0f);
+                m_volume = static_cast<int>(std::round(v * 100.0f));
             }
             m_muted = (str.find("[MUTED]") != std::string::npos);
         }
@@ -436,33 +360,8 @@ void VolumeModuleView::update_metrics() {
         set_icon("audio-volume-high");
     }
 
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-    if (m_is_hovered) {
-        set_text(m_muted ? "Muted" : (std::to_string(m_volume) + "%"));
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-    } else {
-        set_text(""); // icon-only when not hovered
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
-    }
+    set_tooltip(m_muted ? "Volume: Muted" : ("Volume: " + std::to_string(m_volume) + "%"));
     request_redraw();
-}
-
-bool VolumeModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hovered = bounds.contains(miqu::Point(lx, ly));
-    if (hovered != m_is_hovered) {
-        m_is_hovered = hovered;
-        const auto& cfg = BarConfig::get();
-        int item_h = std::max(28, cfg.height - 8);
-        if (m_is_hovered) {
-            set_text(m_muted ? "Muted" : (std::to_string(m_volume) + "%"));
-            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-        } else {
-            set_text("");
-            set_layout_params(miqu::LayoutParams(item_h, item_h));
-        }
-    }
-    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 bool VolumeModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) {
@@ -559,15 +458,7 @@ void BrightnessModuleView::update_metrics() {
         set_icon("notification-display-brightness-full");
     }
 
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-    if (m_is_hovered) {
-        set_text(std::to_string(m_brightness) + "%");
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-    } else {
-        set_text("");
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
-    }
+    set_tooltip("Brightness: " + std::to_string(m_brightness) + "%");
     request_redraw();
 }
 
@@ -586,33 +477,8 @@ void BrightnessModuleView::set_brightness(int pct) {
         set_icon("notification-display-brightness-full");
     }
 
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-    if (m_is_hovered) {
-        set_text(std::to_string(m_brightness) + "%");
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-    } else {
-        set_text("");
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
-    }
+    set_tooltip("Brightness: " + std::to_string(m_brightness) + "%");
     request_redraw();
-}
-
-bool BrightnessModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hovered = bounds.contains(miqu::Point(lx, ly));
-    if (hovered != m_is_hovered) {
-        m_is_hovered = hovered;
-        const auto& cfg = BarConfig::get();
-        int item_h = std::max(28, cfg.height - 8);
-        if (m_is_hovered) {
-            set_text(std::to_string(m_brightness) + "%");
-            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-        } else {
-            set_text("");
-            set_layout_params(miqu::LayoutParams(item_h, item_h));
-        }
-    }
-    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 bool BrightnessModuleView::on_scroll(double delta) {
@@ -663,34 +529,8 @@ void DarkModeModuleView::sync_theme_state() {
     }
 
     set_icon(m_is_dark ? "weather-clear-night" : "weather-clear");
-
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-    if (m_is_hovered) {
-        set_text(m_is_dark ? "Dark" : "Light");
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-    } else {
-        set_text("");
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
-    }
+    set_tooltip(m_is_dark ? "Dark Mode (Click to toggle)" : "Light Mode (Click to toggle)");
     request_redraw();
-}
-
-bool DarkModeModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hovered = bounds.contains(miqu::Point(lx, ly));
-    if (hovered != m_is_hovered) {
-        m_is_hovered = hovered;
-        const auto& cfg = BarConfig::get();
-        int item_h = std::max(28, cfg.height - 8);
-        if (m_is_hovered) {
-            set_text(m_is_dark ? "Dark" : "Light");
-            set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-        } else {
-            set_text("");
-            set_layout_params(miqu::LayoutParams(item_h, item_h));
-        }
-    }
-    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 void DarkModeModuleView::toggle_mode() {
@@ -699,9 +539,7 @@ void DarkModeModuleView::toggle_mode() {
     // Optimistically toggle icon state immediately for responsive feedback
     m_is_dark = !m_is_dark;
     set_icon(m_is_dark ? "weather-clear-night" : "weather-clear");
-    if (m_is_hovered) {
-        set_text(m_is_dark ? "Dark" : "Light");
-    }
+    set_tooltip(m_is_dark ? "Dark Mode (Click to toggle)" : "Light Mode (Click to toggle)");
     request_redraw();
 }
 
@@ -736,6 +574,7 @@ void ClockModuleView::update_time() {
     m_time_str = time_buf;
     m_date_str = date_buf;
 
+    set_tooltip(m_date_str + "  " + m_time_str);
     request_redraw();
 }
 
@@ -846,32 +685,19 @@ void NotificationModuleView::update_metrics() {
     m_unread_count = std::max(0, unread);
     m_dnd = (dnd_int != 0);
 
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-
     if (m_dnd) {
         set_icon("notifications-disabled");
+        set_tooltip("Notifications: Do Not Disturb");
     } else {
         set_icon("bell");
-    }
-
-    if (m_unread_count > 0) {
-        set_text(std::to_string(m_unread_count));
-        set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
-    } else {
-        set_text("");
-        set_layout_params(miqu::LayoutParams(item_h, item_h));
+        if (m_unread_count == 0) {
+            set_tooltip("Notifications: None");
+        } else {
+            set_tooltip("Notifications: " + std::to_string(m_unread_count) + " unread");
+        }
     }
 
     request_redraw();
-}
-
-bool NotificationModuleView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
-    bool hovered = bounds.contains(miqu::Point(lx, ly));
-    if (hovered != m_is_hovered) {
-        m_is_hovered = hovered;
-    }
-    return miqu::Button::on_mouse_move(lx, ly, bounds);
 }
 
 bool NotificationModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) {
@@ -897,6 +723,7 @@ PeekButtonView::PeekButtonView() {
     set_flat(true);
     set_padding(2, 0);
     set_layout_params(miqu::LayoutParams(8, item_h));
+    set_tooltip("Show Desktop");
     set_on_click_listener([]() {
         auto mgr = miqu::WindowManager::get();
         if (mgr) {

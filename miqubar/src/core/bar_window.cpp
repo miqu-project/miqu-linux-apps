@@ -2,6 +2,8 @@
 #include "../config/bar_config.hpp"
 #include "miqutoolkit/core/app_engine.hpp"
 #include "miqutoolkit/core/config.hpp"
+#include "miqutoolkit/view/text_view.hpp"
+#include "miqutoolkit/view/tooltip_manager.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -39,14 +41,17 @@ BarRootView::BarRootView() {
 
     if (cfg.show_workspace_btn) {
         m_ws_btn = std::make_shared<WorkspaceButtonView>();
+        m_ws_btn->set_tooltip("Workspace Overview");
         m_center_box->add_view(m_ws_btn);
     }
     if (cfg.show_start) {
         m_start_btn = std::make_shared<StartButtonView>();
+        m_start_btn->set_tooltip("Start Menu");
         m_center_box->add_view(m_start_btn);
     }
     if (cfg.show_search) {
         m_search_btn = std::make_shared<SearchButtonView>();
+        m_search_btn->set_tooltip("Search Apps & Files");
         m_center_box->add_view(m_search_btn);
     }
     if (cfg.show_taskbar) {
@@ -124,6 +129,7 @@ BarRootView::BarRootView() {
 }
 
 BarRootView::~BarRootView() {
+    miqu::TooltipManager::get()->dismiss();
     if (m_network_win) m_network_win->close();
     if (m_bluetooth_win) m_bluetooth_win->close();
     if (m_sound_win) m_sound_win->close();
@@ -161,6 +167,7 @@ bool BarRootView::on_scroll(double delta) {
 }
 
 void BarRootView::toggle_network() {
+    miqu::TooltipManager::get()->dismiss();
     if (m_network_win) {
         m_network_win->close();
         m_network_win = nullptr;
@@ -211,6 +218,7 @@ void BarRootView::toggle_network() {
 }
 
 void BarRootView::toggle_bluetooth() {
+    miqu::TooltipManager::get()->dismiss();
     if (m_bluetooth_win) {
         m_bluetooth_win->close();
         m_bluetooth_win = nullptr;
@@ -261,6 +269,7 @@ void BarRootView::toggle_bluetooth() {
 }
 
 void BarRootView::toggle_sound() {
+    miqu::TooltipManager::get()->dismiss();
     if (m_sound_win) {
         m_sound_win->close();
         m_sound_win = nullptr;
@@ -311,6 +320,7 @@ void BarRootView::toggle_sound() {
 }
 
 void BarRootView::toggle_brightness() {
+    miqu::TooltipManager::get()->dismiss();
     if (m_brightness_win) {
         m_brightness_win->close();
         m_brightness_win = nullptr;
@@ -365,6 +375,7 @@ void BarRootView::toggle_quick_settings() {
 }
 
 void BarRootView::toggle_calendar() {
+    miqu::TooltipManager::get()->dismiss();
     if (m_calendar_win) {
         m_calendar_win->close();
         m_calendar_win = nullptr;
@@ -456,7 +467,7 @@ bool BarWindow::init() {
     }
 
     m_window = miqu::WindowBuilder::create()
-        ->role(miqu::WindowRole::LayerTop)
+        ->role(cfg.position == "top" ? miqu::WindowRole::LayerTop : miqu::WindowRole::LayerBottom)
         ->title("miqubar")
         ->appId("miqubar")
         ->layerNamespace("miqubar")
@@ -491,39 +502,37 @@ void BarWindow::sync_theme() {
 
 void BarWindow::start_telemetry_timer() {
     m_running = true;
-    m_timer_thread = std::thread([this]() {
-        int clock_ticks = 0;
-        const auto& cfg = BarConfig::get();
-        int interval_ms = cfg.telemetry_interval_ms;
+    m_clock_ticks = 0;
+    schedule_next_telemetry();
+}
 
-        while (m_running) {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            if (m_cv.wait_for(lock, std::chrono::milliseconds(500), [this]() { return !m_running; })) {
-                break;
-            }
+void BarWindow::schedule_next_telemetry() {
+    auto* engine = miqu::AppEngine::instance();
+    if (!engine || !m_running) return;
 
-            if (!m_running) break;
+    m_telemetry_timer_id = engine->post_delayed(500, [this]() {
+        m_telemetry_timer_id = 0;
+        if (!m_running || !m_window) return;
 
-            clock_ticks += 500;
-            if (m_root_view) {
-                m_root_view->update_clock();
-                if (clock_ticks >= interval_ms) {
-                    m_root_view->update_telemetry();
-                    clock_ticks = 0;
-                }
+        m_clock_ticks += 500;
+        if (m_root_view) {
+            m_root_view->update_clock();
+            const auto& cfg = BarConfig::get();
+            if (m_clock_ticks >= cfg.telemetry_interval_ms) {
+                m_root_view->update_telemetry();
+                m_clock_ticks = 0;
             }
         }
+        schedule_next_telemetry();
     });
 }
 
 void BarWindow::stop_telemetry_timer() {
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_running = false;
-    }
-    m_cv.notify_all();
-    if (m_timer_thread.joinable()) {
-        m_timer_thread.join();
+    m_running = false;
+    auto* engine = miqu::AppEngine::instance();
+    if (engine && m_telemetry_timer_id != 0) {
+        engine->cancel_delayed(m_telemetry_timer_id);
+        m_telemetry_timer_id = 0;
     }
 }
 

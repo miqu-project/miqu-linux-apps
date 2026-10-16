@@ -34,13 +34,10 @@ public:
     BatteryModuleView();
     void update_metrics();
 
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
-
 private:
     int m_capacity = 100;
     bool m_charging = false;
     bool m_present = false;
-    bool m_is_hovered = false;
 };
 
 // Network Status Button (Wi-Fi / Ethernet)
@@ -48,8 +45,6 @@ class NetworkModuleView : public miqu::Button {
 public:
     explicit NetworkModuleView(std::function<void()> on_open_network);
     void update_metrics();
-
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
 
     bool is_connected() const { return m_connected; }
     const std::string& get_ssid() const { return m_ssid; }
@@ -59,7 +54,6 @@ private:
     bool m_is_wifi = false;
     int m_signal_strength = 0; // 0 - 100
     std::string m_ssid;
-    bool m_is_hovered = false;
     std::function<void()> m_on_open_network;
 };
 
@@ -69,8 +63,6 @@ public:
     explicit BluetoothModuleView(std::function<void()> on_open_bluetooth);
     void update_metrics();
 
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
-
     bool is_powered() const { return m_powered; }
     bool is_connected() const { return m_connected; }
     const std::string& get_connected_device() const { return m_connected_device; }
@@ -79,7 +71,6 @@ private:
     bool m_powered = false;
     bool m_connected = false;
     std::string m_connected_device;
-    bool m_is_hovered = false;
     std::function<void()> m_on_open_bluetooth;
 };
 
@@ -89,7 +80,6 @@ public:
     explicit VolumeModuleView(std::function<void()> on_open_sound);
     void update_metrics();
 
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
     bool on_scroll(double delta) override;
 
@@ -99,7 +89,6 @@ public:
 private:
     int m_volume = 70;
     bool m_muted = false;
-    bool m_is_hovered = false;
     std::function<void()> m_on_open_sound;
 };
 
@@ -109,7 +98,6 @@ public:
     explicit BrightnessModuleView(std::function<void()> on_open_brightness);
     void update_metrics();
 
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
     bool on_scroll(double delta) override;
 
     int get_brightness() const { return m_brightness; }
@@ -117,7 +105,6 @@ public:
 
 private:
     int m_brightness = 100;
-    bool m_is_hovered = false;
     std::string m_backlight_path;
     std::function<void()> m_on_open_brightness;
 };
@@ -128,15 +115,12 @@ public:
     DarkModeModuleView();
     void sync_theme_state();
 
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
-
     bool is_dark() const { return m_is_dark; }
 
 private:
     void toggle_mode();
 
     bool m_is_dark = true;
-    bool m_is_hovered = false;
 };
 
 // Notification Status & History Toggle Button
@@ -145,7 +129,6 @@ public:
     NotificationModuleView();
     void update_metrics();
 
-    bool on_mouse_move(int lx, int ly, const miqu::Rect& bounds) override;
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
 
     int get_unread_count() const { return m_unread_count; }
@@ -154,7 +137,6 @@ public:
 private:
     int m_unread_count = 0;
     bool m_dnd = false;
-    bool m_is_hovered = false;
 };
 
 // Windows-style Stacked Clock & Date Button

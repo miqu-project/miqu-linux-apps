@@ -89,15 +89,15 @@ public:
 private:
     void start_telemetry_timer();
     void stop_telemetry_timer();
+    void schedule_next_telemetry();
 
     miqu::AppEngine* m_engine = nullptr;
     std::shared_ptr<miqu::Window> m_window;
     std::shared_ptr<BarRootView> m_root_view;
 
-    std::thread m_timer_thread;
-    std::atomic<bool> m_running{false};
-    std::mutex m_mutex;
-    std::condition_variable m_cv;
+    bool m_running = false;
+    uint32_t m_telemetry_timer_id = 0;
+    int m_clock_ticks = 0;
 };
 
 } // namespace miqubar

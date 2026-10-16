@@ -349,6 +349,7 @@ int main(int argc, char** argv) {
     btn_header_home = toolbar->add_action(icons::HOME, [nav_view]() {
         nav_view->pop_to_root();
     });
+    btn_header_home->set_tooltip("Home");
     btn_header_home->set_visibility(Visibility::Invisible);
 
     // Synchronize Header bar whenever navigation transitions occur

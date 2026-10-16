@@ -102,6 +102,10 @@ void NotifyConfig::load(const std::string& custom_path) {
             try { history_limit = std::clamp(std::stoi(val), 10, 500); } catch (...) {}
         } else if (key == "center_width") {
             try { center_width = std::clamp(std::stoi(val), 250, 800); } catch (...) {}
+        } else if (key == "center_margin_x") {
+            try { center_margin_x = std::clamp(std::stoi(val), 0, 100); } catch (...) {}
+        } else if (key == "center_margin_y") {
+            try { center_margin_y = std::clamp(std::stoi(val), 0, 100); } catch (...) {}
         } else if (key == "debug") {
             debug = parse_bool(val);
         } else if (key == "group_by_app") {

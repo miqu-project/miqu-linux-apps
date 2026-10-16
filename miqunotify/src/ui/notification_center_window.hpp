@@ -39,7 +39,7 @@ public:
 
 private:
     void create_window();
-    std::shared_ptr<miqu::View> create_history_item_view(const Notification& notif);
+    std::shared_ptr<miqu::View> create_history_item_view(const Notification& notif, bool in_app_group = false);
 
     OnClearAllCb m_on_clear_all;
     OnToggleDndCb m_on_toggle_dnd;
@@ -51,6 +51,8 @@ private:
     std::shared_ptr<miqu::CardView> m_root_card;
     std::shared_ptr<miqu::TextView> m_badge_text;
     std::shared_ptr<miqu::Button> m_dnd_btn;
+    std::shared_ptr<miqu::TextView> m_dnd_label;
+    std::shared_ptr<miqu::Button> m_clear_btn;
     std::shared_ptr<miqu::LinearLayout> m_history_list;
     std::shared_ptr<miqu::ScrollView> m_scroll_view;
 
