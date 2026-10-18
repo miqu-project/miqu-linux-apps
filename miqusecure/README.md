@@ -29,13 +29,12 @@ MiquSecure unifies system hardening, network defenses, hardware kill switches, a
 - `miqutoolkit` (installed system-wide or adjacent directory)
 - Optional runtime utilities: `ufw`, `bubblewrap`, `mat2`, `systemd-resolved`
 
-### Build
+### Local Build
 ```bash
-cmake -B build -S .
-cmake --build build -j$(nproc)
+./make.sh
 ```
 
-### Install
+### System Installation
 To build and install system-wide to `/usr`:
 ```bash
 sudo ./make.sh

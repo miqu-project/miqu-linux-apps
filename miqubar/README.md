@@ -23,10 +23,16 @@ miqubar --init-config
 ```
 Configuration file is located at `~/.config/miqubar/miqubar.conf`.
 
-## Build & Install
+## Build & Installation
+
+### Local Build
 ```bash
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
-sudo make install
+./make.sh
 ```
+
+### System Installation
+To build and install system-wide to `/usr`:
+```bash
+sudo ./make.sh
+```
+

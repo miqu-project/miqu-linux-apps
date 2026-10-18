@@ -28,13 +28,12 @@ MiquInfo offers an elegant graphical system summary—displaying OS details, Way
 - `miqutoolkit`
 - `libpci`, `libudev`
 
-### Build
+### Local Build
 ```bash
-cmake -B build -S .
-cmake --build build -j$(nproc)
+./make.sh
 ```
 
-### Install
+### System Installation
 To build and install system-wide to `/usr`:
 ```bash
 sudo ./make.sh

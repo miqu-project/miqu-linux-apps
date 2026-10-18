@@ -28,13 +28,12 @@ MiquMusic delivers smooth local audio playback, full queue controls, responsive 
 - `miqutoolkit`
 - `libmpdclient`
 
-### Build
+### Local Build
 ```bash
-cmake -B build -S .
-cmake --build build -j$(nproc)
+./make.sh
 ```
 
-### Install
+### System Installation
 To build and install system-wide to `/usr`:
 ```bash
 sudo ./make.sh
