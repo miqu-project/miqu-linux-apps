@@ -50,7 +50,7 @@ void Config::sync_defaults_from_toolkit() {
         m_primary = t_cfg->colors.primary;
         m_on_primary = t_cfg->colors.on_primary;
         m_primary_container = t_cfg->colors.primary_container;
-        m_background = t_cfg->colors.background.with_alpha(1.0f);
+        m_background = t_cfg->colors.surface.with_alpha(1.0f);
         m_surface = t_cfg->colors.surface;
         m_on_surface = t_cfg->colors.on_surface;
         m_outline = t_cfg->colors.outline;
