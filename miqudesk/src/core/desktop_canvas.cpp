@@ -128,7 +128,6 @@ bool DesktopCanvas::init() {
         ->title("miqudesk")
         ->appId("miqudesk")
         ->keyboardInteractive(false)
-        ->dimBackdrop(false)
         ->closeOnClickOutside(false)
         ->closeOnEscape(false)
         ->contentView(m_root_view)
