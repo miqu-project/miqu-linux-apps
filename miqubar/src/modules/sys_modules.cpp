@@ -553,9 +553,9 @@ ClockModuleView::ClockModuleView(std::function<void()> on_open_calendar)
 
     set_flat(true);
     set_padding(8, 2);
+    set_text_alignment(miqu::TextAlignment::Center);
     set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
     set_on_click_listener(m_on_open_calendar);
-    set_text(""); // Drawn via custom draw with Pango horizontal center alignment
     update_time();
 }
 
@@ -574,75 +574,12 @@ void ClockModuleView::update_time() {
     m_time_str = time_buf;
     m_date_str = date_buf;
 
+    std::string text = cfg.clock_stacked ? (m_time_str + "\n" + m_date_str)
+                                         : (m_time_str + "  " + m_date_str);
+    set_text(text);
     set_tooltip(m_date_str + "  " + m_time_str);
-    request_redraw();
 }
 
-miqu::Size ClockModuleView::measure_size() const {
-    const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
-
-    cairo_surface_t* temp_surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
-    cairo_t* cr = cairo_create(temp_surf);
-    PangoLayout* layout = pango_cairo_create_layout(cr);
-
-    std::string text = cfg.clock_stacked ? (m_time_str + "\n" + m_date_str)
-                                         : (m_time_str + "  " + m_date_str);
-    pango_layout_set_text(layout, text.c_str(), -1);
-    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
-
-    auto config = miqu::Config::get();
-    std::string font_family = config->metrics.font_family.empty() ? "Sans" : config->metrics.font_family;
-    int font_size = get_toolkit_font_size();
-    std::string font_desc_str = font_family + " " + std::to_string(font_size);
-    PangoFontDescription* desc = pango_font_description_from_string(font_desc_str.c_str());
-    pango_layout_set_font_description(layout, desc);
-    pango_font_description_free(desc);
-
-    int text_w = 0, text_h = 0;
-    pango_layout_get_pixel_size(layout, &text_w, &text_h);
-
-    g_object_unref(layout);
-    cairo_destroy(cr);
-    cairo_surface_destroy(temp_surf);
-
-    return miqu::Size(text_w + 16, item_h);
-}
-
-void ClockModuleView::draw(cairo_t* cr, const miqu::Rect& bounds) {
-    if (!is_visible() || !cr || bounds.width <= 0 || bounds.height <= 0) return;
-
-    // Draw button background, rounded corners, hover/pressed feedback
-    miqu::Button::draw(cr, bounds);
-
-    const auto& cfg = BarConfig::get();
-    auto config = miqu::Config::get();
-
-    PangoLayout* layout = pango_cairo_create_layout(cr);
-    std::string text = cfg.clock_stacked ? (m_time_str + "\n" + m_date_str)
-                                         : (m_time_str + "  " + m_date_str);
-    pango_layout_set_text(layout, text.c_str(), -1);
-    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
-
-    std::string font_family = config->metrics.font_family.empty() ? "Sans" : config->metrics.font_family;
-    int font_size = get_toolkit_font_size();
-    std::string font_desc_str = font_family + " " + std::to_string(font_size);
-    PangoFontDescription* desc = pango_font_description_from_string(font_desc_str.c_str());
-    pango_layout_set_font_description(layout, desc);
-    pango_font_description_free(desc);
-
-    int text_w = 0, text_h = 0;
-    pango_layout_get_pixel_size(layout, &text_w, &text_h);
-
-    double text_x = bounds.x + (bounds.width - text_w) / 2.0;
-    double text_y = bounds.y + (bounds.height - text_h) / 2.0;
-
-    cairo_move_to(cr, text_x, text_y);
-    auto fg = config->colors.on_surface;
-    cairo_set_source_rgba(cr, fg.r, fg.g, fg.b, fg.a);
-    pango_cairo_show_layout(cr, layout);
-    g_object_unref(layout);
-}
 
 // ==========================================
 // Notification Module

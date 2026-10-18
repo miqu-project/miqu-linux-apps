@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include <miqutoolkit/core/config.hpp>
+#include <miqutoolkit/core/fs_utils.hpp>
 
 #include <fstream>
 #include <sstream>
@@ -37,15 +38,7 @@ static bool parse_bool(const std::string& val) {
 }
 
 std::string Config::get_user_config_path() {
-    const char* xdg_config = getenv("XDG_CONFIG_HOME");
-    if (xdg_config && *xdg_config) {
-        return std::string(xdg_config) + "/miquidle/miquidle.conf";
-    }
-    const char* home = getenv("HOME");
-    if (home && *home) {
-        return std::string(home) + "/.config/miquidle/miquidle.conf";
-    }
-    return "";
+    return miqu::FsUtils::get_user_config_file("miquidle");
 }
 
 std::string Config::init_user_config() {
@@ -53,21 +46,15 @@ std::string Config::init_user_config() {
 }
 
 std::string Config::find_default_config() {
-    // 1. Check user configuration (without auto-seeding)
+    // 1. Resolve configuration path according to 2-tier architecture
     std::string user_conf = get_user_config_path();
     if (!user_conf.empty() && fs::exists(user_conf)) {
         return user_conf;
     }
 
-    // 2. Check alternative user config naming (e.g. ~/.config/miquidle/config)
-    const char* xdg_config = getenv("XDG_CONFIG_HOME");
-    const char* home = getenv("HOME");
-    if (xdg_config && *xdg_config) {
-        std::string alt = std::string(xdg_config) + "/miquidle/config";
-        if (fs::exists(alt)) return alt;
-    } else if (home && *home) {
-        std::string alt = std::string(home) + "/.config/miquidle/config";
-        if (fs::exists(alt)) return alt;
+    std::string sys_conf = miqu::FsUtils::get_system_config_file("miquidle");
+    if (!sys_conf.empty() && fs::exists(sys_conf)) {
+        return sys_conf;
     }
 
     return "";

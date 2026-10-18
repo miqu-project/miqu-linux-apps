@@ -53,20 +53,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 1. Resolve user configuration file if present (no auto-seeding on startup)
-    std::string user_cfg_dir = miqu::FsUtils::get_user_config_dir("miquinfo");
-    std::string target_conf;
-    if (!user_cfg_dir.empty()) {
-        std::string p = user_cfg_dir + "/miquinfo.conf";
-        if (fs::exists(p)) {
-            target_conf = p;
-        }
-    }
+    // 1. Resolve configuration path according to 2-tier ecosystem architecture
+    std::string user_conf = miqu::FsUtils::get_user_config_file("miquinfo");
+    std::string target_conf = fs::exists(user_conf) ? user_conf : miqu::FsUtils::get_system_config_file("miquinfo");
 
     int default_tab = 0;
 
-    if (!target_conf.empty()) {
-        // Overlay any toolkit appearance overrides (colors, fonts, metrics, icon_theme)
+    if (!target_conf.empty() && fs::exists(target_conf)) {
+        // Load exclusive configuration file (processes internal source directives)
         miqu::Config::get()->load_from_file(target_conf);
 
         std::ifstream file(target_conf);

@@ -12,6 +12,7 @@
 #include <string>
 #include <mutex>
 #include <memory>
+#include <unordered_map>
 
 G_BEGIN_DECLS
 
@@ -71,6 +72,18 @@ static void miqu_polkit_listener_class_init(MiquPolkitListenerClass* klass) {
     listener_class->initiate_authentication_finish = miqu_polkit_listener_initiate_authentication_finish;
 }
 
+static std::mutex s_sessions_mutex;
+static std::unordered_map<AuthSessionContext*, std::shared_ptr<AuthSessionContext>> s_active_sessions;
+
+static std::shared_ptr<AuthSessionContext> get_session_ctx(gpointer user_data) {
+    std::lock_guard<std::mutex> lock(s_sessions_mutex);
+    auto it = s_active_sessions.find(static_cast<AuthSessionContext*>(user_data));
+    if (it != s_active_sessions.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
 static void on_session_request(
     PolkitAgentSession* s,
     gchar* request,
@@ -78,7 +91,8 @@ static void on_session_request(
     gpointer user_data
 ) {
     (void)s;
-    auto ctx = *static_cast<std::shared_ptr<AuthSessionContext>*>(user_data);
+    auto ctx = get_session_ctx(user_data);
+    if (!ctx) return;
 
     miqu::AppEngine::instance()->post([ctx, echo_on]() {
         miqu::AuthDialogManager::instance()->show_dialog(
@@ -108,7 +122,6 @@ static void on_session_show_error(
     gpointer user_data
 ) {
     (void)s;
-    auto ctx = *static_cast<std::shared_ptr<AuthSessionContext>*>(user_data);
     std::string err_msg = text ? text : "Authentication failed.";
 
     miqu::AppEngine::instance()->post([err_msg]() {
@@ -122,7 +135,6 @@ static void on_session_show_info(
     gpointer user_data
 ) {
     (void)s;
-    auto ctx = *static_cast<std::shared_ptr<AuthSessionContext>*>(user_data);
     std::string info_msg = text ? text : "";
 
     miqu::AppEngine::instance()->post([info_msg]() {
@@ -136,8 +148,16 @@ static void on_session_completed(
     gpointer user_data
 ) {
     (void)s;
-    auto* ctx_ptr = static_cast<std::shared_ptr<AuthSessionContext>*>(user_data);
-    auto ctx = *ctx_ptr;
+    std::shared_ptr<AuthSessionContext> ctx;
+    {
+        std::lock_guard<std::mutex> lock(s_sessions_mutex);
+        auto it = s_active_sessions.find(static_cast<AuthSessionContext*>(user_data));
+        if (it != s_active_sessions.end()) {
+            ctx = it->second;
+            s_active_sessions.erase(it);
+        }
+    }
+    if (!ctx) return;
 
     {
         std::lock_guard<std::mutex> lock(ctx->mutex);
@@ -173,14 +193,12 @@ static void on_session_completed(
     miqu::AppEngine::instance()->post([]() {
         miqu::AuthDialogManager::instance()->dismiss_dialog();
     });
-
-    delete ctx_ptr;
 }
 
 static void on_cancellable_cancelled(GCancellable* cancellable, gpointer user_data) {
     (void)cancellable;
-    auto* ctx_ptr = static_cast<std::shared_ptr<AuthSessionContext>*>(user_data);
-    auto ctx = *ctx_ptr;
+    auto ctx = get_session_ctx(user_data);
+    if (!ctx) return;
     std::lock_guard<std::mutex> lock(ctx->mutex);
     if (ctx->session && !ctx->completed) {
         polkit_agent_session_cancel(ctx->session);
@@ -280,18 +298,21 @@ static void miqu_polkit_listener_initiate_authentication(
         return;
     }
 
-    auto* ctx_closure = new std::shared_ptr<AuthSessionContext>(ctx);
+    {
+        std::lock_guard<std::mutex> lock(s_sessions_mutex);
+        s_active_sessions[ctx.get()] = ctx;
+    }
 
-    g_signal_connect(ctx->session, "request", G_CALLBACK(on_session_request), ctx_closure);
-    g_signal_connect(ctx->session, "show-error", G_CALLBACK(on_session_show_error), ctx_closure);
-    g_signal_connect(ctx->session, "show-info", G_CALLBACK(on_session_show_info), ctx_closure);
-    g_signal_connect(ctx->session, "completed", G_CALLBACK(on_session_completed), ctx_closure);
+    g_signal_connect(ctx->session, "request", G_CALLBACK(on_session_request), ctx.get());
+    g_signal_connect(ctx->session, "show-error", G_CALLBACK(on_session_show_error), ctx.get());
+    g_signal_connect(ctx->session, "show-info", G_CALLBACK(on_session_show_info), ctx.get());
+    g_signal_connect(ctx->session, "completed", G_CALLBACK(on_session_completed), ctx.get());
 
     if (cancellable) {
         ctx->cancellable_handler_id = g_cancellable_connect(
             cancellable,
             G_CALLBACK(on_cancellable_cancelled),
-            ctx_closure,
+            ctx.get(),
             nullptr
         );
     }

@@ -648,9 +648,7 @@ void ThemeBackend::update_gtk_theme(ThemeMode mode) {
     run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "gtk-theme", gtk_theme});
     run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "icon-theme", icon_theme});
 
-    // Pulse opposite color-scheme briefly so Libadwaita / GTK4 apps re-parse colors.css
-    run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "color-scheme", opp_scheme});
-    usleep(30000); // 30ms
+    // Set target color-scheme for Libadwaita / GTK4 apps
     run_command_sync({"gsettings", "set", "org.gnome.desktop.interface", "color-scheme", scheme});
 
     const char* home = getenv("HOME");

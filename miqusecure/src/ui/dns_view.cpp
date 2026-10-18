@@ -110,11 +110,12 @@ void DnsView::setup_master_card() {
     ));
 
     std::weak_ptr<Switch> weak_master = m_switch_master;
-    m_switch_master->set_on_checked_changed_listener([this, weak_master](bool checked) {
+    std::weak_ptr<bool> weak_alive = m_alive;
+    m_switch_master->set_on_checked_changed_listener([this, weak_master, weak_alive](bool checked) {
         if (m_updating_ui) return;
         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-        std::thread([this, checked, weak_master]() {
+        std::thread([this, checked, weak_master, weak_alive]() {
             bool ok = false;
             if (checked) {
                 int idx = m_spinner_provider ? m_spinner_provider->get_selected_index() : 0;
@@ -129,7 +130,9 @@ void DnsView::setup_master_card() {
             }
 
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_master]() {
+                engine->post([this, checked, ok, weak_master, weak_alive]() {
+                    auto alive = weak_alive.lock();
+                    if (!alive || !*alive) return;
                     if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                     if (ok) {
                         if (m_on_changed) m_on_changed();
@@ -206,10 +209,13 @@ void DnsView::setup_resolver_card() {
 
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-            std::thread([this, p_ip, s_ip]() {
+            std::weak_ptr<bool> weak_alive = m_alive;
+            std::thread([this, p_ip, s_ip, weak_alive]() {
                 bool ok = SecurityBackend::apply_dns(p_ip, s_ip);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, ok]() {
+                    engine->post([this, ok, weak_alive]() {
+                        auto alive = weak_alive.lock();
+                        if (!alive || !*alive) return;
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok) {
                             if (m_on_changed) m_on_changed();
@@ -369,10 +375,13 @@ void DnsView::show_custom_dns_popup(const std::shared_ptr<View>& anchor) {
             if (m_custom_popup) m_custom_popup->dismiss();
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-            std::thread([this, primary, secondary]() {
+            std::weak_ptr<bool> weak_alive = m_alive;
+            std::thread([this, primary, secondary, weak_alive]() {
                 bool ok = SecurityBackend::apply_dns(primary, secondary);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, ok]() {
+                    engine->post([this, ok, weak_alive]() {
+                        auto alive = weak_alive.lock();
+                        if (!alive || !*alive) return;
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok && m_on_changed) m_on_changed();
                     });

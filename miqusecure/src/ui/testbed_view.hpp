@@ -10,7 +10,9 @@ namespace miqusecure {
 class TestbedView : public miqu::ScrollView {
 public:
     explicit TestbedView(const DistroboxInfo& info, std::function<void()> on_refresh);
-    ~TestbedView() override = default;
+    ~TestbedView() override {
+        if (m_alive) *m_alive = false;
+    }
 
     void update_info(const DistroboxInfo& info);
 
@@ -39,6 +41,7 @@ private:
 
     // Boxes list
     std::shared_ptr<miqu::LinearLayout> m_boxes_container;
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 
 } // namespace miqusecure

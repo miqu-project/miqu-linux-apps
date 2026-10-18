@@ -9,7 +9,9 @@ namespace miqusecure {
 class CleanerView : public miqu::ScrollView {
 public:
     CleanerView(const CleanerInfo& info, std::function<void()> on_changed = nullptr);
-    ~CleanerView() override = default;
+    ~CleanerView() override {
+        if (m_alive) *m_alive = false;
+    }
 
     void update_info(const CleanerInfo& info);
 
@@ -40,6 +42,7 @@ private:
     std::shared_ptr<miqu::TextView> m_browser_size_lbl;
     std::shared_ptr<miqu::TextView> m_trash_size_lbl;
     std::shared_ptr<miqu::TextView> m_history_size_lbl;
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 
 using MetadataView = CleanerView;

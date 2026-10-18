@@ -50,15 +50,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // 1. Resolve user configuration file if present (no auto-seeding on startup)
-    std::string user_cfg_dir = FsUtils::get_user_config_dir("miqugallery");
-    std::string target_conf;
-    if (!user_cfg_dir.empty()) {
-        std::string p = user_cfg_dir + "/miqugallery.conf";
-        if (std::filesystem::exists(p)) {
-            target_conf = p;
-        }
-    }
+    // 1. Resolve configuration path (Canonical Two-Tier Authority Model)
+    std::string user_conf = FsUtils::get_user_config_file("miqugallery");
+    std::string target_conf = std::filesystem::exists(user_conf) ? user_conf : FsUtils::get_system_config_file("miqugallery");
 
     int thumbnail_size = 150;
 

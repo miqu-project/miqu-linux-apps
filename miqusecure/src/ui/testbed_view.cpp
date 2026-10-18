@@ -215,10 +215,13 @@ void TestbedView::setup_create_section() {
         btn->set_text("Creating...");
         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-        std::thread([this, name, image, weak_btn]() {
+        std::weak_ptr<bool> weak_alive = m_alive;
+        std::thread([this, name, image, weak_btn, weak_alive]() {
             SecurityBackend::create_testbed(name, image);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, weak_btn]() {
+                engine->post([this, weak_btn, weak_alive]() {
+                    auto alive = weak_alive.lock();
+                    if (!alive || !*alive) return;
                     if (auto b = weak_btn.lock()) {
                         b->set_text("+ Create Testbed");
                     }
@@ -407,10 +410,13 @@ void TestbedView::rebuild_boxes_list() {
                 b->set_text("Destroying...");
             }
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-            std::thread([this, b_name]() {
+            std::weak_ptr<bool> weak_alive = m_alive;
+            std::thread([this, b_name, weak_alive]() {
                 SecurityBackend::destroy_testbed(b_name);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this]() {
+                    engine->post([this, weak_alive]() {
+                        auto alive = weak_alive.lock();
+                        if (!alive || !*alive) return;
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (m_on_refresh) m_on_refresh();
                     });
@@ -478,11 +484,14 @@ void TestbedView::rebuild_boxes_list() {
             btn->set_text("Installing...");
             if (prg) prg->set_visibility(Visibility::Visible);
 
-            std::thread([this, b_name, pkg, weak_install, weak_input, weak_prog]() {
+            std::weak_ptr<bool> weak_alive = m_alive;
+            std::thread([this, b_name, pkg, weak_install, weak_input, weak_prog, weak_alive]() {
                 std::string err;
                 bool ok = SecurityBackend::install_testbed_package(b_name, pkg, err);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, ok, weak_install, weak_input, weak_prog]() {
+                    engine->post([this, ok, weak_install, weak_input, weak_prog, weak_alive]() {
+                        auto alive = weak_alive.lock();
+                        if (!alive || !*alive) return;
                         if (auto p = weak_prog.lock()) {
                             p->set_visibility(Visibility::Invisible);
                         }
@@ -579,10 +588,13 @@ void TestbedView::rebuild_boxes_list() {
                     if (auto b = weak_uninst.lock()) {
                         b->set_text("Removing...");
                     }
-                    std::thread([this, b_name, p_name]() {
+                    std::weak_ptr<bool> weak_alive = m_alive;
+                    std::thread([this, b_name, p_name, weak_alive]() {
                         SecurityBackend::remove_testbed_package(b_name, p_name);
                         if (auto engine = AppEngine::instance()) {
-                            engine->post([this]() {
+                            engine->post([this, weak_alive]() {
+                                auto alive = weak_alive.lock();
+                                if (!alive || !*alive) return;
                                 if (m_on_refresh) m_on_refresh();
                             });
                         }

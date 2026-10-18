@@ -17,27 +17,19 @@ static std::string trim_str(const std::string& str) {
 }
 
 std::string ConfigManager::get_user_config_path() {
-    std::string user_cfg_dir = FsUtils::get_user_config_dir("miqulauncher");
-    if (!user_cfg_dir.empty()) {
-        std::string p = user_cfg_dir + "/miqulauncher.conf";
-        if (fs::exists(p)) {
-            return p;
-        }
-    }
-    return "";
+    return FsUtils::get_user_config_file("miqulauncher");
 }
 
 void ConfigManager::load(LauncherConfig& config) {
-    std::string user_path = get_user_config_path();
-
     std::string target_path;
     if (!config.config_path.empty() && fs::exists(config.config_path)) {
         target_path = config.config_path;
-    } else if (!user_path.empty() && fs::exists(user_path)) {
-        target_path = user_path;
+    } else {
+        std::string user_path = get_user_config_path();
+        target_path = fs::exists(user_path) ? user_path : FsUtils::get_system_config_file("miqulauncher");
     }
 
-    if (target_path.empty()) {
+    if (target_path.empty() || !fs::exists(target_path)) {
         return;
     }
 

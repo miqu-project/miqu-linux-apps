@@ -34,13 +34,8 @@ void PolkitConfig::load(const std::string& custom_path) {
     if (!custom_path.empty() && fs::exists(custom_path)) {
         target_path = custom_path;
     } else {
-        std::string user_cfg_dir = FsUtils::get_user_config_dir("miqupolkit");
-        if (!user_cfg_dir.empty()) {
-            std::string p = user_cfg_dir + "/miqupolkit.conf";
-            if (fs::exists(p)) {
-                target_path = p;
-            }
-        }
+        std::string user_conf = FsUtils::get_user_config_file("miqupolkit");
+        target_path = fs::exists(user_conf) ? user_conf : FsUtils::get_system_config_file("miqupolkit");
     }
 
     if (target_path.empty() || !fs::exists(target_path)) {

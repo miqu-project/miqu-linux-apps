@@ -13,14 +13,50 @@ using namespace miqu;
 
 namespace miqudm {
 
-class UserCardView : public View {
+class UserCardView : public LinearLayout {
 public:
     UserCardView(UserInfo user, bool is_selected = false)
-        : m_user(std::move(user)), m_is_selected(is_selected) {}
+        : LinearLayout(Orientation::Vertical), m_user(std::move(user)), m_is_selected(is_selected) {
+        set_layout_params(LayoutParams(104, 116));
+        set_padding(4);
+
+        std::string initial = m_user.display_name.empty() ? "?" : m_user.display_name.substr(0, 1);
+        if (initial >= "a" && initial <= "z") initial[0] = toupper(initial[0]);
+
+        m_avatar = AvatarViewBuilder::create()
+            ->size(50)
+            ->text(initial)
+            ->circle()
+            ->bold(true)
+            ->textSize(18)
+            ->selected(m_is_selected)
+            ->build();
+        m_avatar->set_layout_params(LayoutParams(
+            50, 50,
+            Gravity::Top | Gravity::CenterHorizontal
+        ));
+        m_avatar->set_margin(0, 8, 0, 0);
+        add_view(m_avatar);
+
+        m_name_label = TextViewBuilder::create()
+            ->text(m_user.display_name)
+            ->center()
+            ->ellipsize(true)
+            ->bold(m_is_selected)
+            ->build();
+        m_name_label->set_layout_params(LayoutParams(
+            96, static_cast<int>(LayoutDimension::WrapContent),
+            Gravity::Bottom | Gravity::CenterHorizontal
+        ));
+        m_name_label->set_margin(0, 0, 0, 8);
+        add_view(m_name_label);
+    }
 
     void set_selected(bool selected) {
         if (m_is_selected != selected) {
             m_is_selected = selected;
+            m_avatar->set_selected(selected);
+            m_name_label->set_bold(selected);
             request_redraw();
         }
     }
@@ -33,111 +69,31 @@ public:
         if (!cr || bounds.width <= 0 || bounds.height <= 0) return;
 
         auto config = Config::get();
-        cairo_save(cr);
-
         int pad = 2;
         int card_x = bounds.x + pad;
         int card_y = bounds.y + pad;
         int card_w = bounds.width - (2 * pad);
         int card_h = bounds.height - (2 * pad);
-        double card_radius = 12.0;
+        int card_radius = 12;
 
-        // 1. Draw Card Background & Selection Highlight
+        cairo_save(cr);
         CardView::draw_rounded_rect(cr, card_x, card_y, card_w, card_h, card_radius);
         if (m_is_selected) {
-            cairo_set_source_rgba(cr, config->colors.primary.r,
-                                      config->colors.primary.g,
-                                      config->colors.primary.b,
-                                      0.16f);
+            cairo_set_source_rgba(cr, config->colors.primary.r, config->colors.primary.g, config->colors.primary.b, 0.16f);
             cairo_fill_preserve(cr);
-
-            cairo_set_source_rgba(cr, config->colors.primary.r,
-                                      config->colors.primary.g,
-                                      config->colors.primary.b,
-                                      0.85f);
+            cairo_set_source_rgba(cr, config->colors.primary.r, config->colors.primary.g, config->colors.primary.b, 0.85f);
             cairo_set_line_width(cr, 1.6);
             cairo_stroke(cr);
         } else {
-            cairo_set_source_rgba(cr, config->colors.surface_variant.r,
-                                      config->colors.surface_variant.g,
-                                      config->colors.surface_variant.b,
-                                      0.25f);
+            cairo_set_source_rgba(cr, config->colors.surface_variant.r, config->colors.surface_variant.g, config->colors.surface_variant.b, 0.25f);
             cairo_fill_preserve(cr);
-
-            cairo_set_source_rgba(cr, config->colors.outline_variant.r,
-                                      config->colors.outline_variant.g,
-                                      config->colors.outline_variant.b,
-                                      0.30f);
+            cairo_set_source_rgba(cr, config->colors.outline_variant.r, config->colors.outline_variant.g, config->colors.outline_variant.b, 0.30f);
             cairo_set_line_width(cr, 1.0);
             cairo_stroke(cr);
         }
-
-        // 2. Avatar Circle
-        int avatar_size = 50;
-        int avatar_x = card_x + (card_w - avatar_size) / 2;
-        int avatar_y = card_y + 12;
-
-        cairo_save(cr);
-        cairo_arc(cr, avatar_x + avatar_size / 2.0, avatar_y + avatar_size / 2.0, avatar_size / 2.0, 0, 2 * M_PI);
-        if (m_is_selected) {
-            cairo_set_source_rgba(cr, config->colors.primary.r, config->colors.primary.g, config->colors.primary.b, 0.95f);
-        } else {
-            cairo_set_source_rgba(cr, config->colors.surface_variant.r, config->colors.surface_variant.g, config->colors.surface_variant.b, 0.85f);
-        }
-        cairo_fill_preserve(cr);
-
-        cairo_set_source_rgba(cr, config->colors.outline.r, config->colors.outline.g, config->colors.outline.b, 0.35f);
-        cairo_set_line_width(cr, 1.2);
-        cairo_stroke(cr);
         cairo_restore(cr);
 
-        // 3. Avatar Initial Letter
-        std::string initial = m_user.display_name.empty() ? "?" : m_user.display_name.substr(0, 1);
-        if (initial >= "a" && initial <= "z") initial[0] = toupper(initial[0]);
-
-        PangoLayout* initial_layout = pango_cairo_create_layout(cr);
-        pango_layout_set_text(initial_layout, initial.c_str(), -1);
-
-        std::string font_family = config->metrics.font_family.empty() ? "Sans" : config->metrics.font_family;
-        std::string init_font = font_family + " Bold 18";
-        PangoFontDescription* idesc = pango_font_description_from_string(init_font.c_str());
-        pango_layout_set_font_description(initial_layout, idesc);
-        pango_font_description_free(idesc);
-
-        int init_w = 0, init_h = 0;
-        pango_layout_get_pixel_size(initial_layout, &init_w, &init_h);
-        int init_x = avatar_x + (avatar_size - init_w) / 2;
-        int init_y = avatar_y + (avatar_size - init_h) / 2;
-
-        cairo_move_to(cr, init_x, init_y);
-        if (m_is_selected) {
-            cairo_set_source_rgba(cr, config->colors.on_primary.r, config->colors.on_primary.g, config->colors.on_primary.b, 1.0f);
-        } else {
-            cairo_set_source_rgba(cr, config->colors.primary.r, config->colors.primary.g, config->colors.primary.b, 1.0f);
-        }
-        pango_cairo_show_layout(cr, initial_layout);
-        g_object_unref(initial_layout);
-
-        // 4. User Display Name (Centered)
-        PangoLayout* name_layout = pango_cairo_create_layout(cr);
-        pango_layout_set_text(name_layout, m_user.display_name.c_str(), -1);
-        std::string name_font = font_family + (m_is_selected ? " Bold 11" : " 11");
-        PangoFontDescription* ndesc = pango_font_description_from_string(name_font.c_str());
-        pango_layout_set_font_description(name_layout, ndesc);
-        pango_font_description_free(ndesc);
-
-        int text_area_w = card_w - 8;
-        pango_layout_set_width(name_layout, text_area_w * PANGO_SCALE);
-        pango_layout_set_ellipsize(name_layout, PANGO_ELLIPSIZE_END);
-        pango_layout_set_alignment(name_layout, PANGO_ALIGN_CENTER);
-
-        int name_y = avatar_y + avatar_size + 10;
-        cairo_move_to(cr, card_x + 4, name_y);
-        cairo_set_source_rgba(cr, config->colors.on_surface.r, config->colors.on_surface.g, config->colors.on_surface.b, 1.0f);
-        pango_cairo_show_layout(cr, name_layout);
-        g_object_unref(name_layout);
-
-        cairo_restore(cr);
+        LinearLayout::draw(cr, bounds);
     }
 
     const UserInfo& get_user() const { return m_user; }
@@ -145,6 +101,8 @@ public:
 private:
     UserInfo m_user;
     bool m_is_selected = false;
+    std::shared_ptr<AvatarView> m_avatar;
+    std::shared_ptr<TextView> m_name_label;
 };
 
 static std::string get_current_time_str() {

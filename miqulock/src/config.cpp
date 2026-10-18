@@ -191,15 +191,7 @@ void Config::load_file(const std::string& path, int depth) {
 }
 
 std::string Config::get_user_config_path() {
-    const char* xdg_config = getenv("XDG_CONFIG_HOME");
-    if (xdg_config && *xdg_config) {
-        return std::string(xdg_config) + "/miqulock/miqulock.conf";
-    }
-    const char* home = getenv("HOME");
-    if (home && *home) {
-        return std::string(home) + "/.config/miqulock/miqulock.conf";
-    }
-    return "";
+    return miqu::FsUtils::get_user_config_file("miqulock");
 }
 
 std::string Config::init_user_config() {
@@ -226,13 +218,8 @@ void Config::load(const std::string& custom_path) {
     if (!custom_path.empty() && fs::exists(custom_path)) {
         m_config_path = custom_path;
     } else {
-        std::string user_cfg_dir = miqu::FsUtils::get_user_config_dir("miqulock");
-        if (!user_cfg_dir.empty()) {
-            std::string p = user_cfg_dir + "/miqulock.conf";
-            if (fs::exists(p)) {
-                m_config_path = p;
-            }
-        }
+        std::string user_conf = miqu::FsUtils::get_user_config_file("miqulock");
+        m_config_path = fs::exists(user_conf) ? user_conf : miqu::FsUtils::get_system_config_file("miqulock");
     }
 
     if (!m_config_path.empty() && fs::exists(m_config_path)) {

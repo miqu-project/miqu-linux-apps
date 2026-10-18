@@ -90,11 +90,14 @@ void CleanerView::setup_status_hero() {
         ->padding(16, 8)
         ->onClick([this]() {
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-            std::thread([this]() {
+            std::weak_ptr<bool> weak_alive = m_alive;
+            std::thread([this, weak_alive]() {
                 std::string log;
                 SecurityBackend::clean_all_caches(log);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, log]() {
+                    engine->post([this, log, weak_alive]() {
+                        auto alive = weak_alive.lock();
+                        if (!alive || !*alive) return;
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (m_result_lbl) m_result_lbl->set_text("✔ " + log);
                         if (m_on_changed) m_on_changed();
@@ -194,11 +197,14 @@ void CleanerView::setup_caches_section() {
             ->padding(12, 6)
             ->onClick([this, clean_action]() {
                 if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-                std::thread([this, clean_action]() {
+                std::weak_ptr<bool> weak_alive = m_alive;
+                std::thread([this, clean_action, weak_alive]() {
                     std::string log;
                     bool ok = clean_action(log);
                     if (auto engine = AppEngine::instance()) {
-                        engine->post([this, ok, log]() {
+                        engine->post([this, ok, log, weak_alive]() {
+                            auto alive = weak_alive.lock();
+                            if (!alive || !*alive) return;
                             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                             if (m_result_lbl) m_result_lbl->set_text(ok ? ("✔ " + log) : ("Error: " + log));
                             if (m_on_changed) m_on_changed();
@@ -350,11 +356,14 @@ void CleanerView::clean_file(const std::string& path) {
     if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
     if (m_result_lbl) m_result_lbl->set_text("Scrubbing metadata with mat2...");
 
-    std::thread([this, path]() {
+    std::weak_ptr<bool> weak_alive = m_alive;
+    std::thread([this, path, weak_alive]() {
         std::string log;
         bool ok = SecurityBackend::clean_metadata(path, log);
         if (auto engine = AppEngine::instance()) {
-            engine->post([this, ok, log]() {
+            engine->post([this, ok, log, weak_alive]() {
+                auto alive = weak_alive.lock();
+                if (!alive || !*alive) return;
                 if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                 if (m_result_lbl) {
                     m_result_lbl->set_text(ok ? ("✔ Metadata scrubbed successfully: " + log) : ("Error: " + log));

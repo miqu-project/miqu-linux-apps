@@ -9,7 +9,9 @@ namespace miqusecure {
 class DnsView : public miqu::ScrollView {
 public:
     DnsView(const DnsInfo& info, std::function<void()> on_changed);
-    ~DnsView() override = default;
+    ~DnsView() override {
+        if (m_alive) *m_alive = false;
+    }
 
     void update_info(const DnsInfo& info);
 
@@ -38,6 +40,8 @@ private:
 
     // Active popup window reference
     std::shared_ptr<miqu::PopupWindow> m_custom_popup;
+
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 
 } // namespace miqusecure

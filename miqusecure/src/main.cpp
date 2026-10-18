@@ -54,15 +54,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Resolve user configuration file if present (no auto-seeding on startup)
-    std::string user_cfg_dir = FsUtils::get_user_config_dir("miqusecure");
-    std::string target_conf;
-    if (!user_cfg_dir.empty()) {
-        std::string p = user_cfg_dir + "/miqusecure.conf";
-        if (fs::exists(p)) {
-            target_conf = p;
-        }
-    }
+    // 1. Resolve configuration path (Canonical Two-Tier Authority Model)
+    std::string user_conf = FsUtils::get_user_config_file("miqusecure");
+    std::string target_conf = fs::exists(user_conf) ? user_conf : FsUtils::get_system_config_file("miqusecure");
 
     int default_tab = 0;
 

@@ -1,5 +1,6 @@
 #include "bar_config.hpp"
 #include "miqutoolkit/core/config.hpp"
+#include "miqutoolkit/core/fs_utils.hpp"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -52,19 +53,8 @@ void BarConfig::load(const std::string& custom_path) {
     miqubar_outline = false;
     std::string path_to_load = custom_path;
     if (path_to_load.empty()) {
-        const char* xdg_config = getenv("XDG_CONFIG_HOME");
-        std::string user_cfg;
-        if (xdg_config && xdg_config[0] != '\0') {
-            user_cfg = std::string(xdg_config) + "/miqubar/miqubar.conf";
-        } else {
-            const char* home = getenv("HOME");
-            if (home) user_cfg = std::string(home) + "/.config/miqubar/miqubar.conf";
-        }
-        if (!user_cfg.empty() && fs::exists(user_cfg)) {
-            path_to_load = user_cfg;
-        } else if (fs::exists("/usr/share/miqubar/miqubar.conf")) {
-            path_to_load = "/usr/share/miqubar/miqubar.conf";
-        }
+        std::string user_conf = miqu::FsUtils::get_user_config_file("miqubar");
+        path_to_load = fs::exists(user_conf) ? user_conf : miqu::FsUtils::get_system_config_file("miqubar");
     }
 
     if (!path_to_load.empty() && fs::exists(path_to_load)) {

@@ -145,9 +145,6 @@ public:
     explicit ClockModuleView(std::function<void()> on_open_calendar);
     void update_time();
 
-    void draw(cairo_t* cr, const miqu::Rect& bounds) override;
-    miqu::Size measure_size() const override;
-
 private:
     std::string m_time_str;
     std::string m_date_str;

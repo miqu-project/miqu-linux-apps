@@ -104,14 +104,17 @@ void FirewallView::setup_status_hero() {
     ));
 
     std::weak_ptr<Switch> weak_master = m_switch_master;
-    m_switch_master->set_on_checked_changed_listener([this, weak_master](bool checked) {
+    std::weak_ptr<bool> weak_alive = m_alive;
+    m_switch_master->set_on_checked_changed_listener([this, weak_master, weak_alive](bool checked) {
         if (m_updating_ui) return;
         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-        std::thread([this, checked, weak_master]() {
+        std::thread([this, checked, weak_master, weak_alive]() {
             bool ok = SecurityBackend::set_firewall_enabled(checked);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_master]() {
+                engine->post([this, checked, ok, weak_master, weak_alive]() {
+                    auto alive = weak_alive.lock();
+                    if (!alive || !*alive) return;
                     if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                     if (ok) {
                         if (m_on_changed) m_on_changed();
@@ -206,10 +209,13 @@ void FirewallView::setup_network_profile() {
 
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-            std::thread([this, target_mode]() {
+            std::weak_ptr<bool> weak_alive = m_alive;
+            std::thread([this, target_mode, weak_alive]() {
                 bool ok = SecurityBackend::set_network_mode(target_mode);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, ok]() {
+                    engine->post([this, ok, weak_alive]() {
+                        auto alive = weak_alive.lock();
+                        if (!alive || !*alive) return;
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok) {
                             if (m_on_changed) m_on_changed();
@@ -269,14 +275,17 @@ void FirewallView::setup_network_profile() {
     ));
 
     std::weak_ptr<Switch> weak_stealth = m_switch_stealth;
-    m_switch_stealth->set_on_checked_changed_listener([this, weak_stealth](bool checked) {
+    std::weak_ptr<bool> weak_alive_stealth = m_alive;
+    m_switch_stealth->set_on_checked_changed_listener([this, weak_stealth, weak_alive_stealth](bool checked) {
         if (m_updating_ui) return;
         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-        std::thread([this, checked, weak_stealth]() {
+        std::thread([this, checked, weak_stealth, weak_alive_stealth]() {
             bool ok = SecurityBackend::set_strict_mode(checked);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_stealth]() {
+                engine->post([this, checked, ok, weak_stealth, weak_alive_stealth]() {
+                    auto alive = weak_alive_stealth.lock();
+                    if (!alive || !*alive) return;
                     if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                     if (ok) {
                         if (m_on_changed) m_on_changed();
@@ -330,14 +339,17 @@ void FirewallView::setup_network_profile() {
     ));
 
     std::weak_ptr<Switch> weak_block = m_switch_block_all;
-    m_switch_block_all->set_on_checked_changed_listener([this, weak_block](bool checked) {
+    std::weak_ptr<bool> weak_alive_block = m_alive;
+    m_switch_block_all->set_on_checked_changed_listener([this, weak_block, weak_alive_block](bool checked) {
         if (m_updating_ui) return;
         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-        std::thread([this, checked, weak_block]() {
+        std::thread([this, checked, weak_block, weak_alive_block]() {
             bool ok = SecurityBackend::set_network_mode(checked ? NetworkMode::Lockdown : NetworkMode::Home);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_block]() {
+                engine->post([this, checked, ok, weak_block, weak_alive_block]() {
+                    auto alive = weak_alive_block.lock();
+                    if (!alive || !*alive) return;
                     if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                     if (ok) {
                         if (m_on_changed) m_on_changed();
@@ -429,14 +441,17 @@ void FirewallView::setup_local_services() {
         ));
 
         std::weak_ptr<Switch> weak_sw = sw;
-        sw->set_on_checked_changed_listener([this, port, weak_sw](bool checked) {
+        std::weak_ptr<bool> weak_alive_sw = m_alive;
+        sw->set_on_checked_changed_listener([this, port, weak_sw, weak_alive_sw](bool checked) {
             if (m_updating_ui) return;
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-            std::thread([this, port, checked, weak_sw]() {
+            std::thread([this, port, checked, weak_sw, weak_alive_sw]() {
                 bool ok = SecurityBackend::toggle_service(port, checked);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, checked, ok, weak_sw]() {
+                    engine->post([this, checked, ok, weak_sw, weak_alive_sw]() {
+                        auto alive = weak_alive_sw.lock();
+                        if (!alive || !*alive) return;
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok) {
                             if (m_on_changed) m_on_changed();
@@ -633,10 +648,13 @@ void FirewallView::rebuild_rules_list() {
             ->padding(8, 4)
             ->onClick([this, current_rule]() {
                 if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
-                std::thread([this, current_rule]() {
+                std::weak_ptr<bool> weak_alive = m_alive;
+                std::thread([this, current_rule, weak_alive]() {
                     bool ok = SecurityBackend::delete_firewall_rule(current_rule);
                     if (auto engine = AppEngine::instance()) {
-                        engine->post([this, ok]() {
+                        engine->post([this, ok, weak_alive]() {
+                            auto alive = weak_alive.lock();
+                            if (!alive || !*alive) return;
                             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                             if (ok && m_on_changed) m_on_changed();
                         });
@@ -763,10 +781,13 @@ void FirewallView::show_add_rule_popup(const std::shared_ptr<View>& anchor) {
             if (m_add_popup) m_add_popup->dismiss();
             if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Visible);
 
-            std::thread([this, port, proto, action]() {
+            std::weak_ptr<bool> weak_alive = m_alive;
+            std::thread([this, port, proto, action, weak_alive]() {
                 bool ok = SecurityBackend::add_firewall_rule(port, proto, action);
                 if (auto engine = AppEngine::instance()) {
-                    engine->post([this, ok]() {
+                    engine->post([this, ok, weak_alive]() {
+                        auto alive = weak_alive.lock();
+                        if (!alive || !*alive) return;
                         if (m_progress_bar) m_progress_bar->set_visibility(Visibility::Invisible);
                         if (ok && m_on_changed) m_on_changed();
                     });

@@ -9,7 +9,9 @@ namespace miqusecure {
 class HardwareView : public miqu::ScrollView {
 public:
     HardwareView(const HardwareInfo& info, std::function<void()> on_changed);
-    ~HardwareView() override = default;
+    ~HardwareView() override {
+        if (m_alive) *m_alive = false;
+    }
 
     void update_info(const HardwareInfo& info);
 
@@ -38,6 +40,7 @@ private:
     std::shared_ptr<miqu::Switch> m_switch_mic;
     std::shared_ptr<miqu::TextView> m_cam_status_badge;
     std::shared_ptr<miqu::TextView> m_cam_proc_lbl;
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 
 } // namespace miqusecure

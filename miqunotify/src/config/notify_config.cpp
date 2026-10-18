@@ -41,13 +41,8 @@ void NotifyConfig::load(const std::string& custom_path) {
 
     std::string path_to_load = custom_path;
     if (path_to_load.empty()) {
-        std::string cfg_dir = miqu::FsUtils::get_user_config_dir("miqunotify");
-        if (!cfg_dir.empty()) {
-            std::string user_cfg = cfg_dir + "/miqunotify.conf";
-            if (fs::exists(user_cfg)) {
-                path_to_load = user_cfg;
-            }
-        }
+        std::string user_conf = miqu::FsUtils::get_user_config_file("miqunotify");
+        path_to_load = fs::exists(user_conf) ? user_conf : miqu::FsUtils::get_system_config_file("miqunotify");
     }
 
     if (path_to_load.empty() || !fs::exists(path_to_load)) {

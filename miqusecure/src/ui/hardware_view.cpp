@@ -93,11 +93,14 @@ void HardwareView::setup_airplane_hero() {
     ));
 
     std::weak_ptr<Switch> weak_air = m_switch_airplane;
-    m_switch_airplane->set_on_checked_changed_listener([this, weak_air](bool checked) {
-        std::thread([this, checked, weak_air]() {
+    std::weak_ptr<bool> weak_alive_air = m_alive;
+    m_switch_airplane->set_on_checked_changed_listener([this, weak_air, weak_alive_air](bool checked) {
+        std::thread([this, checked, weak_air, weak_alive_air]() {
             bool ok = SecurityBackend::set_airplane_mode(checked);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_air]() {
+                engine->post([this, checked, ok, weak_air, weak_alive_air]() {
+                    auto alive = weak_alive_air.lock();
+                    if (!alive || !*alive) return;
                     if (ok) {
                         if (m_on_changed) m_on_changed();
                     } else {
@@ -169,11 +172,14 @@ void HardwareView::setup_wireless_section() {
     ));
 
     std::weak_ptr<Switch> weak_wifi = m_switch_wifi;
-    m_switch_wifi->set_on_checked_changed_listener([this, weak_wifi](bool checked) {
-        std::thread([this, checked, weak_wifi]() {
+    std::weak_ptr<bool> weak_alive_wifi = m_alive;
+    m_switch_wifi->set_on_checked_changed_listener([this, weak_wifi, weak_alive_wifi](bool checked) {
+        std::thread([this, checked, weak_wifi, weak_alive_wifi]() {
             bool ok = SecurityBackend::set_wifi_enabled(checked);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_wifi]() {
+                engine->post([this, checked, ok, weak_wifi, weak_alive_wifi]() {
+                    auto alive = weak_alive_wifi.lock();
+                    if (!alive || !*alive) return;
                     if (ok) {
                         if (m_on_changed) m_on_changed();
                     } else {
@@ -226,11 +232,14 @@ void HardwareView::setup_wireless_section() {
     ));
 
     std::weak_ptr<Switch> weak_bt = m_switch_bt;
-    m_switch_bt->set_on_checked_changed_listener([this, weak_bt](bool checked) {
-        std::thread([this, checked, weak_bt]() {
+    std::weak_ptr<bool> weak_alive_bt = m_alive;
+    m_switch_bt->set_on_checked_changed_listener([this, weak_bt, weak_alive_bt](bool checked) {
+        std::thread([this, checked, weak_bt, weak_alive_bt]() {
             bool ok = SecurityBackend::set_bluetooth_enabled(checked);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_bt]() {
+                engine->post([this, checked, ok, weak_bt, weak_alive_bt]() {
+                    auto alive = weak_alive_bt.lock();
+                    if (!alive || !*alive) return;
                     if (ok) {
                         if (m_on_changed) m_on_changed();
                     } else {
@@ -304,11 +313,14 @@ void HardwareView::setup_sensors_section() {
     ));
 
     std::weak_ptr<Switch> weak_mic = m_switch_mic;
-    m_switch_mic->set_on_checked_changed_listener([this, weak_mic](bool checked) {
-        std::thread([this, checked, weak_mic]() {
+    std::weak_ptr<bool> weak_alive_mic = m_alive;
+    m_switch_mic->set_on_checked_changed_listener([this, weak_mic, weak_alive_mic](bool checked) {
+        std::thread([this, checked, weak_mic, weak_alive_mic]() {
             bool ok = SecurityBackend::set_mic_muted(checked);
             if (auto engine = AppEngine::instance()) {
-                engine->post([this, checked, ok, weak_mic]() {
+                engine->post([this, checked, ok, weak_mic, weak_alive_mic]() {
+                    auto alive = weak_alive_mic.lock();
+                    if (!alive || !*alive) return;
                     if (ok) {
                         if (m_on_changed) m_on_changed();
                     } else {

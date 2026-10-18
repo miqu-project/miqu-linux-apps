@@ -9,7 +9,9 @@ namespace miqusecure {
 class FirewallView : public miqu::ScrollView {
 public:
     FirewallView(const FirewallInfo& info, std::function<void()> on_rules_changed);
-    ~FirewallView() override = default;
+    ~FirewallView() override {
+        if (m_alive) *m_alive = false;
+    }
 
     void update_info(const FirewallInfo& info);
 
@@ -55,6 +57,8 @@ private:
 
     // Active popup window reference
     std::shared_ptr<miqu::PopupWindow> m_add_popup;
+
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 };
 
 } // namespace miqusecure
