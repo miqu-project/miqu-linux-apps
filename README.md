@@ -74,5 +74,22 @@ sudo ./make.sh
 
 ---
 
+## 🙏 Acknowledgements & Inspirations
+
+The Miqu application suite draws inspiration and capabilities from stellar open-source projects and desktop paradigms:
+
+* **[GNOME](https://www.gnome.org/)** — Inspiring the dynamic live workspace expose and overview architecture ([`miquoverview`](./miquoverview)).
+* **Windows** — Inspiring the familiar, ergonomic bottom taskbar ergonomics and accessibility ([`miqubar`](./miqubar)).
+* **[Rofi](https://github.com/davatorium/rofi)** — Inspiring the fast, keyboard-first fuzzy application launcher ([`miqulauncher`](./miqulauncher)).
+* **[UFW](https://launchpad.net/ufw)** — Serving as the battle-tested firewall and network rule engine for [`miqusecure`](./miqusecure).
+* **[MPD (Music Player Daemon)](https://www.musicpd.org/)** — Powering the high-performance audio engine behind [`miqumusic`](./miqumusic).
+* **[Hyprland](https://github.com/hyprwm/Hyprland) & [Sway](https://github.com/swaywm/sway)** — For shaping the expectations of fluid motion, desktop ergonomics, and clean configuration paradigms.
+
+### Special Thanks
+* **[Antigravity IDE](https://deepmind.google/technologies/) by Google** — For pair programming, architectural reasoning, and AI coding assistance across the application suite.
+
+---
+
 ## 📄 License
 Licensed under the GNU General Public License v3.0 (with `miqutoolkit` under Apache 2.0).
+
