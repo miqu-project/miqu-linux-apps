@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <iostream>
 #include <vector>
-#include <set>
 
 namespace miqulock {
 
@@ -50,7 +49,7 @@ void Config::sync_defaults_from_toolkit() {
         m_primary = t_cfg->colors.primary;
         m_on_primary = t_cfg->colors.on_primary;
         m_primary_container = t_cfg->colors.primary_container;
-        m_background = t_cfg->colors.surface.with_alpha(1.0f);
+        m_background = t_cfg->colors.background;
         m_surface = t_cfg->colors.surface;
         m_on_surface = t_cfg->colors.on_surface;
         m_outline = t_cfg->colors.outline;
@@ -61,9 +60,6 @@ void Config::sync_defaults_from_toolkit() {
     m_show_power_actions = true;
     m_time_format = "%H:%M";
     m_date_format = "%A, %B %d";
-    m_wallpaper_path = "";
-    m_blur_radius = 0;
-    m_dim_alpha = 0.0f;
 }
 
 std::string Config::resolve_path(const std::string& path) const {
@@ -75,31 +71,6 @@ std::string Config::resolve_path(const std::string& path) const {
         }
     }
     return path;
-}
-
-bool Config::parse_wallpaper_file(const std::string& path_val, std::string& out_path) const {
-    std::string res = resolve_path(path_val);
-    std::error_code ec;
-    if (!fs::exists(res, ec) || fs::is_directory(res, ec)) {
-        return false;
-    }
-    static const std::set<std::string> img_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"};
-    std::string ext = fs::path(res).extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-    if (!img_exts.count(ext)) {
-        std::ifstream pf(res);
-        std::string forwarded;
-        if (std::getline(pf, forwarded)) {
-            forwarded = trim(forwarded);
-            forwarded = resolve_path(forwarded);
-            std::error_code ec2;
-            if (!forwarded.empty() && fs::exists(forwarded, ec2) && !fs::is_directory(forwarded, ec2)) {
-                res = forwarded;
-            }
-        }
-    }
-    out_path = res;
-    return true;
 }
 
 void Config::load_file(const std::string& path, int depth) {
@@ -131,9 +102,8 @@ void Config::load_file(const std::string& path, int depth) {
             parse_hex_color(value, m_on_primary);
         } else if (key == "color_primary_container" || key == "primary_container") {
             parse_hex_color(value, m_primary_container);
-        } else if (key == "color_background") {
+        } else if (key == "color_background" || key == "background") {
             parse_hex_color(value, m_background);
-            m_background = m_background.with_alpha(1.0f);
         } else if (key == "color_surface" || key == "surface") {
             parse_hex_color(value, m_surface);
         } else if (key == "color_on_surface" || key == "on_surface" || key == "text_color") {
@@ -152,40 +122,12 @@ void Config::load_file(const std::string& path, int depth) {
             std::string v = value;
             std::transform(v.begin(), v.end(), v.begin(), ::tolower);
             m_show_power_actions = (v == "true" || v == "1" || v == "yes" || v == "on");
-        } else if (key == "wallpaper" || key == "background_image" || key == "image") {
-            if (!parse_wallpaper_file(value, m_wallpaper_path)) {
-                std::cerr << "[miqulock] Warning: 'wallpaper' file not found: " << value << "\n";
-            }
-        } else if (key == "background") {
-            // Disambiguation:
-            // 1. Valid hex color: toolkit palette background override & solid fallback (forced opaque)
-            // 2. Existing file or pointer: backward compatibility with legacy Section 1 'background = ...'
-            Color c;
-            if (parse_hex_color(value, c)) {
-                m_background = c.with_alpha(1.0f);
-            } else if (parse_wallpaper_file(value, m_wallpaper_path)) {
-                // Backward-compatible wallpaper path
-            } else {
-                std::cerr << "[miqulock] Warning: 'background' value is neither a valid hex color nor an existing file: " << value << "\n";
-            }
         } else if (key == "font" || key == "font_family") {
             m_font_family = value;
         } else if (key == "time_format") {
             m_time_format = value;
         } else if (key == "date_format") {
             m_date_format = value;
-        } else if (key == "blur" || key == "blur_radius") {
-            try {
-                m_blur_radius = std::max(0, std::stoi(value));
-            } catch (const std::exception& e) {
-                std::cerr << "[miqulock] Warning: invalid integer value for '" << key << "': " << value << "\n";
-            }
-        } else if (key == "dim" || key == "dim_alpha") {
-            try {
-                m_dim_alpha = std::clamp(std::stof(value), 0.0f, 1.0f);
-            } catch (const std::exception& e) {
-                std::cerr << "[miqulock] Warning: invalid float value for '" << key << "': " << value << "\n";
-            }
         }
     }
 }

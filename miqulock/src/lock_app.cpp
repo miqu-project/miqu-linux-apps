@@ -103,38 +103,6 @@ LockApp::InitResult LockApp::init(const std::string& custom_config_path) {
 }
 
 
-std::shared_ptr<miqu::View> LockApp::create_background_view(std::shared_ptr<ScreenLockInstance> instance) {
-    const auto& cfg = Config::get();
-    const auto& bg_path = cfg.get_wallpaper_path();
-    if (bg_path.empty()) {
-        return nullptr;
-    }
-
-    auto builder = miqu::ImageViewBuilder::create()
-        ->source(bg_path)
-        ->fitMode(miqu::FitMode::Cover)
-        ->qualityMode(miqu::ImageQuality::FullOriginal);
-
-    if (cfg.get_blur_radius() > 0) {
-        builder->blurRadius(cfg.get_blur_radius());
-    }
-    if (cfg.get_dim_alpha() > 0.001f) {
-        builder->dim(cfg.get_dim_alpha());
-    }
-
-    auto bg_view = builder->build();
-
-    bg_view->set_on_click_listener([instance]() {
-        if (instance && instance->password_input) {
-            instance->password_input->set_focused(true);
-            if (instance->window) instance->window->schedule_redraw();
-        }
-    });
-
-    return bg_view;
-}
-
-
 void LockApp::setup_clock_views(std::shared_ptr<ScreenLockInstance> instance) {
     const auto& cfg = Config::get();
     const auto& on_surface_color = cfg.get_on_surface_color();
@@ -217,6 +185,16 @@ std::shared_ptr<miqu::View> LockApp::create_auth_card(std::shared_ptr<ScreenLock
         ->padding(18, 14)
         ->onSubmit([this](const std::string& pwd) {
             verify_password(pwd);
+        })
+        ->onTextChanged([this, instance](const std::shared_ptr<miqu::EditText>&, const std::string& text) {
+            for (auto& s : m_screens) {
+                if (s && s != instance && s->password_input) {
+                    if (s->password_input->get_text() != text) {
+                        s->password_input->set_text(text);
+                        if (s->window) s->window->schedule_redraw();
+                    }
+                }
+            }
         })
         ->build();
     instance->password_input->set_focused(true);
@@ -322,26 +300,25 @@ std::shared_ptr<miqu::View> LockApp::create_auth_card(std::shared_ptr<ScreenLock
         ));
     }
 
-    return card_builder->build();
+    auto card = card_builder->build();
+    card->set_on_click_listener([instance]() {
+        if (instance && instance->password_input) {
+            instance->password_input->set_focused(true);
+            if (instance->window) instance->window->schedule_redraw();
+        }
+    });
+
+    return card;
 }
 
 std::shared_ptr<miqu::View> LockApp::create_lock_view(std::shared_ptr<ScreenLockInstance> instance) {
     const auto& cfg = Config::get();
 
     auto root_frame = miqu::FrameLayoutBuilder::create()
-        ->backgroundColor(cfg.get_background_color().with_alpha(1.0f))
+        ->backgroundColor(cfg.get_background_color())
         ->build();
 
-    // 1. Full-window Background ImageView
-    auto bg_view = create_background_view(instance);
-    if (bg_view) {
-        root_frame->add_view(bg_view, miqu::LayoutParams(
-            static_cast<int>(miqu::LayoutDimension::MatchParent),
-            static_cast<int>(miqu::LayoutDimension::MatchParent)
-        ));
-    }
-
-    // 2. Center Column (Clock + Date + Auth Card)
+    // Center Column (Clock + Date + Auth Card)
     setup_clock_views(instance);
     auto auth_card = create_auth_card(instance);
 
@@ -447,15 +424,23 @@ void LockApp::sync_lock_screens() {
             ->output(out.wl_output)
             ->contentView(view)
             ->keyboardInteractive(true)
+            ->onKeyboardEnter([this, instance]() {
+                if (instance && instance->password_input) {
+                    instance->password_input->set_focused(true);
+                    if (instance->window) instance->window->schedule_redraw();
+                }
+            })
             ->onKey([this, instance](const miqu::KeyPressEvent& event) {
                 if (event.pressed) {
                     bool caps = (event.modifiers & static_cast<uint32_t>(miqu::KeyboardModifier::Caps)) != 0;
                     update_caps_lock_state(caps);
 
                     if (event.keysym == XKB_KEY_Escape) {
-                        if (instance->password_input) {
-                            instance->password_input->clear();
-                            if (instance->window) instance->window->schedule_redraw();
+                        for (auto& s : m_screens) {
+                            if (s && s->password_input) {
+                                s->password_input->clear();
+                                if (s->window) s->window->schedule_redraw();
+                            }
                         }
                     } else if (instance->password_input && !instance->password_input->is_focused()) {
                         instance->password_input->set_focused(true);
@@ -466,7 +451,17 @@ void LockApp::sync_lock_screens() {
             ->build();
 
         if (instance->window) {
+            if (instance->password_input) {
+                instance->password_input->set_focused(true);
+            }
             m_screens.push_back(instance);
+        }
+    }
+
+    for (auto& s : m_screens) {
+        if (s && s->password_input) {
+            s->password_input->set_focused(true);
+            if (s->window) s->window->schedule_redraw();
         }
     }
 
@@ -503,6 +498,11 @@ void LockApp::update_time_strings() {
         if (!s) continue;
         if (s->time_view) s->time_view->set_text(time_buf);
         if (s->date_view) s->date_view->set_text(date_buf);
+        if (s->password_input && !s->password_input->is_focused()) {
+            if (s->window && !s->window->has_popup()) {
+                s->password_input->set_focused(true);
+            }
+        }
         if (s->window) s->window->schedule_redraw();
     }
 }
