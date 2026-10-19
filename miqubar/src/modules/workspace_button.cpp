@@ -16,7 +16,7 @@ WorkspaceButtonView::WorkspaceButtonView() {
     set_icon("");
 
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
     set_layout_params(miqu::LayoutParams(item_h, item_h));
 
     sync_workspaces();
@@ -273,11 +273,11 @@ void WorkspaceButtonView::show_flyout() {
     int target_x = bounds.x + (bounds.width - flyout_w) / 2;
     if (target_x < 8) target_x = 8;
     if (target_x + flyout_w > win_w - 8) target_x = win_w - flyout_w - 8;
-    margin.left = target_x;
+    margin.left = target_x + cfg.margin_left;
     if (is_top) {
-        margin.top = cfg.height + 8;
+        margin.top = cfg.height + 8 + cfg.margin_top;
     } else {
-        margin.bottom = cfg.height + 8;
+        margin.bottom = cfg.height + 8 + cfg.margin_bottom;
     }
 
     m_flyout_window = miqu::WindowBuilder::create()

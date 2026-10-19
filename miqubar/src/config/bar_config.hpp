@@ -15,10 +15,23 @@ public:
     // General
     std::string position = "bottom";
     int height = 48;
-    int exclusive_zone = 48;
+    bool reserve_space = true;
     int bar_corner_radius = 8;
     bool custom_bar_corner_radius = false;
     bool miqubar_outline = false;
+    int margin_top = 0;
+    int margin_bottom = 0;
+    int margin_left = 0;
+    int margin_right = 0;
+    int padding_top = 4;
+    int padding_bottom = 4;
+    int padding_left = 6;
+    int padding_right = 6;
+
+    int get_item_height() const {
+        int inner_h = height - padding_top - padding_bottom;
+        return std::max(12, inner_h);
+    }
 
     // Start & Taskbar
     bool show_start = true;

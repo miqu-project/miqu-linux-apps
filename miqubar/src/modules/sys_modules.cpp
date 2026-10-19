@@ -27,7 +27,7 @@ static int get_toolkit_font_size() {
 // ==========================================
 CpuModuleView::CpuModuleView() {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -66,7 +66,7 @@ void CpuModuleView::update_metrics() {
 // ==========================================
 MemoryModuleView::MemoryModuleView() {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -106,7 +106,7 @@ void MemoryModuleView::update_metrics() {
 // ==========================================
 BatteryModuleView::BatteryModuleView() {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -180,7 +180,7 @@ void BatteryModuleView::update_metrics() {
 NetworkModuleView::NetworkModuleView(std::function<void()> on_open_network)
     : m_on_open_network(std::move(on_open_network)) {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -251,7 +251,7 @@ void NetworkModuleView::update_metrics() {
 BluetoothModuleView::BluetoothModuleView(std::function<void()> on_open_bluetooth)
     : m_on_open_bluetooth(std::move(on_open_bluetooth)) {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -322,7 +322,7 @@ void BluetoothModuleView::update_metrics() {
 VolumeModuleView::VolumeModuleView(std::function<void()> on_open_sound)
     : m_on_open_sound(std::move(on_open_sound)) {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -391,7 +391,7 @@ bool VolumeModuleView::on_scroll(double delta) {
 BrightnessModuleView::BrightnessModuleView(std::function<void()> on_open_brightness)
     : m_on_open_brightness(std::move(on_open_brightness)) {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -495,7 +495,7 @@ bool BrightnessModuleView::on_scroll(double delta) {
 // ==========================================
 DarkModeModuleView::DarkModeModuleView() {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -549,7 +549,7 @@ void DarkModeModuleView::toggle_mode() {
 ClockModuleView::ClockModuleView(std::function<void()> on_open_calendar)
     : m_on_open_calendar(std::move(on_open_calendar)) {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_padding(8, 2);
@@ -586,7 +586,7 @@ void ClockModuleView::update_time() {
 // ==========================================
 NotificationModuleView::NotificationModuleView() {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_text_size(get_toolkit_font_size());
@@ -655,7 +655,7 @@ bool NotificationModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton b
 // ==========================================
 PeekButtonView::PeekButtonView() {
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
 
     set_flat(true);
     set_padding(2, 0);

@@ -12,7 +12,7 @@ StartButtonView::StartButtonView() {
     const auto& cfg = BarConfig::get();
     auto config = miqu::Config::get();
 
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
     set_circle(false);
     set_corner_radius(config->metrics.corner_radius);
     // Make start button icon prominent and bold (24px or item_h - 16)

@@ -15,13 +15,13 @@ BarRootView::BarRootView() {
 
     set_style(cfg.miqubar_outline ? miqu::CardStyle::Outlined : miqu::CardStyle::Filled);
     set_radius(cfg.bar_corner_radius);
-    set_elevation(0);
+    set_elevation(0); // Surface elevation and shadows are handled natively by miquland compositor layer rules
+    set_padding(cfg.padding_left, cfg.padding_top, cfg.padding_right, cfg.padding_bottom);
 
     // 1. Left container (pinned left)
     m_left_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
     m_left_box->set_gravity(miqu::Gravity::CenterVertical);
     m_left_box->set_divider_spacing(6);
-    m_left_box->set_margin(6, 0, 0, 0);
     m_left_box->set_layout_params(miqu::LayoutParams(
         static_cast<int>(miqu::LayoutDimension::WrapContent),
         static_cast<int>(miqu::LayoutDimension::MatchParent),
@@ -64,7 +64,6 @@ BarRootView::BarRootView() {
     m_right_box = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Horizontal);
     m_right_box->set_gravity(miqu::Gravity::CenterVertical);
     m_right_box->set_divider_spacing(2);
-    m_right_box->set_margin(0, 0, 4, 0);
     m_right_box->set_layout_params(miqu::LayoutParams(
         static_cast<int>(miqu::LayoutDimension::WrapContent),
         static_cast<int>(miqu::LayoutDimension::MatchParent),
@@ -141,6 +140,8 @@ void BarRootView::sync_theme() {
     const auto& cfg = BarConfig::get();
     set_style(cfg.miqubar_outline ? miqu::CardStyle::Outlined : miqu::CardStyle::Filled);
     set_radius(cfg.bar_corner_radius);
+    set_elevation(0);
+    set_padding(cfg.padding_left, cfg.padding_top, cfg.padding_right, cfg.padding_bottom);
     if (m_start_btn) m_start_btn->sync_style();
     if (m_search_btn) m_search_btn->sync_style();
     if (m_dark_mode) m_dark_mode->sync_theme_state();
@@ -191,9 +192,9 @@ void BarRootView::toggle_network() {
     bool is_top = (cfg.position == "top");
     uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
-    margin.right = 60;
-    if (is_top) margin.top = cfg.height + 8;
-    else margin.bottom = cfg.height + 8;
+    margin.right = 60 + cfg.margin_right;
+    if (is_top) margin.top = cfg.height + 8 + cfg.margin_top;
+    else margin.bottom = cfg.height + 8 + cfg.margin_bottom;
 
     m_network_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
@@ -241,9 +242,9 @@ void BarRootView::toggle_bluetooth() {
     bool is_top = (cfg.position == "top");
     uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
-    margin.right = 40;
-    if (is_top) margin.top = cfg.height + 8;
-    else margin.bottom = cfg.height + 8;
+    margin.right = 40 + cfg.margin_right;
+    if (is_top) margin.top = cfg.height + 8 + cfg.margin_top;
+    else margin.bottom = cfg.height + 8 + cfg.margin_bottom;
 
     m_bluetooth_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
@@ -291,9 +292,9 @@ void BarRootView::toggle_sound() {
     bool is_top = (cfg.position == "top");
     uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
-    margin.right = 24;
-    if (is_top) margin.top = cfg.height + 8;
-    else margin.bottom = cfg.height + 8;
+    margin.right = 24 + cfg.margin_right;
+    if (is_top) margin.top = cfg.height + 8 + cfg.margin_top;
+    else margin.bottom = cfg.height + 8 + cfg.margin_bottom;
 
     m_sound_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
@@ -341,9 +342,9 @@ void BarRootView::toggle_brightness() {
     bool is_top = (cfg.position == "top");
     uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
-    margin.right = 24;
-    if (is_top) margin.top = cfg.height + 8;
-    else margin.bottom = cfg.height + 8;
+    margin.right = 24 + cfg.margin_right;
+    if (is_top) margin.top = cfg.height + 8 + cfg.margin_top;
+    else margin.bottom = cfg.height + 8 + cfg.margin_bottom;
 
     m_brightness_win = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerOverlay)
@@ -395,11 +396,11 @@ void BarRootView::toggle_calendar() {
     bool is_top = (cfg.position == "top");
     uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
-    margin.right = 12;
+    margin.right = 12 + cfg.margin_right;
     if (is_top) {
-        margin.top = cfg.height + 8;
+        margin.top = cfg.height + 8 + cfg.margin_top;
     } else {
-        margin.bottom = cfg.height + 8;
+        margin.bottom = cfg.height + 8 + cfg.margin_bottom;
     }
 
     m_calendar_win = miqu::WindowBuilder::create()
@@ -461,14 +462,27 @@ bool BarWindow::init() {
         anchors = 1 | 4 | 8; // Top | Left | Right
     }
 
+    miqu::Margin margin;
+    margin.top = cfg.margin_top;
+    margin.bottom = cfg.margin_bottom;
+    margin.left = cfg.margin_left;
+    margin.right = cfg.margin_right;
+
+    int effective_exclusive_zone = 0;
+    if (cfg.reserve_space) {
+        int v_margin = (cfg.position == "top") ? cfg.margin_top : cfg.margin_bottom;
+        effective_exclusive_zone = cfg.height + v_margin;
+    }
+
     m_window = miqu::WindowBuilder::create()
         ->role(cfg.position == "top" ? miqu::WindowRole::LayerTop : miqu::WindowRole::LayerBottom)
         ->title("miqubar")
         ->appId("miqubar")
         ->layerNamespace("miqubar")
         ->anchors(anchors)
-        ->exclusiveZone(cfg.exclusive_zone)
+        ->exclusiveZone(effective_exclusive_zone)
         ->preferredSize(0, cfg.height)
+        ->contentMargin(margin)
         ->transparent(true)
         ->keyboardInteractive(false)
         ->closeOnClickOutside(false)

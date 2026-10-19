@@ -511,7 +511,7 @@ void TaskbarView::sync_windows() {
     }
 
     const auto& cfg = BarConfig::get();
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
     int item_w = cfg.icon_only ? item_h : cfg.item_max_width;
 
     // Window grouping
@@ -727,12 +727,12 @@ void TaskbarView::show_group_popup(TaskbarItemButton* anchor) {
     int target_x = anchor_bounds.x + (anchor_bounds.width - popup_w) / 2;
     if (target_x < 8) target_x = 8;
     if (target_x + popup_w > win_w - 8) target_x = win_w - popup_w - 8;
-    margin.left = target_x;
+    margin.left = target_x + cfg.margin_left;
 
     if (is_top) {
-        margin.top = cfg.height + 6;
+        margin.top = cfg.height + 6 + cfg.margin_top;
     } else {
-        margin.bottom = cfg.height + 6;
+        margin.bottom = cfg.height + 6 + cfg.margin_bottom;
     }
 
     m_preview_window = miqu::WindowBuilder::create()
@@ -857,12 +857,12 @@ void TaskbarView::show_context_menu(const std::vector<miqu::WindowInfo>& win_gro
     if (left_pos + menu_w > win_w - 8) {
         left_pos = std::max(8, win_w - menu_w - 8);
     }
-    margin.left = std::max(8, left_pos);
+    margin.left = std::max(8, left_pos) + cfg.margin_left;
 
     if (is_top) {
-        margin.top = cfg.height + 4;
+        margin.top = cfg.height + 4 + cfg.margin_top;
     } else {
-        margin.bottom = cfg.height + 4;
+        margin.bottom = cfg.height + 4 + cfg.margin_bottom;
     }
 
     m_menu_window = miqu::WindowBuilder::create()

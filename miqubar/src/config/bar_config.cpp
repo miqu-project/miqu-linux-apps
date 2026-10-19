@@ -51,6 +51,15 @@ static bool parse_bool(const std::string& val) {
 void BarConfig::load(const std::string& custom_path) {
     custom_bar_corner_radius = false;
     miqubar_outline = false;
+    reserve_space = true;
+    margin_top = 0;
+    margin_bottom = 0;
+    margin_left = 0;
+    margin_right = 0;
+    padding_top = 4;
+    padding_bottom = 4;
+    padding_left = 6;
+    padding_right = 6;
     std::string path_to_load = custom_path;
     if (path_to_load.empty()) {
         std::string user_conf = miqu::FsUtils::get_user_config_file("miqubar");
@@ -84,7 +93,10 @@ void BarConfig::load(const std::string& custom_path) {
 
         if (key == "position") position = val;
         else if (key == "height") height = std::max(24, std::stoi(val));
-        else if (key == "exclusive_zone") exclusive_zone = std::stoi(val);
+        else if (key == "reserve_space") reserve_space = parse_bool(val);
+        else if (key == "exclusive_zone") {
+            if (val == "0" || val == "-1" || val == "false") reserve_space = false;
+        }
         else if (key == "bar_corner_radius") {
             if (!val.empty()) {
                 try {
@@ -96,6 +108,34 @@ void BarConfig::load(const std::string& custom_path) {
             }
         }
         else if (key == "miqubar_outline") miqubar_outline = parse_bool(val);
+        else if (key == "margin_top") margin_top = std::max(0, std::stoi(val));
+        else if (key == "margin_bottom") margin_bottom = std::max(0, std::stoi(val));
+        else if (key == "margin_left") margin_left = std::max(0, std::stoi(val));
+        else if (key == "margin_right") margin_right = std::max(0, std::stoi(val));
+        else if (key == "margin_horizontal") {
+            int mh = std::max(0, std::stoi(val));
+            margin_left = mh;
+            margin_right = mh;
+        }
+        else if (key == "margin_vertical") {
+            int mv = std::max(0, std::stoi(val));
+            margin_top = mv;
+            margin_bottom = mv;
+        }
+        else if (key == "padding_top") padding_top = std::max(0, std::stoi(val));
+        else if (key == "padding_bottom") padding_bottom = std::max(0, std::stoi(val));
+        else if (key == "padding_left") padding_left = std::max(0, std::stoi(val));
+        else if (key == "padding_right") padding_right = std::max(0, std::stoi(val));
+        else if (key == "padding_horizontal") {
+            int ph = std::max(0, std::stoi(val));
+            padding_left = ph;
+            padding_right = ph;
+        }
+        else if (key == "padding_vertical") {
+            int pv = std::max(0, std::stoi(val));
+            padding_top = pv;
+            padding_bottom = pv;
+        }
         else if (key == "show_start") show_start = parse_bool(val);
         else if (key == "start_icon") start_icon = val;
         else if (key == "launcher_cmd") launcher_cmd = val;

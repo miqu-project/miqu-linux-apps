@@ -25,7 +25,7 @@ void SearchButtonView::sync_style() {
     set_text_size(fs);
     set_radius(config->metrics.corner_radius);
 
-    int item_h = std::max(28, cfg.height - 8);
+    int item_h = cfg.get_item_height();
     if (cfg.search_style == "icon") {
         set_text("");
         set_flat(true);
