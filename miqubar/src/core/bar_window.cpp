@@ -475,7 +475,7 @@ bool BarWindow::init() {
     }
 
     m_window = miqu::WindowBuilder::create()
-        ->role(cfg.position == "top" ? miqu::WindowRole::LayerTop : miqu::WindowRole::LayerBottom)
+        ->role(miqu::WindowRole::LayerTop)
         ->title("miqubar")
         ->appId("miqubar")
         ->layerNamespace("miqubar")
