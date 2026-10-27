@@ -55,8 +55,7 @@ void NotificationCenterWindow::open() {
 
 void NotificationCenterWindow::close() {
     if (m_window) {
-        m_window->close();
-        m_window.reset();
+        auto win = std::move(m_window);
         m_root_card.reset();
         m_history_list.reset();
         m_scroll_view.reset();
@@ -64,6 +63,7 @@ void NotificationCenterWindow::close() {
         m_dnd_btn.reset();
         m_dnd_label.reset();
         m_clear_btn.reset();
+        win->close();
     }
 }
 
@@ -493,7 +493,7 @@ void NotificationCenterWindow::create_window() {
         ->preferredSize(cfg.center_width, 0)
         ->contentView(m_root_card)
         ->onClose([this]() {
-            m_window.reset();
+            close();
         })
         ->build();
 
