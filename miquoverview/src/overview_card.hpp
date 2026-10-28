@@ -2,6 +2,7 @@
 
 #include "cairo_buffer.hpp"
 #include "core/common/wlroots.hpp"
+#include "overview_config.hpp"
 #include <vector>
 #include <string>
 
@@ -20,9 +21,14 @@ inline void make_premul_color(float out[4], float r, float g, float b, float a) 
 
 struct WindowThumbnail {
     miquland::View* view = nullptr;
+    size_t ws_id = 0;
     struct wlr_box box = {0, 0, 0, 0};
     struct wlr_scene_rect* outline[4] = {nullptr, nullptr, nullptr, nullptr};
+    bool is_hovered = false;
+    bool is_selected = false;
 
+    void create_outline(struct wlr_scene_tree* parent, const OverviewTheme& theme);
+    void update_outline(const OverviewTheme& theme);
     void destroy_outline();
 };
 
@@ -33,22 +39,30 @@ struct WorkspaceCard {
     bool is_active = false;
     bool is_hovered = false;
 
-    // Visual nodes in overlay scene tree
+    // Visual nodes
+    struct wlr_scene_shadow* shadow = nullptr;
     struct wlr_scene_rect* bg_rect = nullptr;
-    struct wlr_scene_rect* border_top = nullptr;
-    struct wlr_scene_rect* border_bottom = nullptr;
-    struct wlr_scene_rect* border_left = nullptr;
-    struct wlr_scene_rect* border_right = nullptr;
+    struct wlr_scene_rect* borders[4] = {nullptr, nullptr, nullptr, nullptr};
 
     OverviewCairoBuffer* header_buf = nullptr;
     struct wlr_scene_buffer* header_scene_buf = nullptr;
 
     std::vector<WindowThumbnail> window_thumbnails;
 
-    void update_border();
-    void render_header(const std::string& label, bool active);
-    void remove_thumbnail_for_view(miquland::View* view);
+    void create_decorations(struct wlr_scene_tree* bg_tree, struct wlr_scene_tree* overlay_tree,
+                            const OverviewTheme& theme, size_t orig_active_ws);
+    void update_border(const OverviewTheme& theme);
+    void render_header(struct wlr_scene_tree* overlay_tree, const OverviewTheme& theme,
+                       size_t win_count, bool is_orig_active);
+    void set_alpha(float alpha);
     void destroy_nodes();
+};
+
+struct SavedViewInfo {
+    miquland::View* view = nullptr;
+    int orig_x = 0;
+    int orig_y = 0;
+    size_t ws_id = 0;
 };
 
 } // namespace miquoverview

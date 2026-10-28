@@ -3,18 +3,33 @@
 `miquoverview` is a GPU-accelerated live workspace expose and overview plugin for `miquland`.
 
 ## Features
-- **GPU-Accelerated Live Window Buffers**: Uses wlroots / SceneFX scene graph scaling (`wlr_scene_buffer_set_dest_size`) to scale live running surfaces without client-side resize events. Videos keep playing and terminals keep scrolling live in the overview!
-- **Interactive Workspace Cards**: Visually displays all active and adjacent workspaces in an adaptive grid (2x2, 3x2, etc.) with workspace status, window counts, and active highlighting.
-- **Direct Window & Workspace Activation**: Click any window to switch to its workspace and focus it instantly. Click any workspace card to switch to that workspace.
-- **Keyboard Navigation**: Press `1`-`9` to switch workspaces, arrow keys to navigate, `Enter` to select, or `Escape` to close.
-- **Hyprland-Style C++ Plugin Architecture**: Implemented as a dynamic C++ shared library (`libmiquoverview.so`) loaded via `miquland`'s plugin system.
+- **Full-Screen Responsive Overview**: Fills the usable screen space while respecting exclusive reservations set by desktop components such as `miqubar`.
+- **Configurable Edge Margins**: Preserves a comfortable, polished perimeter border around the workspace display (configurable in `miquoverview.conf`).
+- **Screen-Aspect Workspace Geometry**: Accurately scales the entire workspace into a prominent central rectangle matching the exact monitor aspect ratio.
+- **Live Hardware-Accelerated Rendering**: Windows inside the active workspace are placed and scaled live with zero frame-dropping using wlroots hardware scene nodes (`v->set_overview_scaled`).
+- **Workspace Navigation & Pager**: Interactive top workspace pill bar showing open workspaces, window counts, and active selection.
+- **Direct Window & Workspace Activation**: Click any window to switch to that workspace and focus it immediately; click empty space to activate that workspace; click outside the workspace to dismiss.
+- **Complete Keyboard Navigation**: Use `←`/`→` (or `h`/`l`) to switch between workspaces, `↑`/`↓` (or `k`/`j` / `Tab`) to cycle windows, `1`-`9` for instant workspace jumps, `Enter` to activate, and `Escape` to close.
+- **Mouse Wheel Scrolling**: Switch across workspaces with natural vertical or horizontal scroll wheel gestures.
+- **Uniform Two-Tier Configuration**: Supports standalone user configurations and live dynamic reload with `miqutheme`.
 
-## Configuration
+## Configuration & Theming
+`miquoverview` follows the uniform Miqu ecosystem Two-Tier Architecture:
+- **Tier 1 (System Baseline)**: `/usr/share/miquoverview/miquoverview.conf`
+- **Tier 2 (User Standalone)**: `~/.config/miquoverview/miquoverview.conf`
+
+It includes a self-contained baseline fallback theme and optionally supports decoupled dynamic theming via:
+```ini
+source = ~/.config/miqutheme/current/miqutoolkit.conf
+```
+Config changes and theme updates are watched via `inotify` and hot-reloaded automatically with 0% idle CPU.
+
 In `~/.config/miquland/miquland.conf`:
-
 ```ini
 # Load plugin
-plugin = /usr/lib/miquland/plugins/libmiquoverview.so
+plugins {
+    load = /usr/lib/miquland/plugins/libmiquoverview.so
+}
 
 # Keybindings
 bind = SUPER, Tab, overview_toggle

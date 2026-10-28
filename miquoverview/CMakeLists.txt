@@ -20,11 +20,17 @@ pkg_check_modules(MIQULAND miquland)
 set(SOURCES
     src/cairo_buffer.cpp
     src/overview_card.cpp
+    src/overview_config.cpp
     src/overview_state.cpp
     src/overview_plugin.cpp
 )
 
+# Plugin shared library
 add_library(miquoverview SHARED ${SOURCES})
+set_target_properties(miquoverview PROPERTIES
+    OUTPUT_NAME "miquoverview"
+    PREFIX "lib"
+)
 
 target_include_directories(miquoverview PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -52,5 +58,26 @@ target_compile_options(miquoverview PRIVATE
     -Wno-unused-parameter
 )
 
+# CLI companion binary for --init-config and IPC commands
+add_executable(miquoverview_bin
+    src/main.cpp
+    src/overview_config.cpp
+)
+set_target_properties(miquoverview_bin PROPERTIES
+    OUTPUT_NAME "miquoverview"
+)
+target_include_directories(miquoverview_bin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../miquland/include
+)
+target_link_libraries(miquoverview_bin PRIVATE
+    PkgConfig::WAYLAND_SERVER
+)
+target_compile_options(miquoverview_bin PRIVATE
+    -Wall -Wextra
+)
+
 include(GNUInstallDirs)
 install(TARGETS miquoverview LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/miquland/plugins)
+install(TARGETS miquoverview_bin RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES assets/miquoverview.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/miquoverview)

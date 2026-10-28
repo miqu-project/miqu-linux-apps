@@ -1,20 +1,31 @@
 #include "overview_state.hpp"
+#include "cairo_buffer.hpp"
+#include "overview_config.hpp"
+#include "miquland/plugin.hpp"
 #include "core/server.hpp"
 #include "core/workspace.hpp"
-#include "core/view.hpp"
 #include "core/output.hpp"
-
-#include <xkbcommon/xkbcommon-keysyms.h>
-#include <linux/input-event-codes.h>
-#include <pango/pangocairo.h>
+#include "core/view.hpp"
+#include "core/animation/easing.hpp"
 
 #include <cmath>
 #include <algorithm>
+#include <iostream>
+#include <linux/input-event-codes.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
+#include <pango/pangocairo.h>
 
 namespace miquoverview {
 
 void OverviewState::init(miquland::PluginAPI* api) {
     m_api = api;
+    OverviewConfig::get().load();
+    if (m_api && m_api->get_server()) {
+        OverviewConfig::get().setup_watcher(m_api->get_server()->get_event_loop());
+    }
+    OverviewConfig::get().set_reload_callback([this]() {
+        refresh_appearance();
+    });
 }
 
 void OverviewState::toggle() {
@@ -25,23 +36,64 @@ void OverviewState::toggle() {
     }
 }
 
-void OverviewState::handle_view_destroyed(miquland::View* view) {
-    if (!m_is_open || !view) return;
+void OverviewState::render_top_banner() {
+    if (!m_overlay_tree) return;
 
-    // 1. Purge from saved views so close() never accesses deallocated memory
-    for (auto it = m_saved_views.begin(); it != m_saved_views.end(); ) {
-        if (it->view == view) {
-            it = m_saved_views.erase(it);
-        } else {
-            ++it;
+    const auto& theme = OverviewConfig::get().theme();
+    int bw = 460;
+    int bh = 32;
+    int bx = m_screen.x + (m_screen.width - bw) / 2;
+    int by = m_screen.y + std::max(8, OverviewConfig::get().edge_margin() / 3);
+
+    if (!m_top_banner_buf || m_top_banner_buf->get_width() != bw || m_top_banner_buf->get_height() != bh) {
+        if (m_top_banner_scene_buf) {
+            wlr_scene_node_destroy(&m_top_banner_scene_buf->node);
+            m_top_banner_scene_buf = nullptr;
         }
+        if (m_top_banner_buf) {
+            m_top_banner_buf->drop();
+            m_top_banner_buf = nullptr;
+        }
+        m_top_banner_buf = OverviewCairoBuffer::create(bw, bh);
     }
+    if (!m_top_banner_buf) return;
 
-    // 2. Remove from card thumbnails and refresh window count header
-    for (auto& card : m_cards) {
-        card.remove_thumbnail_for_view(view);
-        render_card_header(card);
+    m_top_banner_buf->clear();
+    cairo_t* cr = m_top_banner_buf->get_cr();
+
+    // Capsule pill container
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, bw - bh / 2.0, bh / 2.0, bh / 2.0 - 1.0, -M_PI / 2, M_PI / 2);
+    cairo_arc(cr, bh / 2.0, bh / 2.0, bh / 2.0 - 1.0, M_PI / 2, 3 * M_PI / 2);
+    cairo_close_path(cr);
+
+    cairo_set_source_rgba(cr, theme.surface.r, theme.surface.g, theme.surface.b, 0.92);
+    cairo_fill_preserve(cr);
+    cairo_set_source_rgba(cr, theme.outline.r, theme.outline.g, theme.outline.b, 0.80);
+    cairo_set_line_width(cr, 1.0);
+    cairo_stroke(cr);
+
+    // Text
+    PangoLayout* layout = pango_cairo_create_layout(cr);
+    pango_layout_set_text(layout, "Miqu Overview   •   Click window or press 1-9 / Esc", -1);
+    PangoFontDescription* desc = pango_font_description_from_string(OverviewConfig::get().font().c_str());
+    pango_layout_set_font_description(layout, desc);
+    pango_font_description_free(desc);
+
+    int tw = 0, th = 0;
+    pango_layout_get_pixel_size(layout, &tw, &th);
+
+    cairo_set_source_rgba(cr, theme.on_surface.r, theme.on_surface.g, theme.on_surface.b, 0.95);
+    cairo_move_to(cr, (bw - tw) / 2.0, (bh - th) / 2.0);
+    pango_cairo_show_layout(cr, layout);
+    g_object_unref(layout);
+
+    if (!m_top_banner_scene_buf) {
+        m_top_banner_scene_buf = wlr_scene_buffer_create(m_overlay_tree, m_top_banner_buf->get_wlr_buffer());
+    } else {
+        wlr_scene_buffer_set_buffer(m_top_banner_scene_buf, m_top_banner_buf->get_wlr_buffer());
     }
+    wlr_scene_node_set_position(&m_top_banner_scene_buf->node, bx, by);
 }
 
 void OverviewState::open() {
@@ -54,43 +106,61 @@ void OverviewState::open() {
     m_orig_active_ws = wm->get_active_workspace_id();
     m_selected_ws = m_orig_active_ws;
 
-    struct wlr_box screen = om->get_primary_usable_geometry();
-    if (screen.width <= 0 || screen.height <= 0) {
-        screen = om->get_primary_geometry();
+    // 1. Usable screen area (respects exclusive reservations by miqubar, etc.)
+    m_screen = om->get_primary_usable_geometry();
+    if (m_screen.width <= 0 || m_screen.height <= 0) {
+        m_screen = om->get_primary_geometry();
     }
-    if (screen.width <= 0 || screen.height <= 0) {
-        screen.width = 1920;
-        screen.height = 1080;
-        screen.x = 0;
-        screen.y = 0;
+    if (m_screen.width <= 0 || m_screen.height <= 0) {
+        m_screen = {0, 0, 1920, 1080};
     }
 
-    double screen_aspect = static_cast<double>(screen.width) / static_cast<double>(screen.height);
-
-    // Number of workspaces to show
-    size_t max_ws = 4;
+    // 2. Collect ONLY active workspaces (no empty non-existent placeholders)
+    std::vector<size_t> active_workspaces;
     for (const auto& [id, ws] : wm->get_workspaces_map()) {
         if (!ws->is_empty() || id == m_orig_active_ws) {
-            max_ws = std::max(max_ws, id);
+            active_workspaces.push_back(id);
         }
     }
-    if (max_ws <= 4) max_ws = 4;
-    else if (max_ws <= 6) max_ws = 6;
-    else if (max_ws <= 8) max_ws = 8;
-    else max_ws = 9;
+    if (active_workspaces.empty()) {
+        active_workspaces.push_back(m_orig_active_ws);
+    }
+    std::sort(active_workspaces.begin(), active_workspaces.end());
+    size_t count = active_workspaces.size();
 
-    int cols = (max_ws <= 4) ? 2 : (max_ws <= 6 ? 3 : 4);
-    int rows = (max_ws + cols - 1) / cols;
+    // 3. Grid configuration
+    int cols = 1;
+    if (count <= 1) {
+        cols = 1;
+    } else if (count <= 4) {
+        cols = 2;
+    } else if (count <= 6) {
+        cols = 3;
+    } else {
+        cols = 4;
+    }
+    int rows = static_cast<int>((count + cols - 1) / cols);
+    m_cols = cols;
 
-    int pad_x = 40;
-    int pad_y = 64;
-    int gap_x = 24;
-    int gap_y = 36;
+    double screen_aspect = static_cast<double>(m_screen.width) / static_cast<double>(m_screen.height);
+    int margin = OverviewConfig::get().edge_margin();
 
-    int avail_w = screen.width - 2 * pad_x - (cols - 1) * gap_x;
-    int avail_h = screen.height - 2 * pad_y - (rows - 1) * gap_y;
-    int cell_w = std::max(100, avail_w / cols);
-    int cell_h = std::max(80, avail_h / rows);
+    int banner_h = 32;
+    int banner_gap = 16;
+    int header_h = 24;
+    int header_gap = 6;
+    int top_reserved = banner_h + banner_gap;
+
+    int gap_x = (cols > 2) ? 20 : 28;
+    int gap_y = (rows > 2) ? 24 : 36;
+
+    int avail_w = m_screen.width - 2 * margin;
+    int avail_h = m_screen.height - 2 * margin - top_reserved;
+    if (avail_w < 200) avail_w = 200;
+    if (avail_h < 150) avail_h = 150;
+
+    int cell_w = std::max(100, (avail_w - (cols - 1) * gap_x) / cols);
+    int cell_h = std::max(80, (avail_h - (rows - 1) * (gap_y + header_h + header_gap)) / rows);
 
     int card_w = cell_w;
     int card_h = static_cast<int>(std::round(card_w / screen_aspect));
@@ -99,131 +169,222 @@ void OverviewState::open() {
         card_w = static_cast<int>(std::round(card_h * screen_aspect));
     }
 
-    double scale = static_cast<double>(card_w) / static_cast<double>(screen.width);
+    double scale = static_cast<double>(card_w) / static_cast<double>(m_screen.width);
 
-    // Scene trees
+    int total_grid_h = rows * card_h + (rows - 1) * (gap_y + header_h + header_gap);
+    int grid_start_y = m_screen.y + margin + top_reserved + (avail_h - total_grid_h) / 2;
+
+    const auto& theme = OverviewConfig::get().theme();
+
+    // Disable compositor-wide popups during overview so dropdowns/tooltips don't float unscaled
+    if (m_api->get_server() && m_api->get_server()->get_popup_tree()) {
+        wlr_scene_node_set_enabled(&m_api->get_server()->get_popup_tree()->node, false);
+    }
+
+    // 4. Scene trees
     m_bg_tree = wlr_scene_tree_create(m_api->get_workspaces_tree());
     wlr_scene_node_lower_to_bottom(&m_bg_tree->node);
     m_overlay_tree = wlr_scene_tree_create(m_api->get_layer_overlay_tree());
 
-    // Dimmed background
-    float dim_color[4];
-    make_premul_color(dim_color, 0.05f, 0.06f, 0.08f, 0.85f);
-    m_backdrop_rect = wlr_scene_rect_create(m_bg_tree, screen.width, screen.height, dim_color);
-    wlr_scene_node_set_position(&m_backdrop_rect->node, screen.x, screen.y);
+    // 5. GPU frosted glass backdrop blur & dimmed backdrop
+    if (OverviewConfig::get().blur()) {
+        struct wlr_scene* scene = m_api->get_scene();
+        if (scene && scene->WLR_PRIVATE.blur_data.num_passes == 0) {
+            wlr_scene_set_blur_data(scene, 3, 5, 0.0f, 1.0f, 1.0f, 1.0f);
+            m_restored_blur_passes = true;
+        }
 
-    create_top_banner(screen);
+        m_blur_node = wlr_scene_blur_create(m_bg_tree, m_screen.width, m_screen.height);
+        if (m_blur_node) {
+            wlr_scene_node_set_position(&m_blur_node->node, m_screen.x, m_screen.y);
+            wlr_scene_node_lower_to_bottom(&m_blur_node->node);
+            wlr_scene_blur_set_alpha(m_blur_node, OverviewConfig::get().animation() ? 0.0f : OverviewConfig::get().blur_alpha());
+            wlr_scene_blur_set_strength(m_blur_node, OverviewConfig::get().animation() ? 0.0f : 1.0f);
+        }
+    }
+
+    const auto& bg = (theme.backdrop.a > 0.0f) ? theme.backdrop : theme.background;
+    float dim_color[4];
+    float init_alpha = OverviewConfig::get().animation() ? 0.0f : bg.a;
+    make_premul_color(dim_color, bg.r, bg.g, bg.b, init_alpha);
+    m_backdrop_rect = wlr_scene_rect_create(m_bg_tree, m_screen.width, m_screen.height, dim_color);
+    wlr_scene_node_set_position(&m_backdrop_rect->node, m_screen.x, m_screen.y);
+
+    render_top_banner();
 
     m_cards.clear();
     m_saved_views.clear();
 
-    for (size_t i = 0; i < max_ws; ++i) {
-        size_t ws_id = i + 1;
-        int r = i / cols;
-        int c = i % cols;
+    // 6. Layout grid row-by-row with centered incomplete rows
+    for (int r = 0; r < rows; ++r) {
+        size_t start_idx = r * cols;
+        size_t end_idx = std::min(start_idx + cols, count);
+        size_t items_in_row = end_idx - start_idx;
 
-        int cell_left = screen.x + pad_x + c * (cell_w + gap_x);
-        int cell_top  = screen.y + pad_y + r * (cell_h + gap_y);
-        int card_x = cell_left + (cell_w - card_w) / 2;
-        int card_y = cell_top + (cell_h - card_h) / 2;
+        int row_w = items_in_row * card_w + (items_in_row - 1) * gap_x;
+        int row_start_x = m_screen.x + margin + (avail_w - row_w) / 2;
+        int row_y = grid_start_y + r * (card_h + gap_y + header_h + header_gap) + header_h + header_gap;
 
-        WorkspaceCard card;
-        card.ws_id = ws_id;
-        card.card_box = {card_x, card_y, card_w, card_h};
-        card.scale = scale;
-        card.is_active = (ws_id == m_orig_active_ws);
+        for (size_t c = 0; c < items_in_row; ++c) {
+            size_t idx = start_idx + c;
+            size_t ws_id = active_workspaces[idx];
+            int card_x = row_start_x + c * (card_w + gap_x);
+            int card_y = row_y;
 
-        // 1. Workspace canvas
-        float canvas_bg[4];
-        make_premul_color(canvas_bg, 0.08f, 0.09f, 0.12f, 1.0f);
-        card.bg_rect = wlr_scene_rect_create(m_bg_tree, card_w, card_h, canvas_bg);
-        wlr_scene_node_set_position(&card.bg_rect->node, card_x, card_y);
+            WorkspaceCard card;
+            card.ws_id = ws_id;
+            card.card_box = {card_x, card_y, card_w, card_h};
+            card.scale = scale;
+            card.is_active = (ws_id == m_orig_active_ws);
 
-        // 2. Borders
-        int border_th = card.is_active ? 3 : 1;
-        float bcolor[4];
-        make_premul_color(bcolor, 0.20f, 0.24f, 0.32f, 0.70f);
-        if (card.is_active) make_premul_color(bcolor, 0.25f, 0.65f, 0.95f, 0.95f);
+            card.create_decorations(m_bg_tree, m_overlay_tree, theme, m_orig_active_ws);
 
-        card.border_top = wlr_scene_rect_create(m_overlay_tree, card_w, border_th, bcolor);
-        wlr_scene_node_set_position(&card.border_top->node, card_x, card_y);
+            miquland::Workspace* ws = wm->get_workspace(ws_id);
+            size_t win_count = ws ? ws->total_view_count() : 0;
+            card.render_header(m_overlay_tree, theme, win_count, ws_id == m_orig_active_ws);
 
-        card.border_bottom = wlr_scene_rect_create(m_overlay_tree, card_w, border_th, bcolor);
-        wlr_scene_node_set_position(&card.border_bottom->node, card_x, card_y + card_h - border_th);
+            if (ws && ws->get_scene_tree()) {
+                wlr_scene_node_set_position(&ws->get_scene_tree()->node, card_x, card_y);
+                wlr_scene_node_set_enabled(&ws->get_scene_tree()->node, true);
 
-        card.border_left = wlr_scene_rect_create(m_overlay_tree, border_th, card_h, bcolor);
-        wlr_scene_node_set_position(&card.border_left->node, card_x, card_y);
+                std::vector<miquland::View*> views = ws->get_tiled_views();
+                for (miquland::View* fv : ws->get_floating_views()) {
+                    views.push_back(fv);
+                }
 
-        card.border_right = wlr_scene_rect_create(m_overlay_tree, border_th, card_h, bcolor);
-        wlr_scene_node_set_position(&card.border_right->node, card_x + card_w - border_th, card_y);
+                for (miquland::View* v : views) {
+                    if (!v || !v->get_scene_tree()) continue;
 
-        // 3. Header badge
-        render_card_header(card);
+                    SavedViewInfo svi;
+                    svi.view = v;
+                    svi.orig_x = v->get_x();
+                    svi.orig_y = v->get_y();
+                    svi.ws_id = ws_id;
+                    m_saved_views.push_back(svi);
 
-        // 4. Position and scale windows
-        miquland::Workspace* ws = wm->get_or_create_workspace(ws_id);
-        if (ws && ws->get_scene_tree()) {
-            wlr_scene_node_set_position(&ws->get_scene_tree()->node, card_x, card_y);
-            wlr_scene_node_set_enabled(&ws->get_scene_tree()->node, true);
+                    int rel_x = v->get_x() - m_screen.x;
+                    int rel_y = v->get_y() - m_screen.y;
 
-            std::vector<miquland::View*> views = ws->get_tiled_views();
-            for (miquland::View* fv : ws->get_floating_views()) {
-                views.push_back(fv);
+                    int vx = static_cast<int>(std::round(rel_x * scale));
+                    int vy = static_cast<int>(std::round(rel_y * scale));
+                    int vw = static_cast<int>(std::round(v->get_width() * scale));
+                    int vh = static_cast<int>(std::round(v->get_height() * scale));
+
+                    wlr_scene_node_set_position(&v->get_scene_tree()->node, vx, vy);
+                    v->set_overview_scaled(true, scale);
+
+                    WindowThumbnail wt;
+                    wt.view = v;
+                    wt.ws_id = ws_id;
+                    wt.box = {card_x + vx, card_y + vy, vw, vh};
+                    wt.create_outline(m_overlay_tree, theme);
+                    card.window_thumbnails.push_back(wt);
+                }
             }
 
-            for (miquland::View* v : views) {
-                if (!v || !v->get_scene_tree()) continue;
-
-                SavedViewInfo svi;
-                svi.view = v;
-                svi.orig_x = v->get_x();
-                svi.orig_y = v->get_y();
-                svi.ws_id = ws_id;
-                m_saved_views.push_back(svi);
-
-                int rel_x = v->get_x() - screen.x;
-                int rel_y = v->get_y() - screen.y;
-
-                int vx = static_cast<int>(std::round(rel_x * scale));
-                int vy = static_cast<int>(std::round(rel_y * scale));
-                int vw = static_cast<int>(std::round(v->get_width() * scale));
-                int vh = static_cast<int>(std::round(v->get_height() * scale));
-
-                wlr_scene_node_set_position(&v->get_scene_tree()->node, vx, vy);
-                v->set_overview_scaled(true, scale);
-
-                WindowThumbnail wt;
-                wt.view = v;
-                wt.box = {card_x + vx, card_y + vy, vw, vh};
-
-                float win_border[4];
-                make_premul_color(win_border, 0.35f, 0.45f, 0.60f, 0.85f);
-
-                wt.outline[0] = wlr_scene_rect_create(m_overlay_tree, vw, 1, win_border);
-                wlr_scene_node_set_position(&wt.outline[0]->node, wt.box.x, wt.box.y);
-
-                wt.outline[1] = wlr_scene_rect_create(m_overlay_tree, vw, 1, win_border);
-                wlr_scene_node_set_position(&wt.outline[1]->node, wt.box.x, wt.box.y + vh - 1);
-
-                wt.outline[2] = wlr_scene_rect_create(m_overlay_tree, 1, vh, win_border);
-                wlr_scene_node_set_position(&wt.outline[2]->node, wt.box.x, wt.box.y);
-
-                wt.outline[3] = wlr_scene_rect_create(m_overlay_tree, 1, vh, win_border);
-                wlr_scene_node_set_position(&wt.outline[3]->node, wt.box.x + vw - 1, wt.box.y);
-
-                card.window_thumbnails.push_back(wt);
-            }
+            m_cards.push_back(std::move(card));
         }
-
-        m_cards.push_back(std::move(card));
     }
 
     m_is_open = true;
+
+    if (OverviewConfig::get().animation()) {
+        m_is_animating = true;
+        m_is_closing = false;
+        apply_animation_step(0.0f, true);
+        double dur = static_cast<double>(OverviewConfig::get().duration());
+        m_anim_id = m_api->schedule_animation(
+            dur,
+            miquland::Easing::ease_out_cubic,
+            [this](float progress) {
+                apply_animation_step(progress, true);
+            },
+            [this]() {
+                apply_animation_step(1.0f, true);
+                m_is_animating = false;
+                m_anim_id = 0;
+            }
+        );
+    } else {
+        apply_animation_step(1.0f, true);
+    }
+}
+
+void OverviewState::apply_animation_step(float progress, bool is_opening) {
+    float t = is_opening ? progress : (1.0f - progress);
+    t = std::clamp(t, 0.0f, 1.0f);
+
+    const auto& theme = OverviewConfig::get().theme();
+    const auto& bg = (theme.backdrop.a > 0.0f) ? theme.backdrop : theme.background;
+
+    if (m_backdrop_rect) {
+        float dim_color[4];
+        make_premul_color(dim_color, bg.r, bg.g, bg.b, bg.a * t);
+        wlr_scene_rect_set_color(m_backdrop_rect, dim_color);
+    }
+
+    if (m_blur_node) {
+        wlr_scene_blur_set_alpha(m_blur_node, OverviewConfig::get().blur_alpha() * t);
+        wlr_scene_blur_set_strength(m_blur_node, t);
+    }
+
+    if (m_top_banner_scene_buf) {
+        wlr_scene_buffer_set_opacity(m_top_banner_scene_buf, t);
+        int final_y = m_screen.y + std::max(8, OverviewConfig::get().edge_margin() / 3);
+        int cur_y = final_y - static_cast<int>(std::round((1.0f - t) * 16.0f));
+        int cur_x = m_screen.x + (m_screen.width - 460) / 2;
+        wlr_scene_node_set_position(&m_top_banner_scene_buf->node, cur_x, cur_y);
+    }
+
+    for (auto& card : m_cards) {
+        card.set_alpha(t);
+    }
+
+    for (const auto& svi : m_saved_views) {
+        if (!svi.view || !svi.view->get_scene_tree()) continue;
+        if (svi.ws_id != m_orig_active_ws) {
+            float view_op = t;
+            wlr_scene_node_for_each_buffer(&svi.view->get_scene_tree()->node, [](struct wlr_scene_buffer* buf, int sx, int sy, void* udata) {
+                float op = *static_cast<float*>(udata);
+                wlr_scene_buffer_set_opacity(buf, op);
+            }, &view_op);
+        }
+    }
 }
 
 void OverviewState::close(size_t target_ws_id, miquland::View* focus_view) {
     if (!m_is_open || !m_api) return;
 
+    if (m_is_closing) return;
+
+    if (m_is_animating && m_anim_id != 0) {
+        m_api->cancel_animation(m_anim_id);
+        m_anim_id = 0;
+    }
+
+    if (OverviewConfig::get().animation()) {
+        m_is_animating = true;
+        m_is_closing = true;
+        double dur = static_cast<double>(OverviewConfig::get().duration());
+        m_anim_id = m_api->schedule_animation(
+            dur,
+            miquland::Easing::ease_out_cubic,
+            [this](float progress) {
+                apply_animation_step(progress, false);
+            },
+            [this, target_ws_id, focus_view]() {
+                m_is_animating = false;
+                m_is_closing = false;
+                m_anim_id = 0;
+                finish_close(target_ws_id, focus_view);
+            }
+        );
+    } else {
+        finish_close(target_ws_id, focus_view);
+    }
+}
+
+void OverviewState::finish_close(size_t target_ws_id, miquland::View* focus_view) {
     auto* wm = m_api->get_workspace_manager();
 
     // 1. Restore views geometry and exit overview scale mode safely
@@ -232,6 +393,12 @@ void OverviewState::close(size_t target_ws_id, miquland::View* focus_view) {
 
         svi.view->set_overview_scaled(false);
         wlr_scene_node_set_position(&svi.view->get_scene_tree()->node, svi.orig_x, svi.orig_y);
+
+        float full_op = 1.0f;
+        wlr_scene_node_for_each_buffer(&svi.view->get_scene_tree()->node, [](struct wlr_scene_buffer* buf, int sx, int sy, void* udata) {
+            float op = *static_cast<float*>(udata);
+            wlr_scene_buffer_set_opacity(buf, op);
+        }, &full_op);
     }
     m_saved_views.clear();
 
@@ -263,6 +430,23 @@ void OverviewState::close(size_t target_ws_id, miquland::View* focus_view) {
         m_top_banner_buf = nullptr;
     }
 
+    if (m_backdrop_rect) {
+        wlr_scene_node_destroy(&m_backdrop_rect->node);
+        m_backdrop_rect = nullptr;
+    }
+
+    if (m_blur_node) {
+        wlr_scene_node_destroy(&m_blur_node->node);
+        m_blur_node = nullptr;
+    }
+
+    if (m_restored_blur_passes) {
+        if (m_api->get_scene()) {
+            wlr_scene_set_blur_data(m_api->get_scene(), 0, 0, 0.0f, 1.0f, 1.0f, 1.0f);
+        }
+        m_restored_blur_passes = false;
+    }
+
     if (m_bg_tree) {
         wlr_scene_node_destroy(&m_bg_tree->node);
         m_bg_tree = nullptr;
@@ -270,6 +454,10 @@ void OverviewState::close(size_t target_ws_id, miquland::View* focus_view) {
     if (m_overlay_tree) {
         wlr_scene_node_destroy(&m_overlay_tree->node);
         m_overlay_tree = nullptr;
+    }
+
+    if (m_api->get_server() && m_api->get_server()->get_popup_tree()) {
+        wlr_scene_node_set_enabled(&m_api->get_server()->get_popup_tree()->node, true);
     }
 
     m_is_open = false;
@@ -284,102 +472,29 @@ void OverviewState::close(size_t target_ws_id, miquland::View* focus_view) {
     }
 }
 
-void OverviewState::create_top_banner(const struct wlr_box& screen) {
-    int bw = 420;
-    int bh = 32;
-    int bx = screen.x + (screen.width - bw) / 2;
-    int by = screen.y + 16;
+void OverviewState::handle_view_destroyed(miquland::View* view) {
+    if (!m_is_open || !view) return;
 
-    m_top_banner_buf = OverviewCairoBuffer::create(bw, bh);
-    if (!m_top_banner_buf) return;
+    m_saved_views.erase(
+        std::remove_if(m_saved_views.begin(), m_saved_views.end(),
+                       [view](const SavedViewInfo& svi) { return svi.view == view; }),
+        m_saved_views.end());
 
-    cairo_t* cr = m_top_banner_buf->get_cr();
+    auto* wm = m_api ? m_api->get_workspace_manager() : nullptr;
+    const auto& theme = OverviewConfig::get().theme();
 
-    // Rounded background pill
-    cairo_new_sub_path(cr);
-    cairo_arc(cr, bw - bh / 2, bh / 2, bh / 2, -M_PI / 2, M_PI / 2);
-    cairo_arc(cr, bh / 2, bh / 2, bh / 2, M_PI / 2, 3 * M_PI / 2);
-    cairo_close_path(cr);
-    cairo_set_source_rgba(cr, 0.12, 0.14, 0.18, 0.90);
-    cairo_fill_preserve(cr);
-    cairo_set_source_rgba(cr, 0.28, 0.35, 0.48, 0.80);
-    cairo_set_line_width(cr, 1.0);
-    cairo_stroke(cr);
-
-    // Text
-    PangoLayout* layout = pango_cairo_create_layout(cr);
-    pango_layout_set_text(layout, "Miqu Overview   •   Click card or press 1-9 / Esc", -1);
-    PangoFontDescription* desc = pango_font_description_from_string("Sans Bold 10");
-    pango_layout_set_font_description(layout, desc);
-    pango_font_description_free(desc);
-
-    int tw = 0, th = 0;
-    pango_layout_get_pixel_size(layout, &tw, &th);
-
-    cairo_set_source_rgba(cr, 0.88, 0.92, 0.98, 0.95);
-    cairo_move_to(cr, (bw - tw) / 2, (bh - th) / 2);
-    pango_cairo_show_layout(cr, layout);
-    g_object_unref(layout);
-
-    m_top_banner_scene_buf = wlr_scene_buffer_create(m_overlay_tree, m_top_banner_buf->get_wlr_buffer());
-    wlr_scene_node_set_position(&m_top_banner_scene_buf->node, bx, by);
-}
-
-void OverviewState::render_card_header(WorkspaceCard& card) {
-    int bw = card.card_box.width;
-    int bh = 24;
-    int bx = card.card_box.x;
-    int by = card.card_box.y - bh - 6;
-
-    if (!card.header_buf) {
-        card.header_buf = OverviewCairoBuffer::create(bw, bh);
-    }
-    if (!card.header_buf) return;
-
-    cairo_t* cr = card.header_buf->get_cr();
-    card.header_buf->clear();
-
-    std::string title = "Workspace " + std::to_string(card.ws_id);
-    if (card.ws_id == m_orig_active_ws) {
-        title += "  [Active]";
-    }
-
-    auto* wm = m_api->get_workspace_manager();
-    miquland::Workspace* ws = wm ? wm->get_workspace(card.ws_id) : nullptr;
-    size_t count = ws ? ws->total_view_count() : 0;
-    std::string count_str = (count == 0) ? "Empty" : (std::to_string(count) + (count == 1 ? " window" : " windows"));
-
-    PangoLayout* layout = pango_cairo_create_layout(cr);
-    pango_layout_set_text(layout, title.c_str(), -1);
-    PangoFontDescription* desc = pango_font_description_from_string("Sans Bold 10");
-    pango_layout_set_font_description(layout, desc);
-    pango_font_description_free(desc);
-
-    if (card.ws_id == m_orig_active_ws) {
-        cairo_set_source_rgba(cr, 0.35, 0.75, 1.0, 1.0);
-    } else {
-        cairo_set_source_rgba(cr, 0.85, 0.88, 0.94, 0.95);
-    }
-    cairo_move_to(cr, 2, 4);
-    pango_cairo_show_layout(cr, layout);
-
-    pango_layout_set_text(layout, count_str.c_str(), -1);
-    desc = pango_font_description_from_string("Sans 9");
-    pango_layout_set_font_description(layout, desc);
-    pango_font_description_free(desc);
-
-    int cw = 0, ch = 0;
-    pango_layout_get_pixel_size(layout, &cw, &ch);
-
-    cairo_set_source_rgba(cr, 0.55, 0.60, 0.70, 0.85);
-    cairo_move_to(cr, bw - cw - 2, 5);
-    pango_cairo_show_layout(cr, layout);
-
-    g_object_unref(layout);
-
-    if (!card.header_scene_buf) {
-        card.header_scene_buf = wlr_scene_buffer_create(m_overlay_tree, card.header_buf->get_wlr_buffer());
-        wlr_scene_node_set_position(&card.header_scene_buf->node, bx, by);
+    for (auto& card : m_cards) {
+        for (auto it = card.window_thumbnails.begin(); it != card.window_thumbnails.end(); ) {
+            if (it->view == view) {
+                it->destroy_outline();
+                it = card.window_thumbnails.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        miquland::Workspace* ws = wm ? wm->get_workspace(card.ws_id) : nullptr;
+        size_t win_count = ws ? ws->total_view_count() : 0;
+        card.render_header(m_overlay_tree, theme, win_count, card.ws_id == m_orig_active_ws);
     }
 }
 
@@ -393,18 +508,22 @@ void OverviewState::select_relative(int delta_x, int delta_y) {
         }
     }
 
-    int next_idx = cur_idx + delta_x + delta_y * 2;
-    if (next_idx >= 0 && next_idx < static_cast<int>(m_cards.size())) {
-        m_selected_ws = m_cards[next_idx].ws_id;
-        for (auto& card : m_cards) {
-            card.is_active = (card.ws_id == m_selected_ws);
-            card.update_border();
-        }
+    int step_y = (m_cols > 0) ? m_cols : 2;
+    int next_idx = cur_idx + delta_x + delta_y * step_y;
+    if (next_idx < 0) next_idx = 0;
+    if (next_idx >= static_cast<int>(m_cards.size())) next_idx = static_cast<int>(m_cards.size()) - 1;
+
+    m_selected_ws = m_cards[next_idx].ws_id;
+    const auto& theme = OverviewConfig::get().theme();
+    for (auto& card : m_cards) {
+        card.is_active = (card.ws_id == m_selected_ws);
+        card.update_border(theme);
     }
 }
 
 bool OverviewState::handle_pointer_button(double lx, double ly, uint32_t button, bool pressed) {
     if (!m_is_open) return false;
+    if (m_is_closing) return true;
 
     if (button == BTN_LEFT && pressed) {
         for (const auto& card : m_cards) {
@@ -428,19 +547,43 @@ bool OverviewState::handle_pointer_button(double lx, double ly, uint32_t button,
 
 bool OverviewState::handle_pointer_motion(double lx, double ly) {
     if (!m_is_open) return false;
+    if (m_is_closing) return true;
 
+    const auto& theme = OverviewConfig::get().theme();
     for (auto& card : m_cards) {
         bool hovered = wlr_box_contains_point(&card.card_box, lx, ly);
         if (hovered != card.is_hovered) {
             card.is_hovered = hovered;
-            card.update_border();
+            card.update_border(theme);
         }
+        if (hovered) {
+            for (auto& wt : card.window_thumbnails) {
+                bool win_h = wlr_box_contains_point(&wt.box, lx, ly);
+                if (win_h != wt.is_hovered) {
+                    wt.is_hovered = win_h;
+                    wt.update_outline(theme);
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool OverviewState::handle_pointer_axis(double lx, double ly, double delta_x, double delta_y) {
+    if (!m_is_open) return false;
+    if (m_is_closing) return true;
+
+    if (delta_y > 0 || delta_x > 0) {
+        select_relative(1, 0);
+    } else if (delta_y < 0 || delta_x < 0) {
+        select_relative(-1, 0);
     }
     return true;
 }
 
 bool OverviewState::handle_key(uint32_t keysym, uint32_t modifiers, bool pressed) {
     if (!m_is_open) return false;
+    if (m_is_closing) return true;
     if (!pressed) return true;
 
     if (keysym == XKB_KEY_Escape) {
@@ -477,6 +620,43 @@ bool OverviewState::handle_key(uint32_t keysym, uint32_t modifiers, bool pressed
     }
 
     return true;
+}
+
+void OverviewState::refresh_appearance() {
+    if (!m_is_open) return;
+
+    const auto& theme = OverviewConfig::get().theme();
+    const auto& bg = (theme.backdrop.a > 0.0f) ? theme.backdrop : theme.background;
+
+    if (m_backdrop_rect) {
+        float dim_color[4];
+        make_premul_color(dim_color, bg.r, bg.g, bg.b, bg.a);
+        wlr_scene_rect_set_color(m_backdrop_rect, dim_color);
+    }
+
+    if (m_blur_node) {
+        wlr_scene_node_set_enabled(&m_blur_node->node, OverviewConfig::get().blur());
+        wlr_scene_blur_set_alpha(m_blur_node, OverviewConfig::get().blur_alpha());
+        wlr_scene_blur_set_strength(m_blur_node, 1.0f);
+    }
+
+    render_top_banner();
+
+    auto* wm = m_api ? m_api->get_workspace_manager() : nullptr;
+    for (auto& card : m_cards) {
+        card.update_border(theme);
+        card.set_alpha(1.0f);
+        miquland::Workspace* ws = wm ? wm->get_workspace(card.ws_id) : nullptr;
+        size_t win_count = ws ? ws->total_view_count() : 0;
+        card.render_header(m_overlay_tree, theme, win_count, card.ws_id == m_orig_active_ws);
+        for (auto& wt : card.window_thumbnails) {
+            wt.update_outline(theme);
+        }
+    }
+
+    if (m_api) {
+        m_api->schedule_frame();
+    }
 }
 
 } // namespace miquoverview

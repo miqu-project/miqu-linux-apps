@@ -1,4 +1,5 @@
 #include "overview_state.hpp"
+#include "overview_config.hpp"
 #include "miquland/plugin.hpp"
 
 using namespace miquoverview;
@@ -8,7 +9,7 @@ MIQU_PLUGIN_EXPORT miquland::PluginInfo* miqu_plugin_init(miquland::PluginAPI* a
         .name = "miquoverview",
         .author = "Miqu Ecosystem Team",
         .description = "GPU-accelerated live workspace expose and overview plugin",
-        .version = "1.1.0",
+        .version = "1.2.0",
         .abi_version = miquland::MIQU_PLUGIN_ABI_VERSION,
     };
 
@@ -36,6 +37,10 @@ MIQU_PLUGIN_EXPORT miquland::PluginInfo* miqu_plugin_init(miquland::PluginAPI* a
         return OverviewState::get().handle_pointer_motion(lx, ly);
     });
 
+    api->register_pointer_axis_hook([](double lx, double ly, double delta_x, double delta_y) -> bool {
+        return OverviewState::get().handle_pointer_axis(lx, ly, delta_x, delta_y);
+    });
+
     api->register_key_hook([](uint32_t keysym, uint32_t modifiers, bool pressed) -> bool {
         return OverviewState::get().handle_key(keysym, modifiers, pressed);
     });
@@ -52,4 +57,5 @@ MIQU_PLUGIN_EXPORT void miqu_plugin_exit() {
     if (OverviewState::get().is_active()) {
         OverviewState::get().close();
     }
+    OverviewConfig::get().cleanup_watcher();
 }
