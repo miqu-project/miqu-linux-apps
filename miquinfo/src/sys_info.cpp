@@ -216,30 +216,77 @@ SystemInfo SysInfoReader::gather() {
 
     // 8. GPU Detection & Graphics Stack
     {
-        FILE* pipe = popen("lspci 2>/dev/null | grep -E 'VGA|3D|Display'", "r");
-        if (pipe) {
-            char buffer[512] = {0};
-            if (fgets(buffer, sizeof(buffer) - 1, pipe)) {
-                std::string line = trim(buffer);
-                auto colon = line.find(':');
-                if (colon != std::string::npos) {
-                    auto second_colon = line.find(':', colon + 1);
-                    if (second_colon != std::string::npos) {
-                        line = trim(line.substr(second_colon + 1));
+        // Direct PCI lookup without expensive lspci subshell
+        std::string vendor_id, device_id;
+        std::error_code ec;
+        if (fs::exists("/sys/bus/pci/devices", ec)) {
+            for (const auto& entry : fs::directory_iterator("/sys/bus/pci/devices", ec)) {
+                std::string cls = read_file_trimmed(entry.path() / "class");
+                if (cls.rfind("0x03", 0) == 0) { // Display controller class
+                    vendor_id = read_file_trimmed(entry.path() / "vendor");
+                    device_id = read_file_trimmed(entry.path() / "device");
+                    if (vendor_id.rfind("0x", 0) == 0) vendor_id = vendor_id.substr(2);
+                    if (device_id.rfind("0x", 0) == 0) device_id = device_id.substr(2);
+                    break;
+                }
+            }
+        }
+
+        if (!vendor_id.empty() && !device_id.empty()) {
+            std::ifstream pci_ids("/usr/share/hwdata/pci.ids");
+            if (pci_ids.is_open()) {
+                std::string line;
+                bool in_vendor = false;
+                std::string vname, dname;
+                while (std::getline(pci_ids, line)) {
+                    if (line.empty() || line[0] == '#') continue;
+                    if (line[0] != '\t') {
+                        if (line.rfind(vendor_id, 0) == 0) {
+                            in_vendor = true;
+                            vname = trim(line.substr(vendor_id.length()));
+                        } else {
+                            in_vendor = false;
+                        }
+                    } else if (in_vendor && line[1] != '\t') {
+                        std::string sub = trim(line);
+                        if (sub.rfind(device_id, 0) == 0) {
+                            dname = trim(sub.substr(device_id.length()));
+                            break;
+                        }
                     }
                 }
-                auto rev_pos = line.find("(rev");
-                if (rev_pos != std::string::npos) {
-                    line = trim(line.substr(0, rev_pos));
+                if (!vname.empty() && !dname.empty()) {
+                    info.gpu_model = vname + " " + dname;
                 }
-                info.gpu_model = line;
             }
-            pclose(pipe);
+        }
+
+        // Fallback to lspci if direct hardware lookup yielded nothing
+        if (info.gpu_model.empty()) {
+            FILE* pipe = popen("lspci 2>/dev/null | grep -E 'VGA|3D|Display'", "r");
+            if (pipe) {
+                char buffer[512] = {0};
+                if (fgets(buffer, sizeof(buffer) - 1, pipe)) {
+                    std::string line = trim(buffer);
+                    auto colon = line.find(':');
+                    if (colon != std::string::npos) {
+                        auto second_colon = line.find(':', colon + 1);
+                        if (second_colon != std::string::npos) {
+                            line = trim(line.substr(second_colon + 1));
+                        }
+                    }
+                    auto rev_pos = line.find("(rev");
+                    if (rev_pos != std::string::npos) {
+                        line = trim(line.substr(0, rev_pos));
+                    }
+                    info.gpu_model = line;
+                }
+                pclose(pipe);
+            }
         }
         if (info.gpu_model.empty()) info.gpu_model = "Standard Graphics Adapter";
 
         // GPU Driver
-        std::error_code ec;
         for (int i = 0; i < 4; ++i) {
             std::string drm_card = "/sys/class/drm/card" + std::to_string(i) + "/device/uevent";
             if (fs::exists(drm_card, ec)) {
@@ -256,14 +303,15 @@ SystemInfo SysInfoReader::gather() {
         }
         if (info.gpu_driver.empty()) info.gpu_driver = "drm/generic";
 
-        // Mesa Version
-        FILE* mpipe = popen("pacman -Q mesa 2>/dev/null | awk '{print $2}'", "r");
-        if (mpipe) {
-            char mbuf[128] = {0};
-            if (fgets(mbuf, sizeof(mbuf) - 1, mpipe)) {
-                info.mesa_version = trim(mbuf);
+        // Mesa Version (direct pacman local db lookup)
+        if (fs::exists("/var/lib/pacman/local", ec)) {
+            for (const auto& entry : fs::directory_iterator("/var/lib/pacman/local", ec)) {
+                std::string fname = entry.path().filename().string();
+                if (fname.rfind("mesa-", 0) == 0 && fname.size() > 5 && std::isdigit(fname[5])) {
+                    info.mesa_version = fname.substr(5);
+                    break;
+                }
             }
-            pclose(mpipe);
         }
         if (info.mesa_version.empty()) info.mesa_version = "Standard Mesa/GL";
     }

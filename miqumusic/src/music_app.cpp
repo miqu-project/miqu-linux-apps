@@ -21,24 +21,7 @@ MusicApp::~MusicApp() {
 bool MusicApp::init() {
     if (!m_engine) return false;
 
-    bool initial_connected = m_client->connect(m_host, m_port);
-    if (!initial_connected) {
-        std::cerr << "[miqumusic] Warning: Could not connect to MPD on startup. Will keep retrying.\n";
-    }
-
     setup_ui();
-    setup_mpd_callbacks();
-
-    if (initial_connected) {
-        MpdStatus st = m_client->get_status();
-        Song song = m_client->get_current_song();
-        std::vector<Song> q = m_client->get_queue();
-        update_playback_ui(st, song);
-        update_queue_ui(q, st.song_pos);
-    }
-
-    m_client->start_idle_listener();
-    start_ticker();
 
     m_window = WindowBuilder::create()
         ->title("miqumusic")
@@ -61,6 +44,25 @@ bool MusicApp::init() {
     }
 
     m_window->show();
+
+    setup_mpd_callbacks();
+
+    m_engine->post([this]() {
+        bool initial_connected = m_client->connect(m_host, m_port);
+        if (!initial_connected) {
+            std::cerr << "[miqumusic] Warning: Could not connect to MPD on startup. Will keep retrying.\n";
+        } else {
+            MpdStatus st = m_client->get_status();
+            Song song = m_client->get_current_song();
+            std::vector<Song> q = m_client->get_queue();
+            update_playback_ui(st, song);
+            update_queue_ui(q, st.song_pos);
+        }
+
+        m_client->start_idle_listener();
+        start_ticker();
+    });
+
     return true;
 }
 

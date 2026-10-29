@@ -4,18 +4,21 @@
 #include <miqutoolkit/miqutoolkit.hpp>
 #include <memory>
 #include <array>
+#include <thread>
+#include <atomic>
 
 namespace miquinfo {
 
 class InfoApp {
 public:
     explicit InfoApp(std::shared_ptr<miqu::AppEngine> engine);
-    ~InfoApp() = default;
+    ~InfoApp();
 
     bool init();
     int run();
 
     void refresh();
+    void refresh_async();
     void copy_to_clipboard();
     void select_page(int index);
 
@@ -31,6 +34,9 @@ private:
 
     std::array<std::shared_ptr<miqu::LinearLayout>, 5> m_page_cols;
     SystemInfo m_info;
+
+    std::atomic<bool> m_alive{true};
+    std::thread m_worker;
 };
 
 } // namespace miquinfo

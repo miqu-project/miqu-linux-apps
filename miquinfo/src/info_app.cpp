@@ -27,10 +27,15 @@ InfoApp::InfoApp(std::shared_ptr<AppEngine> engine)
     : m_engine(std::move(engine)) {
 }
 
+InfoApp::~InfoApp() {
+    m_alive.store(false);
+    if (m_worker.joinable()) {
+        m_worker.join();
+    }
+}
+
 bool InfoApp::init() {
     if (!m_engine) return false;
-
-    m_info = SysInfoReader::gather();
 
     for (int i = 0; i < 5; ++i) {
         m_page_cols[i] = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -41,14 +46,11 @@ bool InfoApp::init() {
         m_page_cols[i]->set_padding(2, 2);
     }
 
-    PageBuilder::populate_overview(m_page_cols[0], m_info);
-    PageBuilder::populate_hardware(m_page_cols[1], m_info);
-    PageBuilder::populate_thermals(m_page_cols[2], m_info);
-    PageBuilder::populate_storage(m_page_cols[3], m_info);
-    PageBuilder::populate_system(m_page_cols[4], m_info);
-
     setup_ui();
-    return m_window != nullptr;
+    if (!m_window) return false;
+
+    refresh_async();
+    return true;
 }
 
 void InfoApp::setup_ui() {
@@ -171,13 +173,29 @@ void InfoApp::select_page(int index) {
 }
 
 void InfoApp::refresh() {
-    m_info = SysInfoReader::gather();
-    PageBuilder::populate_overview(m_page_cols[0], m_info);
-    PageBuilder::populate_hardware(m_page_cols[1], m_info);
-    PageBuilder::populate_thermals(m_page_cols[2], m_info);
-    PageBuilder::populate_storage(m_page_cols[3], m_info);
-    PageBuilder::populate_system(m_page_cols[4], m_info);
-    if (m_window) m_window->schedule_redraw();
+    refresh_async();
+}
+
+void InfoApp::refresh_async() {
+    if (m_worker.joinable()) {
+        m_worker.join();
+    }
+    m_worker = std::thread([this]() {
+        auto gathered = SysInfoReader::gather();
+        if (!m_alive.load()) return;
+        if (m_engine) {
+            m_engine->post([this, info = std::move(gathered)]() {
+                if (!m_alive.load()) return;
+                m_info = std::move(info);
+                PageBuilder::populate_overview(m_page_cols[0], m_info);
+                PageBuilder::populate_hardware(m_page_cols[1], m_info);
+                PageBuilder::populate_thermals(m_page_cols[2], m_info);
+                PageBuilder::populate_storage(m_page_cols[3], m_info);
+                PageBuilder::populate_system(m_page_cols[4], m_info);
+                if (m_window) m_window->schedule_redraw();
+            });
+        }
+    });
 }
 
 void InfoApp::copy_to_clipboard() {

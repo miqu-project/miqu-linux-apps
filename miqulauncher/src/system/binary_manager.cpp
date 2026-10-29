@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <unistd.h>
 #include <cstdlib>
+#include <miqutoolkit/system/app_manager.hpp>
 
 namespace miqu {
 
@@ -105,22 +106,7 @@ bool BinaryManager::is_terminal_command(const std::string& cmd) {
 
 void BinaryManager::launch_command(const std::string& cmd, bool terminal) {
     if (cmd.empty()) return;
-
-    std::string full_cmd = cmd;
-    bool needs_terminal = terminal || is_terminal_command(cmd);
-
-    if (needs_terminal) {
-        const char* env_term = getenv("TERMINAL");
-        std::string term = (env_term && *env_term) ? env_term : "kitty || foot || alacritty || wezterm || weston-terminal || xterm";
-        full_cmd = term + " -e " + cmd;
-    }
-
-    pid_t pid = fork();
-    if (pid == 0) {
-        setsid();
-        execl("/bin/sh", "sh", "-c", full_cmd.c_str(), nullptr);
-        _exit(1);
-    }
+    AppManager::launch_command(cmd, terminal || is_terminal_command(cmd));
 }
 
 } // namespace miqu
