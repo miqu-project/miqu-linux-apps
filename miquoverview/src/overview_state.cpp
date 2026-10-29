@@ -480,7 +480,14 @@ void OverviewState::finish_close(size_t target_ws_id, miquland::View* focus_view
 
     if (m_api) {
         m_api->set_cursor_icon("default");
-        m_api->recheck_cursor_focus();
+        if (focus_view) {
+            const auto& geom = focus_view->get_geometry();
+            double cx = geom.x + std::max(1, geom.width) / 2.0;
+            double cy = geom.y + std::max(1, geom.height) / 2.0;
+            m_api->warp_cursor(cx, cy);
+        } else {
+            m_api->recheck_cursor_focus();
+        }
     }
 }
 
