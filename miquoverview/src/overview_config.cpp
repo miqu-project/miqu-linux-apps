@@ -340,65 +340,108 @@ void OverviewConfig::setup_watcher(struct wl_event_loop* loop) {
         return;
     }
 
-    std::vector<std::string> dirs_to_watch;
+    m_wd_to_targets.clear();
 
-    // 1. Root user config directory ~/.config (to detect creation of ~/.config/miquoverview)
-    std::string config_root = expand_home("~/.config");
-    if (fs::exists(config_root)) {
-        dirs_to_watch.push_back(config_root);
-    }
-
-    // 2. User app config directory ~/.config/miquoverview
     std::string user_dir = expand_home("~/.config/miquoverview");
-    if (fs::exists(user_dir)) {
-        dirs_to_watch.push_back(user_dir);
+    std::string config_root = expand_home("~/.config");
+
+    // 1. If user app config directory doesn't exist yet, watch parent ~/.config for creation of "miquoverview"
+    if (!fs::exists(user_dir)) {
+        if (fs::exists(config_root)) {
+            int wd = inotify_add_watch(m_inotify_fd, config_root.c_str(), IN_CREATE | IN_MOVED_TO);
+            if (wd >= 0) {
+                m_wd_to_targets[wd].push_back("miquoverview");
+            }
+        }
+    } else {
+        // Watch ~/.config/miquoverview directory for miquoverview.conf
+        int wd = inotify_add_watch(m_inotify_fd, user_dir.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_MODIFY);
+        if (wd >= 0) {
+            m_wd_to_targets[wd].push_back("miquoverview.conf");
+        }
     }
 
-    // 3. System app config directory /usr/share/miquoverview
-    if (fs::exists("/usr/share/miquoverview")) {
-        dirs_to_watch.push_back("/usr/share/miquoverview");
+    // 2. System app config directory /usr/share/miquoverview (only if user config doesn't exist)
+    if (!fs::exists(user_dir + "/miquoverview.conf") && fs::exists("/usr/share/miquoverview")) {
+        int wd = inotify_add_watch(m_inotify_fd, "/usr/share/miquoverview", IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_MODIFY);
+        if (wd >= 0) {
+            m_wd_to_targets[wd].push_back("miquoverview.conf");
+        }
     }
 
-    // 4. All loaded/sourced files and their parent/grandparent directories (e.g. ~/.config/miqutheme/current/)
+    // 3. Sourced files (e.g. ~/.config/miqutheme/current/miqutoolkit.conf)
     for (const auto& file_path : m_watched_files) {
-        inotify_add_watch(m_inotify_fd, file_path.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO | IN_MODIFY);
         fs::path p(file_path);
         fs::path parent = p.parent_path();
         if (fs::exists(parent)) {
-            dirs_to_watch.push_back(parent.string());
+            int wd = inotify_add_watch(m_inotify_fd, parent.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_MODIFY);
+            if (wd >= 0) {
+                m_wd_to_targets[wd].push_back(p.filename().string());
+            }
             if (parent.has_parent_path() && fs::exists(parent.parent_path())) {
-                dirs_to_watch.push_back(parent.parent_path().string());
+                int gwd = inotify_add_watch(m_inotify_fd, parent.parent_path().c_str(), IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_MODIFY);
+                if (gwd >= 0) {
+                    m_wd_to_targets[gwd].push_back(parent.filename().string());
+                }
             }
         }
     }
 
-    std::sort(dirs_to_watch.begin(), dirs_to_watch.end());
-    dirs_to_watch.erase(std::unique(dirs_to_watch.begin(), dirs_to_watch.end()), dirs_to_watch.end());
-
-    for (const auto& dir : dirs_to_watch) {
-        inotify_add_watch(m_inotify_fd, dir.c_str(), IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE | IN_MODIFY);
-    }
+    // Debounce timer: wait 250ms for rapid file writes to settle
+    m_debounce_timer = wl_event_loop_add_timer(m_loop,
+        [](void* data) -> int {
+            auto* self = static_cast<OverviewConfig*>(data);
+            if (!self) return 0;
+            self->load();
+            self->setup_watcher();
+            if (self->m_reload_cb) {
+                self->m_reload_cb();
+            }
+            return 0;
+        }, this);
 
     m_event_source = wl_event_loop_add_fd(m_loop, m_inotify_fd, WL_EVENT_READABLE,
         [](int fd, uint32_t /*mask*/, void* data) -> int {
             auto* self = static_cast<OverviewConfig*>(data);
             if (!self) return 0;
 
-            // Drain inotify events
-            char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
-            while (read(fd, buf, sizeof(buf)) > 0) {}
+            alignas(struct inotify_event) char buf[4096];
+            ssize_t len;
+            bool should_reload = false;
 
-            self->load();
-            self->setup_watcher();
+            while ((len = read(fd, buf, sizeof(buf))) > 0) {
+                for (char* ptr = buf; ptr < buf + len; ) {
+                    auto* event = reinterpret_cast<const struct inotify_event*>(ptr);
+                    auto it = self->m_wd_to_targets.find(event->wd);
+                    if (it != self->m_wd_to_targets.end()) {
+                        if (event->len > 0) {
+                            std::string ev_name(event->name);
+                            for (const auto& target : it->second) {
+                                if (target == ev_name || (target.empty() && ev_name.ends_with(".conf"))) {
+                                    should_reload = true;
+                                    break;
+                                }
+                            }
+                        } else {
+                            should_reload = true;
+                        }
+                    }
+                    ptr += sizeof(struct inotify_event) + event->len;
+                }
+            }
 
-            if (self->m_reload_cb) {
-                self->m_reload_cb();
+            if (should_reload && self->m_debounce_timer) {
+                wl_event_source_timer_update(self->m_debounce_timer, 250);
             }
             return 0;
         }, this);
 }
 
 void OverviewConfig::cleanup_watcher() {
+    if (m_debounce_timer) {
+        wl_event_source_remove(m_debounce_timer);
+        m_debounce_timer = nullptr;
+    }
     if (m_event_source) {
         wl_event_source_remove(m_event_source);
         m_event_source = nullptr;
@@ -407,6 +450,7 @@ void OverviewConfig::cleanup_watcher() {
         close(m_inotify_fd);
         m_inotify_fd = -1;
     }
+    m_wd_to_targets.clear();
 }
 
 } // namespace miquoverview

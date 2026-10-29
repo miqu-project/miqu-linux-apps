@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <functional>
 #include <filesystem>
 #include <wayland-server-core.h>
@@ -89,8 +90,10 @@ private:
 
     int m_inotify_fd = -1;
     struct wl_event_source* m_event_source = nullptr;
+    struct wl_event_source* m_debounce_timer = nullptr;
     struct wl_event_loop* m_loop = nullptr;
     ReloadCallback m_reload_cb;
+    std::unordered_map<int, std::vector<std::string>> m_wd_to_targets;
 };
 
 } // namespace miquoverview
