@@ -2,78 +2,89 @@
 #include "overview_config.hpp"
 #include "core/view.hpp"
 #include <algorithm>
+#include <cmath>
 #include <pango/pangocairo.h>
 
 namespace miquoverview {
 
-void WindowThumbnail::create_outline(struct wlr_scene_tree* parent, const OverviewTheme& theme) {
+static void draw_rounded_rectangle(cairo_t* cr, double x, double y, double w, double h, double r) {
+    if (r <= 0.0) {
+        cairo_rectangle(cr, x, y, w, h);
+        return;
+    }
+    r = std::min(r, std::min(w / 2.0, h / 2.0));
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, x + w - r, y + r, r, -M_PI / 2.0, 0.0);
+    cairo_arc(cr, x + w - r, y + h - r, r, 0.0, M_PI / 2.0);
+    cairo_arc(cr, x + r, y + h - r, r, M_PI / 2.0, M_PI);
+    cairo_arc(cr, x + r, y + r, r, M_PI, 3.0 * M_PI / 2.0);
+    cairo_close_path(cr);
+}
+
+void WindowThumbnail::update_highlight(struct wlr_scene_tree* parent, const OverviewTheme& theme) {
     if (!parent) return;
-    destroy_outline();
-
-    float color[4];
-    make_premul_color(color, theme.outline.r, theme.outline.g, theme.outline.b, 0.75f);
-
-    int w = std::max(1, box.width);
-    int h = std::max(1, box.height);
-
-    // 0: top, 1: bottom, 2: left, 3: right
-    outline[0] = wlr_scene_rect_create(parent, w, 1, color);
-    outline[1] = wlr_scene_rect_create(parent, w, 1, color);
-    outline[2] = wlr_scene_rect_create(parent, 1, h, color);
-    outline[3] = wlr_scene_rect_create(parent, 1, h, color);
-
-    wlr_scene_node_set_position(&outline[0]->node, box.x, box.y);
-    wlr_scene_node_set_position(&outline[1]->node, box.x, box.y + h - 1);
-    wlr_scene_node_set_position(&outline[2]->node, box.x, box.y);
-    wlr_scene_node_set_position(&outline[3]->node, box.x + w - 1, box.y);
-}
-
-void WindowThumbnail::update_outline(const OverviewTheme& theme) {
-    float color[4];
-    int th = (is_hovered || is_selected) ? 2 : 1;
-    if (is_hovered || is_selected) {
-        make_premul_color(color, theme.primary.r, theme.primary.g, theme.primary.b, theme.primary.a);
-    } else {
-        make_premul_color(color, theme.outline.r, theme.outline.g, theme.outline.b, 0.70f);
-    }
-
-    int w = std::max(1, box.width);
-    int h = std::max(1, box.height);
-
-    if (outline[0]) {
-        wlr_scene_rect_set_color(outline[0], color);
-        wlr_scene_rect_set_size(outline[0], w, th);
-        wlr_scene_node_set_position(&outline[0]->node, box.x, box.y);
-    }
-    if (outline[1]) {
-        wlr_scene_rect_set_color(outline[1], color);
-        wlr_scene_rect_set_size(outline[1], w, th);
-        wlr_scene_node_set_position(&outline[1]->node, box.x, box.y + h - th);
-    }
-    if (outline[2]) {
-        wlr_scene_rect_set_color(outline[2], color);
-        wlr_scene_rect_set_size(outline[2], th, h);
-        wlr_scene_node_set_position(&outline[2]->node, box.x, box.y);
-    }
-    if (outline[3]) {
-        wlr_scene_rect_set_color(outline[3], color);
-        wlr_scene_rect_set_size(outline[3], th, h);
-        wlr_scene_node_set_position(&outline[3]->node, box.x + w - th, box.y);
-    }
-}
-
-void WindowThumbnail::destroy_outline() {
-    for (int i = 0; i < 4; ++i) {
-        if (outline[i]) {
-            wlr_scene_node_destroy(&outline[i]->node);
-            outline[i] = nullptr;
+    if (!is_hovered && !is_selected) {
+        if (highlight_scene_buf) {
+            wlr_scene_node_set_enabled(&highlight_scene_buf->node, false);
         }
+        return;
+    }
+
+    int bw = std::max(1, box.width);
+    int bh = std::max(1, box.height);
+
+    if (!highlight_buf || highlight_buf->get_width() != bw || highlight_buf->get_height() != bh) {
+        if (highlight_scene_buf) {
+            wlr_scene_node_destroy(&highlight_scene_buf->node);
+            highlight_scene_buf = nullptr;
+        }
+        if (highlight_buf) {
+            highlight_buf->drop();
+            highlight_buf = nullptr;
+        }
+        highlight_buf = OverviewCairoBuffer::create(bw, bh);
+    }
+    if (!highlight_buf) return;
+
+    highlight_buf->clear();
+    cairo_t* cr = highlight_buf->get_cr();
+
+    double th = 2.0;
+    double half_th = th / 2.0;
+    double draw_w = std::max(1.0, (double)bw - th);
+    double draw_h = std::max(1.0, (double)bh - th);
+    double draw_r = std::max(0.0, (double)corner_radius - half_th);
+
+    draw_rounded_rectangle(cr, half_th, half_th, draw_w, draw_h, draw_r);
+    cairo_set_source_rgba(cr, theme.primary.r, theme.primary.g, theme.primary.b, theme.primary.a);
+    cairo_set_line_width(cr, th);
+    cairo_stroke(cr);
+
+    if (!highlight_scene_buf) {
+        highlight_scene_buf = wlr_scene_buffer_create(parent, highlight_buf->get_wlr_buffer());
+    } else {
+        wlr_scene_buffer_set_buffer(highlight_scene_buf, highlight_buf->get_wlr_buffer());
+        wlr_scene_node_set_enabled(&highlight_scene_buf->node, true);
+    }
+    wlr_scene_node_set_position(&highlight_scene_buf->node, box.x, box.y);
+}
+
+void WindowThumbnail::destroy_highlight() {
+    if (highlight_scene_buf) {
+        wlr_scene_node_destroy(&highlight_scene_buf->node);
+        highlight_scene_buf = nullptr;
+    }
+    if (highlight_buf) {
+        highlight_buf->drop();
+        highlight_buf = nullptr;
     }
 }
 
 void WorkspaceCard::create_decorations(struct wlr_scene_tree* bg_tree, struct wlr_scene_tree* overlay_tree,
                                        const OverviewTheme& theme, size_t orig_active_ws) {
     destroy_nodes();
+
+    int r = OverviewConfig::get().corner_radius();
 
     // 1. Workspace card drop shadow
     if (OverviewConfig::get().shadow()) {
@@ -82,7 +93,7 @@ void WorkspaceCard::create_decorations(struct wlr_scene_tree* bg_tree, struct wl
         make_premul_color(s_color, sc.r, sc.g, sc.b, sc.a);
 
         float sigma = OverviewConfig::get().shadow_blur();
-        int radius = OverviewConfig::get().shadow_radius();
+        int radius = (r > 0) ? r : OverviewConfig::get().shadow_radius();
         int pad = static_cast<int>(std::ceil(std::max(4.0f, sigma * 2.5f)));
 
         shadow = wlr_scene_shadow_create(bg_tree, card_box.width + 2 * pad, card_box.height + 2 * pad,
@@ -99,63 +110,71 @@ void WorkspaceCard::create_decorations(struct wlr_scene_tree* bg_tree, struct wl
         }
     }
 
-    // 2. Workspace background canvas
+    // 2. Workspace background canvas with subtle corner rounding
     float bg_color[4];
     make_premul_color(bg_color, theme.surface.r, theme.surface.g, theme.surface.b, theme.surface.a);
     bg_rect = wlr_scene_rect_create(bg_tree, card_box.width, card_box.height, bg_color);
     wlr_scene_node_set_position(&bg_rect->node, card_box.x, card_box.y);
-
-    // 3. Workspace card border
-    int th = (ws_id == orig_active_ws) ? 2 : 1;
-    float b_color[4];
-    if (ws_id == orig_active_ws) {
-        make_premul_color(b_color, theme.primary.r, theme.primary.g, theme.primary.b, theme.primary.a);
-    } else {
-        make_premul_color(b_color, theme.outline.r, theme.outline.g, theme.outline.b, theme.outline.a);
+    if (r > 0 && bg_rect) {
+        wlr_scene_rect_set_corner_radius(bg_rect, r);
     }
 
-    borders[0] = wlr_scene_rect_create(overlay_tree, card_box.width, th, b_color);
-    borders[1] = wlr_scene_rect_create(overlay_tree, card_box.width, th, b_color);
-    borders[2] = wlr_scene_rect_create(overlay_tree, th, card_box.height, b_color);
-    borders[3] = wlr_scene_rect_create(overlay_tree, th, card_box.height, b_color);
-
-    wlr_scene_node_set_position(&borders[0]->node, card_box.x, card_box.y);
-    wlr_scene_node_set_position(&borders[1]->node, card_box.x, card_box.y + card_box.height - th);
-    wlr_scene_node_set_position(&borders[2]->node, card_box.x, card_box.y);
-    wlr_scene_node_set_position(&borders[3]->node, card_box.x + card_box.width - th, card_box.y);
+    // 3. Workspace card border (only shown when active or hovered)
+    is_active = (ws_id == orig_active_ws);
+    update_border(overlay_tree, theme);
 }
 
-void WorkspaceCard::update_border(const OverviewTheme& theme) {
-    float color[4];
-    int th = (is_active || is_hovered) ? 2 : 1;
-    if (is_active) {
-        make_premul_color(color, theme.primary.r, theme.primary.g, theme.primary.b, theme.primary.a);
-    } else if (is_hovered) {
-        make_premul_color(color, theme.outline_variant.r, theme.outline_variant.g, theme.outline_variant.b, 0.95f);
-    } else {
-        make_premul_color(color, theme.outline.r, theme.outline.g, theme.outline.b, theme.outline.a);
+void WorkspaceCard::update_border(struct wlr_scene_tree* overlay_tree, const OverviewTheme& theme) {
+    if (!overlay_tree) return;
+    bool show_border = (is_active || is_hovered);
+    if (!show_border) {
+        if (border_scene_buf) {
+            wlr_scene_node_set_enabled(&border_scene_buf->node, false);
+        }
+        return;
     }
 
-    if (borders[0]) {
-        wlr_scene_rect_set_color(borders[0], color);
-        wlr_scene_rect_set_size(borders[0], card_box.width, th);
-        wlr_scene_node_set_position(&borders[0]->node, card_box.x, card_box.y);
+    int bw = std::max(1, card_box.width);
+    int bh = std::max(1, card_box.height);
+
+    if (!border_buf || border_buf->get_width() != bw || border_buf->get_height() != bh) {
+        if (border_scene_buf) {
+            wlr_scene_node_destroy(&border_scene_buf->node);
+            border_scene_buf = nullptr;
+        }
+        if (border_buf) {
+            border_buf->drop();
+            border_buf = nullptr;
+        }
+        border_buf = OverviewCairoBuffer::create(bw, bh);
     }
-    if (borders[1]) {
-        wlr_scene_rect_set_color(borders[1], color);
-        wlr_scene_rect_set_size(borders[1], card_box.width, th);
-        wlr_scene_node_set_position(&borders[1]->node, card_box.x, card_box.y + card_box.height - th);
+    if (!border_buf) return;
+
+    border_buf->clear();
+    cairo_t* cr = border_buf->get_cr();
+
+    double th = 2.0;
+    double half_th = th / 2.0;
+    int r = OverviewConfig::get().corner_radius();
+    double draw_r = std::max(0.0, (double)r - half_th);
+
+    draw_rounded_rectangle(cr, half_th, half_th, bw - th, bh - th, draw_r);
+
+    if (is_active) {
+        cairo_set_source_rgba(cr, theme.primary.r, theme.primary.g, theme.primary.b, theme.primary.a);
+    } else {
+        cairo_set_source_rgba(cr, theme.outline_variant.r, theme.outline_variant.g, theme.outline_variant.b, 0.95);
     }
-    if (borders[2]) {
-        wlr_scene_rect_set_color(borders[2], color);
-        wlr_scene_rect_set_size(borders[2], th, card_box.height);
-        wlr_scene_node_set_position(&borders[2]->node, card_box.x, card_box.y);
+    cairo_set_line_width(cr, th);
+    cairo_stroke(cr);
+
+    if (!border_scene_buf) {
+        border_scene_buf = wlr_scene_buffer_create(overlay_tree, border_buf->get_wlr_buffer());
+    } else {
+        wlr_scene_buffer_set_buffer(border_scene_buf, border_buf->get_wlr_buffer());
+        wlr_scene_node_set_enabled(&border_scene_buf->node, true);
     }
-    if (borders[3]) {
-        wlr_scene_rect_set_color(borders[3], color);
-        wlr_scene_rect_set_size(borders[3], th, card_box.height);
-        wlr_scene_node_set_position(&borders[3]->node, card_box.x + card_box.width - th, card_box.y);
-    }
+    wlr_scene_node_set_position(&border_scene_buf->node, card_box.x, card_box.y);
 }
 
 void WorkspaceCard::render_header(struct wlr_scene_tree* overlay_tree, const OverviewTheme& theme,
@@ -235,33 +254,15 @@ void WorkspaceCard::set_alpha(float alpha) {
         make_premul_color(bg_color, theme.surface.r, theme.surface.g, theme.surface.b, theme.surface.a * alpha);
         wlr_scene_rect_set_color(bg_rect, bg_color);
     }
-    float b_color[4];
-    if (is_active) {
-        make_premul_color(b_color, theme.primary.r, theme.primary.g, theme.primary.b, theme.primary.a * alpha);
-    } else if (is_hovered) {
-        make_premul_color(b_color, theme.outline_variant.r, theme.outline_variant.g, theme.outline_variant.b, 0.95f * alpha);
-    } else {
-        make_premul_color(b_color, theme.outline.r, theme.outline.g, theme.outline.b, theme.outline.a * alpha);
-    }
-    for (int i = 0; i < 4; ++i) {
-        if (borders[i]) {
-            wlr_scene_rect_set_color(borders[i], b_color);
-        }
+    if (border_scene_buf) {
+        wlr_scene_buffer_set_opacity(border_scene_buf, alpha);
     }
     if (header_scene_buf) {
         wlr_scene_buffer_set_opacity(header_scene_buf, alpha);
     }
     for (auto& wt : window_thumbnails) {
-        float o_color[4];
-        if (wt.is_hovered || wt.is_selected) {
-            make_premul_color(o_color, theme.primary.r, theme.primary.g, theme.primary.b, theme.primary.a * alpha);
-        } else {
-            make_premul_color(o_color, theme.outline.r, theme.outline.g, theme.outline.b, 0.70f * alpha);
-        }
-        for (int i = 0; i < 4; ++i) {
-            if (wt.outline[i]) {
-                wlr_scene_rect_set_color(wt.outline[i], o_color);
-            }
+        if (wt.highlight_scene_buf) {
+            wlr_scene_buffer_set_opacity(wt.highlight_scene_buf, alpha);
         }
     }
 }
@@ -271,11 +272,13 @@ void WorkspaceCard::destroy_nodes() {
         wlr_scene_node_destroy(&shadow->node);
         shadow = nullptr;
     }
-    for (int i = 0; i < 4; ++i) {
-        if (borders[i]) {
-            wlr_scene_node_destroy(&borders[i]->node);
-            borders[i] = nullptr;
-        }
+    if (border_scene_buf) {
+        wlr_scene_node_destroy(&border_scene_buf->node);
+        border_scene_buf = nullptr;
+    }
+    if (border_buf) {
+        border_buf->drop();
+        border_buf = nullptr;
     }
     if (bg_rect) {
         wlr_scene_node_destroy(&bg_rect->node);
@@ -290,7 +293,7 @@ void WorkspaceCard::destroy_nodes() {
         header_buf = nullptr;
     }
     for (auto& wt : window_thumbnails) {
-        wt.destroy_outline();
+        wt.destroy_highlight();
     }
     window_thumbnails.clear();
 }

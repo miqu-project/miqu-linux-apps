@@ -68,10 +68,7 @@ void OverviewState::render_top_banner() {
     cairo_close_path(cr);
 
     cairo_set_source_rgba(cr, theme.surface.r, theme.surface.g, theme.surface.b, 0.92);
-    cairo_fill_preserve(cr);
-    cairo_set_source_rgba(cr, theme.outline.r, theme.outline.g, theme.outline.b, 0.80);
-    cairo_set_line_width(cr, 1.0);
-    cairo_stroke(cr);
+    cairo_fill(cr);
 
     // Text
     PangoLayout* layout = pango_cairo_create_layout(cr);
@@ -277,8 +274,9 @@ void OverviewState::open() {
                     wt.view = v;
                     wt.ws_id = ws_id;
                     wt.box = {card_x + vx, card_y + vy, vw, vh};
-                    wt.create_outline(m_overlay_tree, theme);
-                    card.window_thumbnails.push_back(wt);
+                    int base_r = v->is_fullscreen() ? 0 : OverviewConfig::get().corner_radius();
+                    wt.corner_radius = static_cast<int>(std::round(static_cast<double>(base_r) * scale));
+                    card.window_thumbnails.push_back(std::move(wt));
                 }
             }
 
@@ -486,7 +484,7 @@ void OverviewState::handle_view_destroyed(miquland::View* view) {
     for (auto& card : m_cards) {
         for (auto it = card.window_thumbnails.begin(); it != card.window_thumbnails.end(); ) {
             if (it->view == view) {
-                it->destroy_outline();
+                it->destroy_highlight();
                 it = card.window_thumbnails.erase(it);
             } else {
                 ++it;
@@ -517,7 +515,7 @@ void OverviewState::select_relative(int delta_x, int delta_y) {
     const auto& theme = OverviewConfig::get().theme();
     for (auto& card : m_cards) {
         card.is_active = (card.ws_id == m_selected_ws);
-        card.update_border(theme);
+        card.update_border(m_overlay_tree, theme);
     }
 }
 
@@ -554,15 +552,13 @@ bool OverviewState::handle_pointer_motion(double lx, double ly) {
         bool hovered = wlr_box_contains_point(&card.card_box, lx, ly);
         if (hovered != card.is_hovered) {
             card.is_hovered = hovered;
-            card.update_border(theme);
+            card.update_border(m_overlay_tree, theme);
         }
-        if (hovered) {
-            for (auto& wt : card.window_thumbnails) {
-                bool win_h = wlr_box_contains_point(&wt.box, lx, ly);
-                if (win_h != wt.is_hovered) {
-                    wt.is_hovered = win_h;
-                    wt.update_outline(theme);
-                }
+        for (auto& wt : card.window_thumbnails) {
+            bool win_h = hovered && wlr_box_contains_point(&wt.box, lx, ly);
+            if (win_h != wt.is_hovered) {
+                wt.is_hovered = win_h;
+                wt.update_highlight(m_overlay_tree, theme);
             }
         }
     }
@@ -644,13 +640,13 @@ void OverviewState::refresh_appearance() {
 
     auto* wm = m_api ? m_api->get_workspace_manager() : nullptr;
     for (auto& card : m_cards) {
-        card.update_border(theme);
+        card.update_border(m_overlay_tree, theme);
         card.set_alpha(1.0f);
         miquland::Workspace* ws = wm ? wm->get_workspace(card.ws_id) : nullptr;
         size_t win_count = ws ? ws->total_view_count() : 0;
         card.render_header(m_overlay_tree, theme, win_count, card.ws_id == m_orig_active_ws);
         for (auto& wt : card.window_thumbnails) {
-            wt.update_outline(theme);
+            wt.update_highlight(m_overlay_tree, theme);
         }
     }
 
