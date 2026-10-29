@@ -519,8 +519,10 @@ void TaskbarView::sync_windows() {
     if (cfg.group_apps) {
         std::unordered_map<std::string, size_t> group_index;
         for (const auto& win : m_windows) {
+            if (win.app_id.empty() && win.title.empty()) {
+                continue;
+            }
             std::string key = !win.app_id.empty() ? win.app_id : win.title;
-            if (key.empty()) key = "unknown";
 
             auto it = group_index.find(key);
             if (it != group_index.end()) {
@@ -532,6 +534,9 @@ void TaskbarView::sync_windows() {
         }
     } else {
         for (const auto& win : m_windows) {
+            if (win.app_id.empty() && win.title.empty()) {
+                continue;
+            }
             grouped_list.push_back({win});
         }
     }

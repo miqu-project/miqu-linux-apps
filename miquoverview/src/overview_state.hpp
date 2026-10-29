@@ -10,6 +10,8 @@
 namespace miquland {
     class PluginAPI;
     class View;
+    struct SwipeEvent;
+    struct TouchGestureEvent;
 }
 
 namespace miquoverview {
@@ -37,6 +39,8 @@ public:
     bool handle_pointer_motion(double lx, double ly);
     bool handle_pointer_axis(double lx, double ly, double delta_x, double delta_y);
     bool handle_key(uint32_t keysym, uint32_t modifiers, bool pressed);
+    bool handle_touchpad_swipe(const miquland::SwipeEvent& event);
+    bool handle_touch_gesture(const miquland::TouchGestureEvent& event);
 
 private:
     OverviewState() = default;
@@ -57,6 +61,10 @@ private:
     size_t m_orig_active_ws = 1;
     size_t m_selected_ws = 1;
     int m_cols = 2;
+
+    double m_accum_swipe_dx = 0.0;
+    double m_accum_swipe_dy = 0.0;
+    bool m_swipe_action_triggered = false;
 
     struct wlr_box m_screen = {0, 0, 1920, 1080}; // Usable screen geometry
 

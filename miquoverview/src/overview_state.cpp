@@ -103,6 +103,15 @@ void OverviewState::open() {
     m_orig_active_ws = wm->get_active_workspace_id();
     m_selected_ws = m_orig_active_ws;
 
+    m_accum_swipe_dx = 0.0;
+    m_accum_swipe_dy = 0.0;
+    m_swipe_action_triggered = false;
+
+    if (m_api) {
+        m_api->clear_pointer_focus();
+        m_api->set_cursor_icon("default");
+    }
+
     // 1. Usable screen area (respects exclusive reservations by miqubar, etc.)
     m_screen = om->get_primary_usable_geometry();
     if (m_screen.width <= 0 || m_screen.height <= 0) {
@@ -468,6 +477,11 @@ void OverviewState::finish_close(size_t target_ws_id, miquland::View* focus_view
         }
         wm->recalculate_layout();
     }
+
+    if (m_api) {
+        m_api->set_cursor_icon("default");
+        m_api->recheck_cursor_focus();
+    }
 }
 
 void OverviewState::handle_view_destroyed(miquland::View* view) {
@@ -547,6 +561,10 @@ bool OverviewState::handle_pointer_motion(double lx, double ly) {
     if (!m_is_open) return false;
     if (m_is_closing) return true;
 
+    if (m_api) {
+        m_api->set_cursor_icon("default");
+    }
+
     const auto& theme = OverviewConfig::get().theme();
     for (auto& card : m_cards) {
         bool hovered = wlr_box_contains_point(&card.card_box, lx, ly);
@@ -612,6 +630,107 @@ bool OverviewState::handle_key(uint32_t keysym, uint32_t modifiers, bool pressed
     }
     if (keysym == XKB_KEY_Down || keysym == XKB_KEY_j) {
         select_relative(0, 1);
+        return true;
+    }
+
+    return true;
+}
+
+bool OverviewState::handle_touchpad_swipe(const miquland::SwipeEvent& event) {
+    if (!m_is_open) return false;
+    if (m_is_closing) return true;
+
+    if (event.state == miquland::SwipeState::Begin) {
+        m_accum_swipe_dx = 0.0;
+        m_accum_swipe_dy = 0.0;
+        m_swipe_action_triggered = false;
+        return true;
+    }
+
+    if (event.state == miquland::SwipeState::Update) {
+        m_accum_swipe_dx += event.dx;
+        m_accum_swipe_dy += event.dy;
+
+        if (m_swipe_action_triggered) {
+            return true;
+        }
+
+        constexpr double SWIPE_HORIZ_THRESHOLD = 18.0;
+        constexpr double SWIPE_VERT_THRESHOLD = 24.0;
+
+        // Horizontal 3-finger swipe: navigate between workspace cards
+        if (std::abs(m_accum_swipe_dx) >= SWIPE_HORIZ_THRESHOLD &&
+            std::abs(m_accum_swipe_dx) > std::abs(m_accum_swipe_dy) * 1.2) {
+            if (m_accum_swipe_dx > 0) {
+                select_relative(1, 0);
+            } else {
+                select_relative(-1, 0);
+            }
+            m_swipe_action_triggered = true;
+            return true;
+        }
+
+        // Vertical 3-finger swipe: dismiss overview to selected workspace
+        if (std::abs(m_accum_swipe_dy) >= SWIPE_VERT_THRESHOLD &&
+            std::abs(m_accum_swipe_dy) > std::abs(m_accum_swipe_dx) * 1.2) {
+            close(m_selected_ws);
+            m_swipe_action_triggered = true;
+            return true;
+        }
+
+        return true;
+    }
+
+    if (event.state == miquland::SwipeState::End) {
+        m_accum_swipe_dx = 0.0;
+        m_accum_swipe_dy = 0.0;
+        m_swipe_action_triggered = false;
+        return true;
+    }
+
+    return true;
+}
+
+bool OverviewState::handle_touch_gesture(const miquland::TouchGestureEvent& event) {
+    if (!m_is_open) return false;
+    if (m_is_closing) return true;
+
+    if (event.state == miquland::SwipeState::Begin) {
+        m_swipe_action_triggered = false;
+        return true;
+    }
+
+    if (event.state == miquland::SwipeState::Update) {
+        if (m_swipe_action_triggered) {
+            return true;
+        }
+
+        constexpr double TOUCH_HORIZ_THRESHOLD = 30.0;
+        constexpr double TOUCH_VERT_THRESHOLD = 40.0;
+
+        if (std::abs(event.avg_dx) >= TOUCH_HORIZ_THRESHOLD &&
+            std::abs(event.avg_dx) > std::abs(event.avg_dy) * 1.2) {
+            if (event.avg_dx > 0) {
+                select_relative(1, 0);
+            } else {
+                select_relative(-1, 0);
+            }
+            m_swipe_action_triggered = true;
+            return true;
+        }
+
+        if (std::abs(event.avg_dy) >= TOUCH_VERT_THRESHOLD &&
+            std::abs(event.avg_dy) > std::abs(event.avg_dx) * 1.2) {
+            close(m_selected_ws);
+            m_swipe_action_triggered = true;
+            return true;
+        }
+
+        return true;
+    }
+
+    if (event.state == miquland::SwipeState::End) {
+        m_swipe_action_triggered = false;
         return true;
     }
 

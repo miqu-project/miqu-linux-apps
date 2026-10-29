@@ -45,6 +45,14 @@ MIQU_PLUGIN_EXPORT miquland::PluginInfo* miqu_plugin_init(miquland::PluginAPI* a
         return OverviewState::get().handle_key(keysym, modifiers, pressed);
     });
 
+    api->register_touchpad_swipe_hook([](const miquland::SwipeEvent& event) -> bool {
+        return OverviewState::get().handle_touchpad_swipe(event);
+    });
+
+    api->register_touch_gesture_hook([](const miquland::TouchGestureEvent& event) -> bool {
+        return OverviewState::get().handle_touch_gesture(event);
+    });
+
     // Lifecycle hook: eliminate dangling pointers if a window crashes mid-overview
     api->register_view_destroy_hook([](miquland::View* view) {
         OverviewState::get().handle_view_destroyed(view);
