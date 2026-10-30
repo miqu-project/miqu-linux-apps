@@ -113,8 +113,8 @@ bool LauncherWindow::init() {
         ->build();
     m_view_toggle_btn->set_padding(6);
 
-    // 5. Populate initial mode BEFORE constructing the Wayland window
-    switch_mode(m_active_mode_index);
+    // 5. Initial mode will be populated immediately after window surface is mapped
+    // to allow Frame 0 to commit instantly.
 
     // 6. Layout assembly
     int card_inner_w = std::max(200, m_config.width - (m_config.edge_padding * 2));
@@ -215,7 +215,12 @@ bool LauncherWindow::init() {
         })
         ->build();
 
-    return m_window != nullptr;
+    if (!m_window) return false;
+
+    // Populate initial mode items now that Frame 0 surface has been committed
+    switch_mode(m_active_mode_index);
+
+    return true;
 }
 
 void LauncherWindow::switch_mode(size_t mode_index) {

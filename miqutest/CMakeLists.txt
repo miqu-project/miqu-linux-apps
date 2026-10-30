@@ -15,7 +15,6 @@ pkg_check_modules(MIQUTOOLKIT REQUIRED IMPORTED_TARGET miqutoolkit)
 
 add_executable(miqutest
     src/main.cpp
-    src/test_app.cpp
 )
 
 target_include_directories(miqutest PRIVATE

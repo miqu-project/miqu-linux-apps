@@ -115,6 +115,8 @@ CliParser::ParseResult CliParser::parse(int argc, char* argv[], LauncherConfig& 
             out_config.icon_theme = argv[++i];
             Config::get()->metrics.icon_theme = out_config.icon_theme;
             Config::get()->notify_changed();
+        } else if (arg == "--auto-exit") {
+            // Handled in main() for benchmarking
         } else {
             std::cerr << "Unknown option: " << arg << "\nRun '" << argv[0] << " --help' for usage." << std::endl;
             return ParseResult::Error;

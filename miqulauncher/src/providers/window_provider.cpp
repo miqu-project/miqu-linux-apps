@@ -1,5 +1,6 @@
 #include "window_provider.hpp"
 #include <miqutoolkit/view/image_view.hpp>
+#include <miqutoolkit/system/app_manager.hpp>
 #include <algorithm>
 
 namespace miqu {
@@ -33,8 +34,17 @@ std::vector<LauncherItem> WindowProvider::get_items(const std::string& query) co
         }
 
         item.icon_name = win.app_id;
-        // Do not eagerly resolve icon path from disk; ImageView resolves on demand
         item.icon_path = "";
+        if (!win.app_id.empty()) {
+            const auto& apps = AppManager::get()->get_installed_apps();
+            for (const auto& app : apps) {
+                if (!app.icon_path.empty() && (app.id == win.app_id || app.id == (win.app_id + ".desktop") ||
+                    app.icon_name == win.app_id)) {
+                    item.icon_path = app.icon_path;
+                    break;
+                }
+            }
+        }
         items.push_back(std::move(item));
     }
 
