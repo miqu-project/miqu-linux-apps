@@ -22,15 +22,36 @@ SearchAggregator::SearchAggregator(
 std::vector<LauncherItem> SearchAggregator::query(const std::string& search_text) {
     std::vector<LauncherItem> results;
     std::unordered_set<std::string> seen_keys;
+    std::unordered_set<std::string> seen_app_binaries;
+
+    auto extract_bin_name = [](const std::string& cmd) -> std::string {
+        if (cmd.empty()) return "";
+        std::string bin = cmd;
+        size_t sp = bin.find_first_of(" \t");
+        if (sp != std::string::npos) bin = bin.substr(0, sp);
+        size_t sl = bin.find_last_of('/');
+        if (sl != std::string::npos) bin = bin.substr(sl + 1);
+        return to_lower(bin);
+    };
 
     auto add_unique = [&](LauncherItem item) {
-        std::string key = to_lower(item.title);
+        std::string key;
         if (item.category == ItemCategory::App && !item.id.empty()) {
             key = "app:" + item.id;
-        } else if (item.category == ItemCategory::Window) {
+        } else if (item.category == ItemCategory::Window && !item.id.empty()) {
             key = "win:" + item.id;
-        } else if (item.category == ItemCategory::File) {
+        } else if (item.category == ItemCategory::Workspace && !item.id.empty()) {
+            key = "ws:" + item.id;
+        } else if (item.category == ItemCategory::File && !item.exec_cmd.empty()) {
             key = "file:" + item.exec_cmd;
+        } else if (item.category == ItemCategory::Run && !item.exec_cmd.empty()) {
+            key = "run:" + item.exec_cmd;
+        } else if (!item.id.empty()) {
+            key = "id:" + item.id;
+        } else if (!item.exec_cmd.empty()) {
+            key = "exec:" + item.exec_cmd;
+        } else {
+            key = to_lower(item.title);
         }
 
         if (seen_keys.find(key) != seen_keys.end()) return false;
@@ -57,6 +78,8 @@ std::vector<LauncherItem> SearchAggregator::query(const std::string& search_text
             for (auto& a : apps) {
                 a.category = ItemCategory::App;
                 a.badge = "App";
+                std::string bin = extract_bin_name(a.exec_cmd);
+                if (!bin.empty()) seen_app_binaries.insert(bin);
                 if (add_unique(std::move(a))) {
                     if (++count >= 8) break;
                 }
@@ -106,6 +129,8 @@ std::vector<LauncherItem> SearchAggregator::query(const std::string& search_text
         for (auto& a : apps) {
             a.category = ItemCategory::App;
             a.badge = "App";
+            std::string bin = extract_bin_name(a.exec_cmd);
+            if (!bin.empty()) seen_app_binaries.insert(bin);
             add_unique(std::move(a));
         }
     }
@@ -133,12 +158,13 @@ std::vector<LauncherItem> SearchAggregator::query(const std::string& search_text
         for (auto& b : bins) {
             // Deduplicate if binary name matches an app already present
             std::string lower_bin = to_lower(b.title);
-            if (seen_keys.find(lower_bin) == seen_keys.end()) {
-                b.category = ItemCategory::Run;
-                b.badge = "Run";
-                if (add_unique(std::move(b))) {
-                    if (++bin_limit >= 12) break;
-                }
+            if (seen_app_binaries.find(lower_bin) != seen_app_binaries.end()) {
+                continue;
+            }
+            b.category = ItemCategory::Run;
+            b.badge = "Run";
+            if (add_unique(std::move(b))) {
+                if (++bin_limit >= 12) break;
             }
         }
     }
