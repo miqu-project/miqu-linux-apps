@@ -5,6 +5,10 @@
 #include "miqutoolkit/view/card_view.hpp"
 #include "miqutoolkit/view/linear_layout.hpp"
 #include <pango/pangocairo.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include <glob.h>
 #include <cmath>
 #include <iostream>
 
@@ -24,7 +28,9 @@ WorkspaceButtonView::WorkspaceButtonView() {
     set_on_click_listener([this]() {
         if (m_flyout_window) {
             hide_flyout();
-        } else {
+            return;
+        }
+        if (!trigger_overview()) {
             show_flyout();
         }
     });
@@ -306,6 +312,97 @@ void WorkspaceButtonView::hide_flyout() {
         m_flyout_window->close();
         m_flyout_window = nullptr;
     }
+}
+
+#pragma pack(push, 1)
+struct IpcHeader {
+    char magic[4];
+    uint32_t type;
+    uint32_t payload_len;
+};
+#pragma pack(pop)
+
+bool WorkspaceButtonView::trigger_overview() {
+    const char* runtime_dir = getenv("XDG_RUNTIME_DIR");
+    const char* wayland_display = getenv("WAYLAND_DISPLAY");
+    std::string sock_path;
+
+    if (runtime_dir && wayland_display) {
+        std::string cand = std::string(runtime_dir) + "/miquland-" + wayland_display + ".sock";
+        if (access(cand.c_str(), F_OK) == 0) {
+            sock_path = cand;
+        }
+    }
+
+    if (sock_path.empty() && runtime_dir) {
+        glob_t g;
+        if (glob((std::string(runtime_dir) + "/miquland-*.sock").c_str(), GLOB_NOSORT, nullptr, &g) == 0) {
+            if (g.gl_pathc > 0 && g.gl_pathv[0]) sock_path = g.gl_pathv[0];
+            globfree(&g);
+        }
+    }
+
+    if (sock_path.empty()) {
+        return false;
+    }
+
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    struct timeval tv{};
+    tv.tv_sec = 0;
+    tv.tv_usec = 150000;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+    struct sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path) - 1);
+
+    if (connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) != 0) {
+        close(fd);
+        return false;
+    }
+
+    std::string msg = "dispatch overview_toggle\n";
+    ssize_t ret = write(fd, msg.data(), msg.size());
+    if (ret != static_cast<ssize_t>(msg.size())) {
+        close(fd);
+        return false;
+    }
+
+    IpcHeader hdr{};
+    size_t total = 0;
+    while (total < sizeof(hdr)) {
+        ssize_t n = read(fd, reinterpret_cast<char*>(&hdr) + total, sizeof(hdr) - total);
+        if (n <= 0) {
+            close(fd);
+            return false;
+        }
+        total += n;
+    }
+
+    if (memcmp(hdr.magic, "MIQU", 4) != 0 || hdr.payload_len == 0 || hdr.payload_len > 65536) {
+        close(fd);
+        return false;
+    }
+
+    std::string payload;
+    payload.resize(hdr.payload_len);
+    total = 0;
+    while (total < hdr.payload_len) {
+        ssize_t n = read(fd, payload.data() + total, hdr.payload_len - total);
+        if (n <= 0) {
+            close(fd);
+            return false;
+        }
+        total += n;
+    }
+    close(fd);
+
+    return (payload.find("\"status\":\"ok\"") != std::string::npos);
 }
 
 } // namespace miqubar

@@ -59,6 +59,9 @@ void CliParser::print_help(const char* prog_name) {
               << "  --no-dim             Disable dimming background overlay outside window (default)\n"
               << "  --show-subtitles     Show item subtitles across all launcher modes (default)\n"
               << "  --no-subtitles       Hide item subtitles across all launcher modes\n"
+              << "  -list, --list        Start in compact list view mode\n"
+              << "  -grid, --grid        Start in multi-column grid view mode\n"
+              << "  -view-mode <mode>    Override presentation mode (grid or list)\n"
               << "  -icon-theme <name>   Override active icon theme\n"
               << "  -h, --help           Show this help message and exit\n"
               << "  -v, --version        Show version information and exit\n"
@@ -115,6 +118,19 @@ CliParser::ParseResult CliParser::parse(int argc, char* argv[], LauncherConfig& 
             out_config.icon_theme = argv[++i];
             Config::get()->metrics.icon_theme = out_config.icon_theme;
             Config::get()->notify_changed();
+        } else if (arg == "-list" || arg == "--list") {
+            out_config.view_mode = "list";
+            out_config.search_view_mode = "list";
+        } else if (arg == "-grid" || arg == "--grid") {
+            out_config.view_mode = "grid";
+            out_config.search_view_mode = "grid";
+        } else if ((arg == "-view-mode" || arg == "--view-mode" || arg == "-view" || arg == "--view") && i + 1 < argc) {
+            std::string mode_val = argv[++i];
+            std::transform(mode_val.begin(), mode_val.end(), mode_val.begin(), ::tolower);
+            if (mode_val == "list" || mode_val == "grid") {
+                out_config.view_mode = mode_val;
+                out_config.search_view_mode = mode_val;
+            }
         } else if (arg == "--auto-exit") {
             // Handled in main() for benchmarking
         } else {

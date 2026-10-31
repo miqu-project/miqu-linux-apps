@@ -24,6 +24,8 @@ public:
     void sync_workspaces();
 
 private:
+    bool trigger_overview();
+
     size_t m_active_id = 1;
     std::vector<miqu::WorkspaceInfo> m_workspaces;
     std::shared_ptr<miqu::Window> m_flyout_window;

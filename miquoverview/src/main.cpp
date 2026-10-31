@@ -62,11 +62,58 @@ static bool send_ipc_command(const std::string& cmd) {
         return false;
     }
 
+    struct timeval tv{};
+    tv.tv_sec = 0;
+    tv.tv_usec = 150000;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
     // IPC command format: "dispatch <cmd>\n"
     std::string msg = "dispatch " + cmd + "\n";
     ssize_t ret = write(fd, msg.data(), msg.size());
+    if (ret != static_cast<ssize_t>(msg.size())) {
+        close(fd);
+        return false;
+    }
+
+#pragma pack(push, 1)
+    struct IpcHeader {
+        char magic[4];
+        uint32_t type;
+        uint32_t payload_len;
+    };
+#pragma pack(pop)
+
+    IpcHeader hdr{};
+    size_t total = 0;
+    while (total < sizeof(hdr)) {
+        ssize_t n = read(fd, reinterpret_cast<char*>(&hdr) + total, sizeof(hdr) - total);
+        if (n <= 0) {
+            close(fd);
+            return false;
+        }
+        total += n;
+    }
+
+    if (memcmp(hdr.magic, "MIQU", 4) != 0 || hdr.payload_len == 0 || hdr.payload_len > 65536) {
+        close(fd);
+        return false;
+    }
+
+    std::string payload;
+    payload.resize(hdr.payload_len);
+    total = 0;
+    while (total < hdr.payload_len) {
+        ssize_t n = read(fd, payload.data() + total, hdr.payload_len - total);
+        if (n <= 0) {
+            close(fd);
+            return false;
+        }
+        total += n;
+    }
     close(fd);
-    return ret == static_cast<ssize_t>(msg.size());
+
+    return payload.find("\"status\":\"ok\"") != std::string::npos;
 }
 
 int main(int argc, char* argv[]) {
