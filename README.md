@@ -37,6 +37,7 @@ This repository contains the integrated first-party desktop applications for the
 | [**`miqulock`**](./miqulock) | Security | Session locking utility implementing the Wayland `ext-session-lock-v1` protocol. |
 | [**`miquidle`**](./miquidle) | Daemon | Idle management daemon monitoring user activity via the Wayland `ext-idle-notify-v1` protocol. |
 | [**`miqupolkit`**](./miqupolkit) | Security | Native graphical Polkit authentication agent handling privilege escalation prompts. |
+| [**`miqufiles`**](./miqufiles) | App | Modern Yazi-style Miller columns file manager with instant preview (images, code/text, directories). |
 | [**`miqutest`**](./miqutest) | Sandbox | Interactive widget showcase and testing harness for developing `miqutoolkit` controls. |
 
 ---

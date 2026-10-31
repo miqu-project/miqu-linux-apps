@@ -81,7 +81,6 @@ public:
     void update_metrics();
 
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
-    bool on_scroll(double delta) override;
 
     int get_volume() const { return m_volume; }
     bool is_muted() const { return m_muted; }
@@ -97,8 +96,6 @@ class BrightnessModuleView : public miqu::Button {
 public:
     explicit BrightnessModuleView(std::function<void()> on_open_brightness);
     void update_metrics();
-
-    bool on_scroll(double delta) override;
 
     int get_brightness() const { return m_brightness; }
     void set_brightness(int pct);
@@ -155,12 +152,6 @@ private:
 class PowerButtonView : public miqu::Button {
 public:
     explicit PowerButtonView(std::function<void()> on_click = nullptr);
-};
-
-// Windows-style "Show Desktop" peek button on far right edge
-class PeekButtonView : public miqu::Button {
-public:
-    PeekButtonView();
 };
 
 } // namespace miqubar

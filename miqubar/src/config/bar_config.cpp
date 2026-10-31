@@ -143,7 +143,6 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "show_workspace_btn") show_workspace_btn = parse_bool(val);
         else if (key == "workspace_display") workspace_display = val;
         else if (key == "hover_flyout") hover_flyout = parse_bool(val);
-        else if (key == "scroll_switch") scroll_switch = parse_bool(val);
         else if (key == "show_search") show_search = parse_bool(val);
         else if (key == "search_style") search_style = val;
         else if (key == "search_cmd") search_cmd = val;
@@ -169,7 +168,6 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "show_dark_mode") show_dark_mode = parse_bool(val);
         else if (key == "show_notifications") show_notifications = parse_bool(val);
         else if (key == "show_clock") show_clock = parse_bool(val);
-        else if (key == "show_peek") show_peek = parse_bool(val);
         else if (key == "show_power") show_power = parse_bool(val);
         else if (key == "clock_stacked") clock_stacked = parse_bool(val);
         else if (key == "time_format") time_format = val;

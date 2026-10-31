@@ -68,7 +68,6 @@ private:
     std::shared_ptr<NotificationModuleView> m_notifications;
     std::shared_ptr<ClockModuleView> m_clock;
     std::shared_ptr<PowerButtonView> m_power;
-    std::shared_ptr<PeekButtonView> m_peek;
 
     std::shared_ptr<miqu::Window> m_network_win;
     std::shared_ptr<miqu::Window> m_bluetooth_win;

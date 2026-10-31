@@ -126,10 +126,6 @@ BarRootView::BarRootView() {
         });
         m_right_box->add_view(m_power);
     }
-    if (cfg.show_peek) {
-        m_peek = std::make_shared<PeekButtonView>();
-        m_right_box->add_view(m_peek);
-    }
     add_view(m_right_box);
 }
 
@@ -161,17 +157,9 @@ bool BarRootView::on_mouse_move(int lx, int ly, const miqu::Rect& bounds) {
     return miqu::CardView::on_mouse_move(lx, ly, bounds);
 }
 
-bool BarRootView::on_scroll(double delta) {
-    if (m_ws_btn && m_ws_btn->is_visible() && m_ws_btn->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
-        return m_ws_btn->on_scroll(delta);
-    }
-    if (m_volume && m_volume->is_visible() && m_volume->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
-        return m_volume->on_scroll(delta);
-    }
-    if (m_brightness && m_brightness->is_visible() && m_brightness->get_bounds().contains(m_last_mouse_x, m_last_mouse_y)) {
-        return m_brightness->on_scroll(delta);
-    }
-    return miqu::CardView::on_scroll(delta);
+bool BarRootView::on_scroll(double) {
+    // Zero scroll response across miqubar to prevent accidental touch/trackpad triggers
+    return false;
 }
 
 void BarRootView::toggle_network() {
@@ -462,7 +450,7 @@ void BarRootView::toggle_power() {
     bool is_top = (cfg.position == "top");
     uint32_t anchors = (is_top ? 1 : 2) | 8;
     miqu::Margin margin;
-    margin.right = 8 + (cfg.show_peek ? 10 : 0) + cfg.margin_right;
+    margin.right = 8 + cfg.margin_right;
     if (is_top) {
         margin.top = cfg.height + 8 + cfg.margin_top;
     } else {

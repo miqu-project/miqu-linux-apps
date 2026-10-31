@@ -308,35 +308,4 @@ void WorkspaceButtonView::hide_flyout() {
     }
 }
 
-bool WorkspaceButtonView::on_scroll(double delta) {
-    if (!BarConfig::get().scroll_switch) return false;
-    if (std::abs(delta) > 0.05) {
-        cycle_workspace(delta > 0 ? -1 : 1);
-        return true;
-    }
-    return false;
-}
-
-void WorkspaceButtonView::cycle_workspace(int delta) {
-    if (m_workspaces.empty()) return;
-    int cur_idx = 0;
-    for (size_t i = 0; i < m_workspaces.size(); ++i) {
-        if (m_workspaces[i].id == m_active_id) {
-            cur_idx = static_cast<int>(i);
-            break;
-        }
-    }
-
-    int next_idx = cur_idx + delta;
-    if (next_idx < 0) next_idx = static_cast<int>(m_workspaces.size()) - 1;
-    if (next_idx >= static_cast<int>(m_workspaces.size())) next_idx = 0;
-
-    size_t target_id = m_workspaces[next_idx].id;
-    auto mgr = miqu::WorkspaceManager::get();
-    if (mgr) {
-        mgr->activate_workspace(target_id);
-    }
-    sync_workspaces();
-}
-
 } // namespace miqubar

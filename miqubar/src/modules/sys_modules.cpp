@@ -373,18 +373,6 @@ bool VolumeModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button,
     return miqu::Button::on_mouse_button(lx, ly, button, pressed, bounds);
 }
 
-bool VolumeModuleView::on_scroll(double delta) {
-    if (std::abs(delta) > 0.05) {
-        int diff = (delta < 0) ? 5 : -5;
-        int next_vol = std::clamp(m_volume + diff, 0, 100);
-        std::string cmd = "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ " + std::to_string(next_vol / 100.0f) + " 2>/dev/null";
-        std::system(cmd.c_str());
-        update_metrics();
-        return true;
-    }
-    return false;
-}
-
 // ==========================================
 // Brightness Module
 // ==========================================
@@ -479,15 +467,6 @@ void BrightnessModuleView::set_brightness(int pct) {
 
     set_tooltip("Brightness: " + std::to_string(m_brightness) + "%");
     request_redraw();
-}
-
-bool BrightnessModuleView::on_scroll(double delta) {
-    if (std::abs(delta) > 0.05) {
-        int diff = (delta < 0) ? 5 : -5;
-        set_brightness(m_brightness + diff);
-        return true;
-    }
-    return false;
 }
 
 // ==========================================
@@ -670,32 +649,6 @@ PowerButtonView::PowerButtonView(std::function<void()> on_click) {
             miqu::AppManager::launch_command("miqupower");
         });
     }
-}
-
-// ==========================================
-// Peek Button ("Show Desktop")
-// ==========================================
-PeekButtonView::PeekButtonView() {
-    const auto& cfg = BarConfig::get();
-    int item_h = cfg.get_item_height();
-
-    set_flat(true);
-    set_padding(2, 0);
-    set_layout_params(miqu::LayoutParams(8, item_h));
-    set_tooltip("Show Desktop");
-    set_on_click_listener([]() {
-        auto mgr = miqu::WindowManager::get();
-        if (mgr) {
-            auto windows = mgr->get_windows();
-            bool any_visible = false;
-            for (const auto& w : windows) {
-                if (!w.is_minimized) { any_visible = true; break; }
-            }
-            for (auto& w : windows) {
-                w.set_minimized(any_visible);
-            }
-        }
-    });
 }
 
 } // namespace miqubar

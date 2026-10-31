@@ -43,7 +43,6 @@ public:
     bool show_workspace_btn = true;
     std::string workspace_display = "icon"; // "icon", "dots", or "badge"
     bool hover_flyout = true;
-    bool scroll_switch = true;
 
     // Search
     bool show_search = true;
@@ -75,7 +74,6 @@ public:
     bool show_dark_mode = true;
     bool show_notifications = true;
     bool show_clock = true;
-    bool show_peek = true;
     bool show_power = true;
     bool clock_stacked = true;
     std::string time_format = "%H:%M";

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+GenericName=File Manager
+Comment=Modern Yazi-style Miller columns file manager for Miqu Desktop
+Exec=miqufiles %U
+Icon=miqufiles
+Terminal=false
+Categories=System;FileManager;Utility;
+MimeType=inode/directory;
+Keywords=files;folders;browser;manager;explorer;yazi;
+StartupNotify=true
+StartupWMClass=miqufiles
