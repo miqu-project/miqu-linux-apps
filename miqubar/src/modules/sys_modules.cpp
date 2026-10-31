@@ -651,6 +651,24 @@ bool NotificationModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton b
 }
 
 // ==========================================
+// Power Button (launches miqupower)
+// ==========================================
+PowerButtonView::PowerButtonView() {
+    const auto& cfg = BarConfig::get();
+    int item_h = cfg.get_item_height();
+
+    set_flat(true);
+    set_padding(6, 2);
+    set_icon("system-shutdown-symbolic");
+    set_icon_size(cfg.icon_size > 0 ? cfg.icon_size - 4 : 20);
+    set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
+    set_tooltip("Session & Power");
+    set_on_click_listener([]() {
+        miqu::AppManager::launch_command("miqupower");
+    });
+}
+
+// ==========================================
 // Peek Button ("Show Desktop")
 // ==========================================
 PeekButtonView::PeekButtonView() {

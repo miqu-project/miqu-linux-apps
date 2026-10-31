@@ -151,6 +151,12 @@ private:
     std::function<void()> m_on_open_calendar;
 };
 
+// Power & Session Management Button (launches miqupower)
+class PowerButtonView : public miqu::Button {
+public:
+    PowerButtonView();
+};
+
 // Windows-style "Show Desktop" peek button on far right edge
 class PeekButtonView : public miqu::Button {
 public:

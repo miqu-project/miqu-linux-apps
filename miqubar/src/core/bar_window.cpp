@@ -120,6 +120,10 @@ BarRootView::BarRootView() {
         });
         m_right_box->add_view(m_clock);
     }
+    if (cfg.show_power) {
+        m_power = std::make_shared<PowerButtonView>();
+        m_right_box->add_view(m_power);
+    }
     if (cfg.show_peek) {
         m_peek = std::make_shared<PeekButtonView>();
         m_right_box->add_view(m_peek);

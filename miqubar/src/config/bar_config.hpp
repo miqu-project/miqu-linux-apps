@@ -76,6 +76,7 @@ public:
     bool show_notifications = true;
     bool show_clock = true;
     bool show_peek = true;
+    bool show_power = true;
     bool clock_stacked = true;
     std::string time_format = "%H:%M";
     std::string date_format = "%d/%m/%Y";

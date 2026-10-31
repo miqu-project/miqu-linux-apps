@@ -170,6 +170,7 @@ void BarConfig::load(const std::string& custom_path) {
         else if (key == "show_notifications") show_notifications = parse_bool(val);
         else if (key == "show_clock") show_clock = parse_bool(val);
         else if (key == "show_peek") show_peek = parse_bool(val);
+        else if (key == "show_power") show_power = parse_bool(val);
         else if (key == "clock_stacked") clock_stacked = parse_bool(val);
         else if (key == "time_format") time_format = val;
         else if (key == "date_format") date_format = val;
