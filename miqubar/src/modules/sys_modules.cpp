@@ -651,9 +651,9 @@ bool NotificationModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton b
 }
 
 // ==========================================
-// Power Button (launches miqupower)
+// Power Button (toggles power flyout or launches miqupower)
 // ==========================================
-PowerButtonView::PowerButtonView() {
+PowerButtonView::PowerButtonView(std::function<void()> on_click) {
     const auto& cfg = BarConfig::get();
     int item_h = cfg.get_item_height();
 
@@ -663,9 +663,13 @@ PowerButtonView::PowerButtonView() {
     set_icon_size(cfg.icon_size > 0 ? cfg.icon_size - 4 : 20);
     set_layout_params(miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::WrapContent), item_h));
     set_tooltip("Session & Power");
-    set_on_click_listener([]() {
-        miqu::AppManager::launch_command("miqupower");
-    });
+    if (on_click) {
+        set_on_click_listener(std::move(on_click));
+    } else {
+        set_on_click_listener([]() {
+            miqu::AppManager::launch_command("miqupower");
+        });
+    }
 }
 
 // ==========================================

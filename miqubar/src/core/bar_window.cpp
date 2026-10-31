@@ -121,7 +121,9 @@ BarRootView::BarRootView() {
         m_right_box->add_view(m_clock);
     }
     if (cfg.show_power) {
-        m_power = std::make_shared<PowerButtonView>();
+        m_power = std::make_shared<PowerButtonView>([this]() {
+            toggle_power();
+        });
         m_right_box->add_view(m_power);
     }
     if (cfg.show_peek) {
@@ -138,6 +140,7 @@ BarRootView::~BarRootView() {
     if (m_sound_win) m_sound_win->close();
     if (m_brightness_win) m_brightness_win->close();
     if (m_calendar_win) m_calendar_win->close();
+    if (m_power_win) m_power_win->close();
 }
 
 void BarRootView::sync_theme() {
@@ -183,6 +186,7 @@ void BarRootView::toggle_network() {
     if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
     if (m_brightness_win) { m_brightness_win->close(); m_brightness_win = nullptr; }
     if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
+    if (m_power_win) { m_power_win->close(); m_power_win = nullptr; }
 
     auto content = std::make_shared<NetworkPopupView>([this]() {
         if (m_network_win) {
@@ -233,6 +237,7 @@ void BarRootView::toggle_bluetooth() {
     if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
     if (m_brightness_win) { m_brightness_win->close(); m_brightness_win = nullptr; }
     if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
+    if (m_power_win) { m_power_win->close(); m_power_win = nullptr; }
 
     auto content = std::make_shared<BluetoothPopupView>([this]() {
         if (m_bluetooth_win) {
@@ -283,6 +288,7 @@ void BarRootView::toggle_sound() {
     if (m_bluetooth_win) { m_bluetooth_win->close(); m_bluetooth_win = nullptr; }
     if (m_brightness_win) { m_brightness_win->close(); m_brightness_win = nullptr; }
     if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
+    if (m_power_win) { m_power_win->close(); m_power_win = nullptr; }
 
     auto content = std::make_shared<SoundControlPopupView>([this]() {
         if (m_sound_win) {
@@ -333,6 +339,7 @@ void BarRootView::toggle_brightness() {
     if (m_bluetooth_win) { m_bluetooth_win->close(); m_bluetooth_win = nullptr; }
     if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
     if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
+    if (m_power_win) { m_power_win->close(); m_power_win = nullptr; }
 
     auto content = std::make_shared<BrightnessControlPopupView>([this]() {
         if (m_brightness_win) {
@@ -387,6 +394,7 @@ void BarRootView::toggle_calendar() {
     if (m_bluetooth_win) { m_bluetooth_win->close(); m_bluetooth_win = nullptr; }
     if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
     if (m_brightness_win) { m_brightness_win->close(); m_brightness_win = nullptr; }
+    if (m_power_win) { m_power_win->close(); m_power_win = nullptr; }
 
     auto content = std::make_shared<CalendarPopupView>([this]() {
         if (m_calendar_win) {
@@ -426,6 +434,60 @@ void BarRootView::toggle_calendar() {
         ->build();
 
     if (m_calendar_win) m_calendar_win->show();
+}
+
+void BarRootView::toggle_power() {
+    miqu::TooltipManager::get()->dismiss();
+    if (m_power_win) {
+        m_power_win->close();
+        m_power_win = nullptr;
+        request_redraw();
+        return;
+    }
+    if (m_network_win) { m_network_win->close(); m_network_win = nullptr; }
+    if (m_bluetooth_win) { m_bluetooth_win->close(); m_bluetooth_win = nullptr; }
+    if (m_sound_win) { m_sound_win->close(); m_sound_win = nullptr; }
+    if (m_brightness_win) { m_brightness_win->close(); m_brightness_win = nullptr; }
+    if (m_calendar_win) { m_calendar_win->close(); m_calendar_win = nullptr; }
+
+    auto content = std::make_shared<PowerPopupView>([this]() {
+        if (m_power_win) {
+            m_power_win->close();
+            m_power_win = nullptr;
+            request_redraw();
+        }
+    });
+
+    const auto& cfg = BarConfig::get();
+    bool is_top = (cfg.position == "top");
+    uint32_t anchors = (is_top ? 1 : 2) | 8;
+    miqu::Margin margin;
+    margin.right = 8 + (cfg.show_peek ? 10 : 0) + cfg.margin_right;
+    if (is_top) {
+        margin.top = cfg.height + 8 + cfg.margin_top;
+    } else {
+        margin.bottom = cfg.height + 8 + cfg.margin_bottom;
+    }
+
+    m_power_win = miqu::WindowBuilder::create()
+        ->role(miqu::WindowRole::LayerOverlay)
+        ->layerNamespace("miqubar-power")
+        ->anchors(anchors)
+        ->preferredSize(260, 275)
+        ->contentSize(260, 275)
+        ->contentMargin(margin)
+        ->transparent(true)
+        ->exclusiveZone(-1)
+        ->closeOnClickOutside(true)
+        ->closeOnEscape(true)
+        ->contentView(content)
+        ->onClose([this]() {
+            m_power_win = nullptr;
+            request_redraw();
+        })
+        ->build();
+
+    if (m_power_win) m_power_win->show();
 }
 
 void BarRootView::update_telemetry() {

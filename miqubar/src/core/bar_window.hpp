@@ -14,6 +14,7 @@
 #include "../popups/network_popup.hpp"
 #include "../popups/bluetooth_popup.hpp"
 #include "../popups/calendar_popup.hpp"
+#include "../popups/power_popup.hpp"
 #include <memory>
 #include <thread>
 #include <atomic>
@@ -45,6 +46,7 @@ public:
     void toggle_brightness();
     void toggle_quick_settings();
     void toggle_calendar();
+    void toggle_power();
 
 private:
     std::shared_ptr<miqu::LinearLayout> m_left_box;
@@ -73,6 +75,7 @@ private:
     std::shared_ptr<miqu::Window> m_sound_win;
     std::shared_ptr<miqu::Window> m_brightness_win;
     std::shared_ptr<miqu::Window> m_calendar_win;
+    std::shared_ptr<miqu::Window> m_power_win;
 
     int m_last_mouse_x = -1;
     int m_last_mouse_y = -1;

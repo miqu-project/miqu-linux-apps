@@ -43,6 +43,7 @@ private:
     std::vector<std::shared_ptr<ActionCard>> m_action_cards;
     int m_selected_index = 0;
     PowerAction m_pending_action = PowerAction::Shutdown;
+    std::optional<PowerAction> m_direct_action;
 
     // Progress page live text views
     std::shared_ptr<TextView> m_progress_title;

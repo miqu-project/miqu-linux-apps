@@ -96,6 +96,7 @@ void PowerWindow::show(std::optional<PowerAction> direct_action) {
         return;
     }
 
+    m_direct_action = direct_action;
     if (direct_action.has_value()) {
         handle_action_selected(*direct_action);
     }
@@ -343,6 +344,10 @@ std::shared_ptr<View> PowerWindow::create_warning_page(PowerAction action, const
         ->cornerRadius(12)
         ->padding(24, 10)
         ->onClick([this]() {
+            if (m_direct_action.has_value()) {
+                dismiss();
+                return;
+            }
             if (m_nav_view) m_nav_view->pop();
             select_card_index(m_selected_index);
             if (m_window) m_window->schedule_redraw();
@@ -512,6 +517,10 @@ void PowerWindow::handle_key_event(const KeyPressEvent& event) {
     // Check if on warning or progress page
     if (m_nav_view && m_nav_view->get_depth() > 1) {
         if (event.keysym == XKB_KEY_Escape) {
+            if (m_direct_action.has_value()) {
+                dismiss();
+                return;
+            }
             m_nav_view->pop();
             select_card_index(m_selected_index);
             if (m_window) m_window->schedule_redraw();

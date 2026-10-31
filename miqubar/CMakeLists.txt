@@ -26,6 +26,7 @@ add_executable(miqubar
     src/popups/network_popup.cpp
     src/popups/bluetooth_popup.cpp
     src/popups/calendar_popup.cpp
+    src/popups/power_popup.cpp
 )
 
 target_include_directories(miqubar PRIVATE
