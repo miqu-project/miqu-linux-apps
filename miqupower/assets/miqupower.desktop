@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=MiquPower
+Comment=Power and Session Management Dialog for Miqu Desktop
+Exec=miqupower
+Icon=miqupower
+Terminal=false
+Type=Application
+Categories=System;Utility;
+Keywords=power;shutdown;reboot;suspend;lock;logout;session;
+StartupNotify=true

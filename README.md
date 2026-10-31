@@ -26,6 +26,7 @@ This repository contains the integrated first-party desktop applications for the
 | [**`miqulauncher`**](./miqulauncher) | Shell | Fast application launcher, fuzzy dmenu alternative, workspace navigator, and window switcher. |
 | [**`miquoverview`**](./miquoverview) | Plugin | GPU-accelerated live workspace expose and overview plugin for `miquland`. |
 | [**`miqunotify`**](./miqunotify) | Daemon | Native desktop notification daemon and slide-out notification history center. |
+| [**`miqupower`**](./miqupower) | Shell | Power and session management dialog with running application warning and graceful shutdown. |
 | [**`miqutheme`**](./miqutheme) | Theming | Visual theme and appearance manager for color schemes, wallpapers, and global design tokens. |
 | [**`miqumusic`**](./miqumusic) | App | Fast, lightweight native MPD (Music Player Daemon) client and audio playback interface. |
 | [**`miqusecure`**](./miqusecure) | Security | Privacy, firewall, and security command center (Tor routing, OpenSnitch rules, LUKS status, auditing). |

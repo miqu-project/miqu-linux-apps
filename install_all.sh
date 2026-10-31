@@ -22,6 +22,7 @@ APPS=(
     "miqusecure"
     "miquoverview"
     "miqunotify"
+    "miqupower"
     "miqubar"
     "miqudm"
     "miqutheme"
