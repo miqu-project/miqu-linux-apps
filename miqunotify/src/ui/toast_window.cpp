@@ -29,6 +29,16 @@ void ToastWindow::ensure_window() {
 
     miqu::Margin margin{cfg.margin_y, cfg.margin_x, cfg.margin_y, cfg.margin_x};
 
+    int initial_h = 0;
+    for (size_t i = 0; i < m_toasts.size(); ++i) {
+        auto sz = m_toasts[i]->measure_size(cfg.toast_width);
+        initial_h += sz.height;
+        if (i + 1 < m_toasts.size()) {
+            initial_h += cfg.toast_spacing;
+        }
+    }
+    initial_h = std::max(50, initial_h);
+
     m_window = miqu::WindowBuilder::create()
         ->role(miqu::WindowRole::LayerTop)
         ->appId("miqunotify")
@@ -39,7 +49,8 @@ void ToastWindow::ensure_window() {
         ->closeOnClickOutside(false)
         ->closeOnEscape(false)
         ->transparent(true)
-        ->preferredSize(cfg.toast_width, 100)
+        ->preferredSize(cfg.toast_width, initial_h)
+        ->contentSize(cfg.toast_width, initial_h)
         ->contentView(m_stack_layout)
         ->build();
 

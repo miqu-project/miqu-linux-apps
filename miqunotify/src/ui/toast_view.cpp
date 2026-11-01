@@ -30,8 +30,8 @@ ToastView::ToastView(
     set_radius(tk->metrics.corner_radius > 0 ? tk->metrics.corner_radius : 12);
     set_card_background_color(tk->colors.surface);
     set_stroke(1, tk->colors.outline.with_alpha(0.25f));
-    set_elevation(2);
-    set_padding(14);
+    set_elevation(0);
+    set_padding(14, 12, 14, 16);
 
     // Root vertical layout
     m_content_layout = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
@@ -72,21 +72,29 @@ ToastView::ToastView(
 
     m_content_layout->add_view(header_layout, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
 
-    // 2. Summary (Title)
+    // 2. Text Container (Summary + Body)
+    auto text_container = std::make_shared<miqu::LinearLayout>(miqu::Orientation::Vertical);
+    text_container->set_divider_spacing(3);
+
+    // Summary (Title)
     if (!m_notif.summary.empty()) {
         m_summary_view = std::make_shared<miqu::TextView>(m_notif.summary);
         m_summary_view->set_text_size(tk->metrics.h3_size > 0 ? tk->metrics.h3_size : 13);
         m_summary_view->set_text_color(tk->colors.on_surface);
         m_summary_view->set_bold(true);
-        m_content_layout->add_view(m_summary_view, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+        text_container->add_view(m_summary_view, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
     }
 
-    // 3. Body
+    // Body
     if (!m_notif.body.empty()) {
         m_body_view = std::make_shared<miqu::TextView>(m_notif.body);
         m_body_view->set_text_size(tk->metrics.font_size > 0 ? tk->metrics.font_size : 11);
         m_body_view->set_text_color(tk->colors.on_surface_variant);
-        m_content_layout->add_view(m_body_view, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+        text_container->add_view(m_body_view, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
+    }
+
+    if (!m_notif.summary.empty() || !m_notif.body.empty()) {
+        m_content_layout->add_view(text_container, miqu::LayoutParams(static_cast<int>(miqu::LayoutDimension::MatchParent), static_cast<int>(miqu::LayoutDimension::WrapContent)));
     }
 
     // 4. Action Buttons (if present)
