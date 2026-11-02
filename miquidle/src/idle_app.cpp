@@ -130,6 +130,23 @@ void IdleApp::setup_inotify() {
             bool should_reload = false;
             for (char* ptr = buffer; ptr < buffer + len; ) {
                 auto* event = reinterpret_cast<const struct inotify_event*>(ptr);
+
+                if (event->mask & IN_IGNORED) {
+                    if (event->wd == m_inotify_file_wd) {
+                        m_inotify_file_wd = -1;
+                    }
+                    if (event->wd == m_inotify_dir_wd) {
+                        m_inotify_dir_wd = -1;
+                    }
+                    ptr += sizeof(struct inotify_event) + event->len;
+                    continue;
+                }
+
+                if (!(event->mask & (IN_MODIFY | IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE))) {
+                    ptr += sizeof(struct inotify_event) + event->len;
+                    continue;
+                }
+
                 if (event->wd == m_inotify_file_wd) {
                     should_reload = true;
                 } else if (event->wd == m_inotify_dir_wd && event->len > 0) {
@@ -148,6 +165,7 @@ void IdleApp::setup_inotify() {
                 if (std::filesystem::exists(m_config_path)) {
                     if (m_inotify_file_wd >= 0) {
                         inotify_rm_watch(m_inotify_fd, m_inotify_file_wd);
+                        m_inotify_file_wd = -1;
                     }
                     m_inotify_file_wd = inotify_add_watch(m_inotify_fd, m_config_path.c_str(),
                         IN_MODIFY | IN_CLOSE_WRITE);

@@ -412,18 +412,26 @@ void OverviewConfig::setup_watcher(struct wl_event_loop* loop) {
             while ((len = read(fd, buf, sizeof(buf))) > 0) {
                 for (char* ptr = buf; ptr < buf + len; ) {
                     auto* event = reinterpret_cast<const struct inotify_event*>(ptr);
+
+                    // Ignore watch teardowns and non-modification events
+                    if (event->mask & IN_IGNORED) {
+                        ptr += sizeof(struct inotify_event) + event->len;
+                        continue;
+                    }
+
+                    if (!(event->mask & (IN_MODIFY | IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE))) {
+                        ptr += sizeof(struct inotify_event) + event->len;
+                        continue;
+                    }
+
                     auto it = self->m_wd_to_targets.find(event->wd);
-                    if (it != self->m_wd_to_targets.end()) {
-                        if (event->len > 0) {
-                            std::string ev_name(event->name);
-                            for (const auto& target : it->second) {
-                                if (target == ev_name || (target.empty() && ev_name.ends_with(".conf"))) {
-                                    should_reload = true;
-                                    break;
-                                }
+                    if (it != self->m_wd_to_targets.end() && event->len > 0) {
+                        std::string ev_name(event->name);
+                        for (const auto& target : it->second) {
+                            if (target == ev_name || (target.empty() && ev_name.ends_with(".conf"))) {
+                                should_reload = true;
+                                break;
                             }
-                        } else {
-                            should_reload = true;
                         }
                     }
                     ptr += sizeof(struct inotify_event) + event->len;
