@@ -1,12 +1,41 @@
 #include "ui/file_preview_view.hpp"
-#include "config/files_config.hpp"
-#include <miqutoolkit/view/button.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
 #include <miqutoolkit/core/config.hpp>
-#include <fstream>
-#include <sstream>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <cmath>
 
 namespace miqu {
+
+namespace {
+
+class AspectImageView : public ImageView {
+public:
+    explicit AspectImageView(const std::string& path) : ImageView(path) {
+        set_fit_mode(FitMode::Contain);
+        set_quality_mode(ImageQuality::FullOriginal);
+        if (!path.empty()) {
+            gdk_pixbuf_get_file_info(path.c_str(), &m_orig_w, &m_orig_h);
+        }
+    }
+
+    Size measure_size() const override {
+        return measure_size(-1);
+    }
+
+    Size measure_size(int avail_width) const override {
+        if (avail_width > 0 && m_orig_w > 0 && m_orig_h > 0) {
+            int h = static_cast<int>(std::round(static_cast<double>(avail_width) * m_orig_h / m_orig_w));
+            return Size(avail_width, h);
+        }
+        return ImageView::measure_size();
+    }
+
+private:
+    int m_orig_w = 0;
+    int m_orig_h = 0;
+};
+
+} // namespace
 
 FilePreviewView::FilePreviewView() {
     LayoutParams lp;
@@ -20,23 +49,36 @@ FilePreviewView::FilePreviewView() {
 void FilePreviewView::update_preview(const FileItem* item, bool show_hidden) {
     clear_views();
     m_current_content = nullptr;
+    m_text_scroll = nullptr;
 
     if (!item) {
-        show_empty_state("No item selected");
+        m_current_item = nullptr;
+        show_empty_state("No selection");
         return;
     }
+
+    m_current_item = std::make_shared<FileItem>(*item);
 
     if (item->is_dir) {
         show_directory_preview(*item, show_hidden);
     } else if (item->category == FileCategory::Image) {
         show_image_preview(*item);
-    } else if (item->category == FileCategory::CodeText) {
-        show_text_preview(*item);
     } else {
-        show_binary_preview(*item);
+        show_file_preview(*item);
     }
 
     request_redraw();
+}
+
+bool FilePreviewView::scroll_preview(double delta) {
+    if (m_text_scroll) {
+        bool handled = m_text_scroll->on_scroll(delta);
+        if (handled) {
+            request_redraw();
+        }
+        return handled;
+    }
+    return false;
 }
 
 void FilePreviewView::show_empty_state(const std::string& message) {
@@ -80,34 +122,30 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
     ));
-    root->set_padding(8);
+    root->set_padding(4);
     root->set_divider_spacing(6);
-
-    // Header label
-    auto header = TextViewBuilder::create()
-        ->text("Contents of " + item.name + " (" + item.size_formatted + ")")
-        ->bold(true)
-        ->textSize(11)
-        ->textColor(config->colors.primary)
-        ->build();
-    root->add_view(header);
 
     auto children = FileItem::scan_directory(item.path, show_hidden);
     if (children.empty()) {
         auto empty_label = TextViewBuilder::create()
             ->text("Empty Folder")
             ->textSize(11)
+            ->center(true)
             ->textColor(config->colors.outline)
             ->build();
         root->add_view(empty_label);
     } else {
-        auto list = std::make_shared<ListView>();
-        list->set_item_height(30);
-        list->set_spacing(2);
-        list->set_item_corner_radius(4);
+        auto list = ListViewBuilder::create()
+            ->itemHeight(36)
+            ->spacing(4)
+            ->itemCornerRadius(6)
+            ->selectable(false)
+            ->build();
+        list->set_selectable(false);
         list->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
-            static_cast<int>(LayoutDimension::MatchParent)
+            0,
+            1.0f
         ));
 
         for (const auto& ch : children) {
@@ -119,6 +157,13 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
                 ->build();
             list->add_item(item_view);
         }
+        list->set_selected_index(-1);
+
+        list->set_on_item_click_listener([this, children](size_t idx, std::shared_ptr<View>) {
+            if (idx < children.size() && m_on_item_click) {
+                m_on_item_click(children[idx]);
+            }
+        });
 
         root->add_view(list);
     }
@@ -129,244 +174,93 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
 
 void FilePreviewView::show_image_preview(const FileItem& item) {
     auto config = Config::get();
-    auto root = std::make_shared<LinearLayout>(Orientation::Vertical);
-    root->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::MatchParent)
-    ));
-    root->set_padding(12);
-    root->set_divider_spacing(8);
 
-    // Image container card
-    auto img_card = CardViewBuilder::create()
-        ->backgroundColor(config->colors.surface_variant)
-        ->cornerRadius(config->metrics.corner_radius)
-        ->stroke(1, config->colors.outline_variant)
-        ->elevation(0)
-        ->build();
-    LayoutParams card_lp;
-    card_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    card_lp.height = 0;
-    card_lp.weight = 1.0f;
-    img_card->set_layout_params(card_lp);
-
-    auto img = std::make_shared<ImageView>(item.path.string());
-    img->set_fit_mode(FitMode::Contain);
-    img->set_quality_mode(ImageQuality::FullOriginal);
-    img->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::MatchParent)
-    ));
-    img_card->add_view(img);
-    root->add_view(img_card);
-
-    // Info metadata
-    auto title = TextViewBuilder::create()
-        ->text(item.name)
-        ->bold(true)
-        ->textSize(12)
-        ->build();
-    root->add_view(title);
-
-    std::string meta_str = item.size_formatted + " • " + item.mtime_formatted + " • " + item.permissions_str;
-    auto meta = TextViewBuilder::create()
-        ->text(meta_str)
-        ->textSize(10)
-        ->textColor(config->colors.outline)
-        ->build();
-    root->add_view(meta);
-
-    // Open button
-    auto btn_open = ButtonBuilder::create()
-        ->text("Open Image")
-        ->style(ButtonStyle::Primary)
-        ->onClick([this, p = item.path]() {
-            if (m_on_open) m_on_open(p);
-        })
-        ->build();
-    LayoutParams btn_lp;
-    btn_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-    btn_lp.height = 32;
-    btn_open->set_layout_params(btn_lp);
-    root->add_view(btn_open);
-
-    add_view(root);
-    m_current_content = root;
-}
-
-void FilePreviewView::show_text_preview(const FileItem& item) {
-    auto config = Config::get();
-    auto& fcfg = FilesConfig::get();
-
-    // Check file size threshold before attempting preview
-    if (item.size_bytes > fcfg.preview_max_file_size_kb * 1024) {
-        show_binary_preview(item);
-        return;
-    }
-
-    std::ifstream file(item.path);
-    if (!file.is_open()) {
-        show_binary_preview(item);
-        return;
-    }
-
-    std::string content;
-    std::string line;
-    size_t line_count = 0;
-    while (std::getline(file, line) && line_count < fcfg.preview_max_text_lines) {
-        // Line number prefix
-        std::string num_str = std::to_string(line_count + 1);
-        while (num_str.size() < 4) num_str = " " + num_str;
-        content += num_str + " │ " + line + "\n";
-        line_count++;
-    }
-
-    auto root = std::make_shared<LinearLayout>(Orientation::Vertical);
-    root->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::MatchParent)
-    ));
-    root->set_padding(8);
-    root->set_divider_spacing(6);
-
-    // Header info
-    std::string header_text = item.name + " (" + std::to_string(line_count) + " lines, " + item.size_formatted + ")";
-    auto header = TextViewBuilder::create()
-        ->text(header_text)
-        ->bold(true)
-        ->textSize(11)
-        ->textColor(config->colors.primary)
-        ->build();
-    root->add_view(header);
-
-    // Code card with ScrollView
-    auto code_card = CardViewBuilder::create()
-        ->backgroundColor(config->colors.surface_variant)
-        ->cornerRadius(config->metrics.corner_radius)
-        ->stroke(1, config->colors.outline_variant)
-        ->elevation(0)
-        ->padding(8)
-        ->build();
-    LayoutParams card_lp;
-    card_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    card_lp.height = 0;
-    card_lp.weight = 1.0f;
-    code_card->set_layout_params(card_lp);
-
-    auto text_view = TextViewBuilder::create()
-        ->text(content)
-        ->fontFamily("Monospace")
-        ->textSize(10)
-        ->wrap(false)
-        ->build();
-
-    auto scroll = ScrollViewBuilder::create()
-        ->contentView(text_view)
-        ->build();
+    auto scroll = std::make_shared<ScrollView>();
     scroll->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
     ));
 
-    code_card->add_view(scroll);
-    root->add_view(code_card);
+    auto aspect_img = std::make_shared<AspectImageView>(item.path.string());
+    aspect_img->set_corner_radius(config->metrics.corner_radius);
+    aspect_img->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::MatchParent)
+    ));
+
+    scroll->set_content_view(aspect_img);
+
+    m_text_scroll = scroll;
+    add_view(scroll);
+    m_current_content = scroll;
+}
+
+void FilePreviewView::show_file_preview(const FileItem& item) {
+    auto config = Config::get();
+
+    auto root = std::make_shared<LinearLayout>(Orientation::Vertical);
+    LayoutParams root_lp;
+    root_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    root_lp.height = static_cast<int>(LayoutDimension::MatchParent);
+    root_lp.gravity = Gravity::Center;
+    root->set_layout_params(root_lp);
+    root->set_padding(24);
+    root->set_divider_spacing(16);
+
+    auto icon = std::make_shared<ImageView>(item.icon_name);
+    icon->set_target_size(56);
+    LayoutParams icon_lp;
+    icon_lp.width = 56;
+    icon_lp.height = 56;
+    icon_lp.gravity = Gravity::CenterHorizontal;
+    root->add_view(icon, icon_lp);
+
+    auto name_tv = TextViewBuilder::create()
+        ->text(item.name)
+        ->bold(true)
+        ->textSize(13)
+        ->center(true)
+        ->textColor(config->colors.on_surface)
+        ->wrap(true)
+        ->build();
+    LayoutParams name_lp;
+    name_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    name_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    name_lp.gravity = Gravity::CenterHorizontal;
+    name_tv->set_layout_params(name_lp);
+    root->add_view(name_tv);
 
     add_view(root);
     m_current_content = root;
 }
 
-void FilePreviewView::show_binary_preview(const FileItem& item) {
-    auto config = Config::get();
-    auto root = std::make_shared<LinearLayout>(Orientation::Vertical);
-    root->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::MatchParent)
-    ));
-    root->set_padding(16);
-    root->set_divider_spacing(12);
+bool FilePreviewView::on_mouse_button(int lx, int ly, MouseButton button, bool pressed, const Rect& bounds) {
+    if (!is_visible()) return false;
 
-    // Centered big icon
-    auto icon_layout = std::make_shared<LinearLayout>(Orientation::Vertical);
-    icon_layout->set_divider_spacing(6);
-    LayoutParams icon_lp;
-    icon_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    icon_lp.gravity = Gravity::CenterHorizontal;
-    icon_layout->set_layout_params(icon_lp);
-
-    auto icon = std::make_shared<ImageView>(item.icon_name);
-    icon->set_target_size(64);
-    LayoutParams img_lp;
-    img_lp.width = 64;
-    img_lp.height = 64;
-    img_lp.gravity = Gravity::CenterHorizontal;
-    icon_layout->add_view(icon, img_lp);
-
-    auto title = TextViewBuilder::create()
-        ->text(item.name)
-        ->bold(true)
-        ->textSize(13)
-        ->center(true)
-        ->build();
-    icon_layout->add_view(title);
-
-    auto cat_badge = TextViewBuilder::create()
-        ->text(item.category_label)
-        ->textSize(10)
-        ->center(true)
-        ->textColor(config->colors.primary)
-        ->build();
-    icon_layout->add_view(cat_badge);
-
-    root->add_view(icon_layout);
-
-    // Metadata card
-    auto meta_card = CardViewBuilder::create()
-        ->backgroundColor(config->colors.surface_variant)
-        ->cornerRadius(config->metrics.corner_radius)
-        ->stroke(1, config->colors.outline_variant)
-        ->padding(12)
-        ->build();
-    LayoutParams meta_lp;
-    meta_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    meta_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    meta_card->set_layout_params(meta_lp);
-
-    auto meta_list = std::make_shared<LinearLayout>(Orientation::Vertical);
-    meta_list->set_divider_spacing(6);
-
-    std::string s_size = "Size: " + item.size_formatted + " (" + std::to_string(item.size_bytes) + " bytes)";
-    std::string s_perm = "Permissions: " + item.permissions_str;
-    std::string s_time = "Modified: " + item.mtime_formatted;
-    std::string s_path = "Location: " + item.path.parent_path().string();
-
-    for (const auto& line : {s_size, s_perm, s_time, s_path}) {
-        auto tv = TextViewBuilder::create()
-            ->text(line)
-            ->textSize(10)
-            ->textColor(config->colors.on_surface_variant)
-            ->build();
-        meta_list->add_view(tv);
+    // First allow child views (e.g. directory ListView or ScrollView thumb) to handle mouse button
+    if (FrameLayout::on_mouse_button(lx, ly, button, pressed, bounds)) {
+        return true;
     }
-    meta_card->add_view(meta_list);
-    root->add_view(meta_card);
 
-    // Open button
-    auto btn_open = ButtonBuilder::create()
-        ->text("Open with Default Application")
-        ->style(ButtonStyle::Primary)
-        ->onClick([this, p = item.path]() {
-            if (m_on_open) m_on_open(p);
-        })
-        ->build();
-    LayoutParams btn_lp;
-    btn_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    btn_lp.height = 36;
-    btn_open->set_layout_params(btn_lp);
-    root->add_view(btn_open);
+    // If not consumed by a child view, handle clicking on single file / image preview
+    if (button == MouseButton::Left && bounds.contains(Point(lx, ly))) {
+        if (pressed) {
+            m_pressed = true;
+            return true;
+        } else if (m_pressed) {
+            m_pressed = false;
+            if (m_current_item && !m_current_item->is_dir && m_on_preview_click) {
+                m_on_preview_click(*m_current_item);
+            }
+            return true;
+        }
+    }
 
-    add_view(root);
-    m_current_content = root;
+    if (!pressed) {
+        m_pressed = false;
+    }
+
+    return false;
 }
 
 } // namespace miqu

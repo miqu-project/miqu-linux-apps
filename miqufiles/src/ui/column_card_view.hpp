@@ -10,9 +10,10 @@ public:
     ~ColumnCardView() override = default;
 
     bool on_mouse_move(int lx, int ly, const Rect& bounds) override {
+        bool was_hovered = m_hovered;
         m_hovered = bounds.contains(Point(lx, ly));
-        CardView::on_mouse_move(lx, ly, bounds);
-        return m_hovered;
+        bool child_handled = CardView::on_mouse_move(lx, ly, bounds);
+        return (m_hovered != was_hovered) || m_hovered || child_handled;
     }
 
     bool on_scroll(double delta) override {

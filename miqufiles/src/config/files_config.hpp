@@ -19,6 +19,7 @@ struct FilesConfig {
     std::string image_preview_quality = "FullOriginal";
 
     static FilesConfig& get();
+    void sync_defaults_from_toolkit();
     void load(const std::string& custom_path = "");
 };
 

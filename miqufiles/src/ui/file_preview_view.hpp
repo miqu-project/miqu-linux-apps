@@ -20,19 +20,29 @@ public:
     ~FilePreviewView() override = default;
 
     void update_preview(const FileItem* item, bool show_hidden = false);
-    void set_on_open_listener(std::function<void(const std::filesystem::path&)> cb) {
-        m_on_open = std::move(cb);
+    bool scroll_preview(double delta);
+    void set_on_item_click_listener(std::function<void(const FileItem&)> cb) {
+        m_on_item_click = std::move(cb);
     }
+    void set_on_preview_click_listener(std::function<void(const FileItem&)> cb) {
+        m_on_preview_click = std::move(cb);
+    }
+
+    bool on_mouse_button(int lx, int ly, MouseButton button, bool pressed, const Rect& bounds) override;
 
 private:
     void show_empty_state(const std::string& message = "No selection");
     void show_directory_preview(const FileItem& item, bool show_hidden);
     void show_image_preview(const FileItem& item);
-    void show_text_preview(const FileItem& item);
-    void show_binary_preview(const FileItem& item);
+    void show_file_preview(const FileItem& item);
 
     std::shared_ptr<View> m_current_content;
+    std::shared_ptr<ScrollView> m_text_scroll;
     std::function<void(const std::filesystem::path&)> m_on_open;
+    std::function<void(const FileItem&)> m_on_item_click;
+    std::function<void(const FileItem&)> m_on_preview_click;
+    std::shared_ptr<FileItem> m_current_item;
+    bool m_pressed = false;
 };
 
 } // namespace miqu

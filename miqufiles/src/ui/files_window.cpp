@@ -13,21 +13,6 @@ namespace miqu {
 
 namespace fs = std::filesystem;
 
-static std::string format_display_path(const fs::path& p) {
-    const char* home = std::getenv("HOME");
-    std::string path_str = p.string();
-    if (home && *home) {
-        std::string home_str(home);
-        if (path_str == home_str) {
-            return "~";
-        }
-        if (path_str.rfind(home_str + "/", 0) == 0) {
-            return "~" + path_str.substr(home_str.size());
-        }
-    }
-    return path_str;
-}
-
 std::shared_ptr<FilesWindow> FilesWindow::create(std::shared_ptr<AppEngine> engine, const std::string& start_path) {
     std::string initial_path = start_path;
     if (initial_path.empty()) {
@@ -54,6 +39,7 @@ FilesWindow::FilesWindow(std::shared_ptr<AppEngine> engine, fs::path start_path)
 
 bool FilesWindow::init() {
     build_ui();
+    sync_theme();
     navigate_to(m_current_path, false);
     return m_window != nullptr;
 }
@@ -64,6 +50,50 @@ void FilesWindow::show() {
     }
 }
 
+void FilesWindow::sync_theme() {
+    auto config = Config::get();
+    if (!config) return;
+
+    if (m_col_parent_card) {
+        m_col_parent_card->set_card_background_color(config->colors.surface_variant);
+        m_col_parent_card->set_stroke(1, config->colors.outline_variant);
+        m_col_parent_card->set_radius(config->metrics.corner_radius);
+    }
+    if (m_col_current_card) {
+        m_col_current_card->set_card_background_color(config->colors.surface);
+        m_col_current_card->set_stroke(1, config->colors.outline_variant);
+        m_col_current_card->set_radius(config->metrics.corner_radius);
+    }
+    if (m_col_preview_card) {
+        m_col_preview_card->set_card_background_color(config->colors.surface_variant);
+        m_col_preview_card->set_stroke(1, config->colors.outline_variant);
+        m_col_preview_card->set_radius(config->metrics.corner_radius);
+    }
+    if (m_path_text) {
+        m_path_text->set_text_color(config->colors.on_surface_variant);
+    }
+    if (m_h1_title) {
+        m_h1_title->set_text_color(config->colors.primary);
+    }
+    if (m_hero_subtitle) {
+        m_hero_subtitle->set_text_color(config->colors.outline);
+    }
+
+    populate_parent_column();
+    populate_current_column();
+
+    if (m_preview_view) {
+        m_preview_view->update_preview(get_selected_item(), m_show_hidden);
+    }
+    if (m_status_bar) {
+        m_status_bar->request_redraw();
+    }
+    if (m_window) {
+        m_window->refresh_theme();
+        m_window->schedule_redraw();
+    }
+}
+
 void FilesWindow::build_ui() {
     auto config = Config::get();
     auto& fcfg = FilesConfig::get();
@@ -71,15 +101,15 @@ void FilesWindow::build_ui() {
     // 1. Standard Toolbar
     m_toolbar = ToolbarBuilder::create()
         ->title("Files")
-        ->subtitle(format_display_path(m_current_path))
-        ->onBack([this]() { navigate_up(); })
+        ->titleAlignment(TitleAlignment::Center)
+        ->onBack([this]() { on_left_action(); })
         ->onRefresh([this]() { refresh(); })
         ->onClose([this]() {
             if (m_window) m_window->request_close();
             else m_engine->quit();
         })
         ->build();
-    m_toolbar->set_back_tooltip("Up to parent folder (h / Backspace)");
+    m_toolbar->set_back_tooltip("Up to parent folder (h / Backspace / Left)");
 
     // Home action
     auto btn_home = m_toolbar->add_action(icons::HOME, [this]() {
@@ -100,7 +130,38 @@ void FilesWindow::build_ui() {
     });
     m_btn_search->set_tooltip("Filter / Search Files (/)");
 
-    // 2. Search Container (collapsible)
+    // 2. Dedicated Full-Path Text Strip just below the toolbar
+    m_path_strip = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    m_path_strip->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    m_path_strip->set_padding(16, 4, 16, 4);
+    m_path_strip->set_divider_spacing(8);
+
+    auto path_icon = std::make_shared<ImageView>("folder");
+    path_icon->set_target_size(14);
+    path_icon->set_dim(0.35f);
+    LayoutParams icon_lp;
+    icon_lp.width = 14;
+    icon_lp.height = 14;
+    icon_lp.gravity = Gravity::CenterVertical;
+    m_path_strip->add_view(path_icon, icon_lp);
+
+    m_path_text = TextViewBuilder::create()
+        ->text(m_current_path.string())
+        ->textSize(11)
+        ->textColor(config->colors.on_surface_variant)
+        ->wrap(false)
+        ->build();
+    LayoutParams text_lp;
+    text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    text_lp.gravity = Gravity::CenterVertical;
+    m_path_text->set_layout_params(text_lp);
+    m_path_strip->add_view(m_path_text);
+
+    // 3. Search Container (collapsible)
     m_search_container = std::make_shared<LinearLayout>(Orientation::Horizontal);
     m_search_container->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
@@ -128,37 +189,26 @@ void FilesWindow::build_ui() {
         0,
         1.0f
     ));
-    columns_container->set_padding(8, 4, 8, 4);
-    columns_container->set_divider_spacing(8);
+    columns_container->set_padding(14, 6, 14, 8);
+    columns_container->set_divider_spacing(12);
 
     // --- LEFT COLUMN: Parent Directory (weight 1.0) ---
-    auto col_parent_card = std::make_shared<ColumnCardView>();
-    col_parent_card->set_card_background_color(config->colors.surface_variant);
-    col_parent_card->set_radius(config->metrics.corner_radius);
-    col_parent_card->set_stroke(1, config->colors.outline_variant);
-    col_parent_card->set_elevation(0);
-    col_parent_card->set_padding(6);
+    m_col_parent_card = std::make_shared<ColumnCardView>();
+    m_col_parent_card->set_card_background_color(config->colors.surface_variant);
+    m_col_parent_card->set_radius(config->metrics.corner_radius);
+    m_col_parent_card->set_stroke(1, config->colors.outline_variant);
+    m_col_parent_card->set_elevation(0);
+    m_col_parent_card->set_padding(8);
     LayoutParams col_parent_lp;
     col_parent_lp.width = 0;
     col_parent_lp.height = static_cast<int>(LayoutDimension::MatchParent);
     col_parent_lp.weight = 1.0f;
-    col_parent_card->set_layout_params(col_parent_lp);
-
-    auto col_parent_layout = std::make_shared<LinearLayout>(Orientation::Vertical);
-    col_parent_layout->set_divider_spacing(4);
-
-    m_parent_title = TextViewBuilder::create()
-        ->text("Parent")
-        ->bold(true)
-        ->textSize(10)
-        ->textColor(config->colors.outline)
-        ->build();
-    col_parent_layout->add_view(m_parent_title);
+    m_col_parent_card->set_layout_params(col_parent_lp);
 
     m_parent_list = std::make_shared<ListView>();
-    m_parent_list->set_item_height(32);
-    m_parent_list->set_spacing(2);
-    m_parent_list->set_item_corner_radius(4);
+    m_parent_list->set_item_height(38);
+    m_parent_list->set_spacing(4);
+    m_parent_list->set_item_corner_radius(6);
     m_parent_list->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
@@ -168,36 +218,72 @@ void FilesWindow::build_ui() {
             navigate_to(m_parent_items[idx].path);
         }
     });
-    col_parent_layout->add_view(m_parent_list);
-    col_parent_card->add_view(col_parent_layout);
+    m_col_parent_card->add_view(m_parent_list);
+
+    // Root Hero: Big H1 App Name centered in 1st pillar when at root (no parent)
+    m_parent_root_hero = std::make_shared<LinearLayout>(Orientation::Vertical);
+    LayoutParams hero_lp;
+    hero_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    hero_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    hero_lp.gravity = Gravity::Center;
+    m_parent_root_hero->set_layout_params(hero_lp);
+    m_parent_root_hero->set_divider_spacing(10);
+    m_parent_root_hero->set_visibility(Visibility::Gone);
+
+    auto app_icon = std::make_shared<ImageView>("system-file-manager");
+    app_icon->set_target_size(56);
+    app_icon->set_dim(0.15f);
+    LayoutParams hero_icon_lp;
+    hero_icon_lp.width = 56;
+    hero_icon_lp.height = 56;
+    hero_icon_lp.gravity = Gravity::CenterHorizontal;
+    m_parent_root_hero->add_view(app_icon, hero_icon_lp);
+
+    m_h1_title = TextViewBuilder::create()
+        ->text("Files")
+        ->bold(true)
+        ->textSize(26)
+        ->center(true)
+        ->textColor(config->colors.primary)
+        ->build();
+    LayoutParams h1_lp;
+    h1_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    h1_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    h1_lp.gravity = Gravity::CenterHorizontal;
+    m_h1_title->set_layout_params(h1_lp);
+    m_parent_root_hero->add_view(m_h1_title);
+
+    m_hero_subtitle = TextViewBuilder::create()
+        ->text("File Manager")
+        ->textSize(11)
+        ->center(true)
+        ->textColor(config->colors.outline)
+        ->build();
+    LayoutParams sub_lp;
+    sub_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    sub_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    sub_lp.gravity = Gravity::CenterHorizontal;
+    m_hero_subtitle->set_layout_params(sub_lp);
+    m_parent_root_hero->add_view(m_hero_subtitle);
+
+    m_col_parent_card->add_view(m_parent_root_hero);
 
     // --- CENTER COLUMN: Active Directory (weight 1.6) ---
-    auto col_current_card = std::make_shared<ColumnCardView>();
-    col_current_card->set_card_background_color(config->colors.surface);
-    col_current_card->set_radius(config->metrics.corner_radius);
-    col_current_card->set_stroke(1, config->colors.outline);
-    col_current_card->set_elevation(0);
-    col_current_card->set_padding(6);
+    m_col_current_card = std::make_shared<ColumnCardView>();
+    m_col_current_card->set_card_background_color(config->colors.surface);
+    m_col_current_card->set_radius(config->metrics.corner_radius);
+    m_col_current_card->set_stroke(1, config->colors.outline_variant);
+    m_col_current_card->set_elevation(0);
+    m_col_current_card->set_padding(8);
     LayoutParams col_current_lp;
     col_current_lp.width = 0;
     col_current_lp.height = static_cast<int>(LayoutDimension::MatchParent);
     col_current_lp.weight = 1.6f;
-    col_current_card->set_layout_params(col_current_lp);
-
-    auto col_current_layout = std::make_shared<LinearLayout>(Orientation::Vertical);
-    col_current_layout->set_divider_spacing(4);
-
-    m_current_title = TextViewBuilder::create()
-        ->text("Current")
-        ->bold(true)
-        ->textSize(11)
-        ->textColor(config->colors.primary)
-        ->build();
-    col_current_layout->add_view(m_current_title);
+    m_col_current_card->set_layout_params(col_current_lp);
 
     m_current_list = std::make_shared<ListView>();
-    m_current_list->set_item_height(34);
-    m_current_list->set_spacing(2);
+    m_current_list->set_item_height(40);
+    m_current_list->set_spacing(4);
     m_current_list->set_item_corner_radius(6);
     m_current_list->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
@@ -207,74 +293,68 @@ void FilesWindow::build_ui() {
         auto now = std::chrono::steady_clock::now();
         auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_click_time).count();
         if (m_last_clicked_index == static_cast<int>(idx) && diff < 400) {
-            // Double click: open
             open_selected();
         } else {
-            // Single click: select and preview
             m_last_click_time = now;
             m_last_clicked_index = static_cast<int>(idx);
             set_selected_index(static_cast<int>(idx));
         }
     });
-    col_current_layout->add_view(m_current_list);
-    col_current_card->add_view(col_current_layout);
+    m_col_current_card->add_view(m_current_list);
 
-    // --- RIGHT COLUMN: Preview & Child View (weight 2.0) ---
-    auto col_preview_card = std::make_shared<ColumnCardView>();
-    col_preview_card->set_card_background_color(config->colors.surface_variant);
-    col_preview_card->set_radius(config->metrics.corner_radius);
-    col_preview_card->set_stroke(1, config->colors.outline_variant);
-    col_preview_card->set_elevation(0);
-    col_preview_card->set_padding(6);
+    // --- RIGHT COLUMN: Preview & Child View (weight 2.0) [NO SELECTION] ---
+    m_col_preview_card = std::make_shared<ColumnCardView>();
+    m_col_preview_card->set_card_background_color(config->colors.surface_variant);
+    m_col_preview_card->set_radius(config->metrics.corner_radius);
+    m_col_preview_card->set_stroke(1, config->colors.outline_variant);
+    m_col_preview_card->set_elevation(0);
+    m_col_preview_card->set_padding(8);
     LayoutParams col_preview_lp;
     col_preview_lp.width = 0;
     col_preview_lp.height = static_cast<int>(LayoutDimension::MatchParent);
     col_preview_lp.weight = 2.0f;
-    col_preview_card->set_layout_params(col_preview_lp);
-
-    auto col_preview_layout = std::make_shared<LinearLayout>(Orientation::Vertical);
-    col_preview_layout->set_divider_spacing(4);
-
-    m_preview_title = TextViewBuilder::create()
-        ->text("Preview")
-        ->bold(true)
-        ->textSize(10)
-        ->textColor(config->colors.outline)
-        ->build();
-    col_preview_layout->add_view(m_preview_title);
+    m_col_preview_card->set_layout_params(col_preview_lp);
 
     m_preview_view = std::make_shared<FilePreviewView>();
-    m_preview_view->set_on_open_listener([this](const fs::path& p) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            setsid();
-            execlp("xdg-open", "xdg-open", p.c_str(), nullptr);
-            _exit(1);
+    m_preview_view->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::MatchParent)
+    ));
+    m_preview_view->set_on_item_click_listener([this](const FileItem& item) {
+        if (item.is_dir) {
+            navigate_to(item.path.parent_path(), true, item.name);
+        } else {
+            navigate_to(item.path.parent_path(), true, item.name);
+            enter_fullscreen_preview();
         }
     });
-    col_preview_layout->add_view(m_preview_view);
-    col_preview_card->add_view(col_preview_layout);
+    m_preview_view->set_on_preview_click_listener([this](const FileItem& item) {
+        if (!item.is_dir) {
+            enter_fullscreen_preview();
+        }
+    });
+    m_col_preview_card->add_view(m_preview_view);
 
     // Add columns
-    columns_container->add_view(col_parent_card);
-    columns_container->add_view(col_current_card);
-    columns_container->add_view(col_preview_card);
+    columns_container->add_view(m_col_parent_card);
+    columns_container->add_view(m_col_current_card);
+    columns_container->add_view(m_col_preview_card);
 
     // 4. Status Bar
     m_status_bar = std::make_shared<StatusBarView>();
 
     // 5. Root Layout
-    auto root_container = std::make_shared<LinearLayout>(Orientation::Vertical);
-    root_container->set_layout_params(LayoutParams(
+    m_root_container = std::make_shared<LinearLayout>(Orientation::Vertical);
+    m_root_container->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
     ));
-    root_container->set_background_color(config->colors.background);
 
-    root_container->add_view(m_toolbar);
-    root_container->add_view(m_search_container);
-    root_container->add_view(columns_container);
-    root_container->add_view(m_status_bar);
+    m_root_container->add_view(m_toolbar);
+    m_root_container->add_view(m_path_strip);
+    m_root_container->add_view(m_search_container);
+    m_root_container->add_view(columns_container);
+    m_root_container->add_view(m_status_bar);
 
     // 6. Toplevel Window Creation
     m_window = WindowBuilder::create()
@@ -283,7 +363,7 @@ void FilesWindow::build_ui() {
         ->role(WindowRole::Toplevel)
         ->preferredSize(fcfg.window_width, fcfg.window_height)
         ->closeOnEscape(false)
-        ->contentView(root_container)
+        ->contentView(m_root_container)
         ->onKey([this](const KeyPressEvent& ev) {
             if (!ev.pressed) return;
 
@@ -305,7 +385,7 @@ void FilesWindow::build_ui() {
                 case XKB_KEY_h:
                 case XKB_KEY_BackSpace:
                     if (!m_search_visible) {
-                        navigate_up();
+                        on_left_action();
                         return;
                     }
                     break;
@@ -313,7 +393,7 @@ void FilesWindow::build_ui() {
                 case XKB_KEY_Right:
                 case XKB_KEY_l:
                     if (!m_search_visible) {
-                        open_selected();
+                        on_right_action();
                         return;
                     }
                     break;
@@ -326,7 +406,11 @@ void FilesWindow::build_ui() {
                 case XKB_KEY_Up:
                 case XKB_KEY_k:
                     if (!m_search_visible || ev.keysym == XKB_KEY_Up) {
-                        set_selected_index(m_selected_index - 1);
+                        if (m_fullscreen_preview) {
+                            m_preview_view->scroll_preview(-2.0);
+                        } else {
+                            set_selected_index(m_selected_index - 1);
+                        }
                         return;
                     }
                     break;
@@ -334,7 +418,11 @@ void FilesWindow::build_ui() {
                 case XKB_KEY_Down:
                 case XKB_KEY_j:
                     if (!m_search_visible || ev.keysym == XKB_KEY_Down) {
-                        set_selected_index(m_selected_index + 1);
+                        if (m_fullscreen_preview) {
+                            m_preview_view->scroll_preview(2.0);
+                        } else {
+                            set_selected_index(m_selected_index + 1);
+                        }
                         return;
                     }
                     break;
@@ -342,7 +430,9 @@ void FilesWindow::build_ui() {
                 case XKB_KEY_Home:
                 case XKB_KEY_g:
                     if (!m_search_visible) {
-                        set_selected_index(0);
+                        if (!m_fullscreen_preview) {
+                            set_selected_index(0);
+                        }
                         return;
                     }
                     break;
@@ -350,28 +440,38 @@ void FilesWindow::build_ui() {
                 case XKB_KEY_End:
                 case XKB_KEY_G:
                     if (!m_search_visible) {
-                        set_selected_index(static_cast<int>(m_filtered_items.size()) - 1);
+                        if (!m_fullscreen_preview) {
+                            set_selected_index(static_cast<int>(m_filtered_items.size()) - 1);
+                        }
                         return;
                     }
                     break;
 
                 case XKB_KEY_Page_Up:
-                    set_selected_index(m_selected_index - 10);
+                    if (m_fullscreen_preview) {
+                        m_preview_view->scroll_preview(-10.0);
+                    } else {
+                        set_selected_index(m_selected_index - 10);
+                    }
                     return;
 
                 case XKB_KEY_Page_Down:
-                    set_selected_index(m_selected_index + 10);
+                    if (m_fullscreen_preview) {
+                        m_preview_view->scroll_preview(10.0);
+                    } else {
+                        set_selected_index(m_selected_index + 10);
+                    }
                     return;
 
                 case XKB_KEY_period:
-                    if (!m_search_visible) {
+                    if (!m_search_visible && !m_fullscreen_preview) {
                         toggle_hidden();
                         return;
                     }
                     break;
 
                 case XKB_KEY_slash:
-                    if (!m_search_visible) {
+                    if (!m_search_visible && !m_fullscreen_preview) {
                         toggle_search();
                         return;
                     }
@@ -379,6 +479,9 @@ void FilesWindow::build_ui() {
 
                 case XKB_KEY_asciitilde:
                     if (!m_search_visible) {
+                        if (m_fullscreen_preview) {
+                            exit_fullscreen_preview();
+                        }
                         const char* h = std::getenv("HOME");
                         if (h) navigate_to(h);
                         return;
@@ -391,7 +494,11 @@ void FilesWindow::build_ui() {
 
                 case XKB_KEY_q:
                     if (!m_search_visible) {
-                        if (m_window) m_window->request_close();
+                        if (m_fullscreen_preview) {
+                            exit_fullscreen_preview();
+                        } else if (m_window) {
+                            m_window->request_close();
+                        }
                         return;
                     }
                     break;
@@ -399,6 +506,8 @@ void FilesWindow::build_ui() {
                 case XKB_KEY_Escape:
                     if (m_search_visible) {
                         toggle_search();
+                    } else if (m_fullscreen_preview) {
+                        exit_fullscreen_preview();
                     } else if (!m_filter_query.empty()) {
                         m_filter_query.clear();
                         if (m_search_view) m_search_view->set_query("");
@@ -430,7 +539,11 @@ void FilesWindow::build_ui() {
         ->build();
 }
 
-void FilesWindow::navigate_to(const fs::path& p, bool record_history) {
+void FilesWindow::navigate_to(const fs::path& p, bool record_history, const std::string& target_select_name) {
+    if (m_fullscreen_preview) {
+        exit_fullscreen_preview();
+    }
+
     std::error_code ec;
     fs::path canonical_p = fs::canonical(p, ec);
     if (ec || !fs::is_directory(canonical_p, ec)) {
@@ -444,9 +557,10 @@ void FilesWindow::navigate_to(const fs::path& p, bool record_history) {
 
     m_current_path = canonical_p;
 
-    // Update toolbar display
-    m_toolbar->set_title(m_current_path.filename().empty() ? "/" : m_current_path.filename().string());
-    m_toolbar->set_subtitle(format_display_path(m_current_path));
+    // Update path strip display & back button (toolbar title remains stable "Files")
+    if (m_path_text) {
+        m_path_text->set_text(m_current_path.string());
+    }
     m_toolbar->set_back_visible(m_current_path != m_current_path.root_path());
 
     // Update parent column
@@ -454,12 +568,81 @@ void FilesWindow::navigate_to(const fs::path& p, bool record_history) {
 
     // Scan active directory
     m_current_items = FileItem::scan_directory(m_current_path, m_show_hidden);
-    apply_filter();
+    apply_filter(target_select_name);
 }
 
 void FilesWindow::navigate_up() {
+    if (m_fullscreen_preview) {
+        exit_fullscreen_preview();
+        return;
+    }
     if (m_current_path != m_current_path.root_path()) {
-        navigate_to(m_current_path.parent_path());
+        std::string prev_name = m_current_path.filename().string();
+        navigate_to(m_current_path.parent_path(), true, prev_name);
+    }
+}
+
+void FilesWindow::on_left_action() {
+    if (m_fullscreen_preview) {
+        exit_fullscreen_preview();
+        return;
+    }
+    navigate_up();
+}
+
+void FilesWindow::on_right_action() {
+    if (m_fullscreen_preview) {
+        return;
+    }
+    const FileItem* item = get_selected_item();
+    if (!item) return;
+
+    if (item->is_dir) {
+        navigate_to(item->path);
+    } else {
+        enter_fullscreen_preview();
+    }
+}
+
+void FilesWindow::enter_fullscreen_preview() {
+    const FileItem* item = get_selected_item();
+    if (!item || item->is_dir || m_fullscreen_preview) return;
+
+    m_fullscreen_preview = true;
+    if (m_col_parent_card) m_col_parent_card->set_visibility(Visibility::Gone);
+    if (m_col_current_card) m_col_current_card->set_visibility(Visibility::Gone);
+    if (m_col_preview_card) m_col_preview_card->set_visibility(Visibility::Visible);
+
+    if (m_path_text) {
+        m_path_text->set_text(item->path.string());
+    }
+    if (m_window) {
+        m_window->schedule_redraw();
+    }
+}
+
+void FilesWindow::exit_fullscreen_preview() {
+    if (!m_fullscreen_preview) return;
+
+    m_fullscreen_preview = false;
+    if (m_col_parent_card) m_col_parent_card->set_visibility(Visibility::Visible);
+    if (m_col_current_card) m_col_current_card->set_visibility(Visibility::Visible);
+    if (m_col_preview_card) m_col_preview_card->set_visibility(Visibility::Visible);
+
+    if (m_path_text) {
+        m_path_text->set_text(m_current_path.string());
+    }
+    if (m_window) {
+        m_window->schedule_redraw();
+    }
+}
+
+void FilesWindow::open_external(const fs::path& p) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        execlp("xdg-open", "xdg-open", p.c_str(), nullptr);
+        _exit(1);
     }
 }
 
@@ -512,12 +695,13 @@ void FilesWindow::populate_parent_column() {
     if (parent_p.empty() || m_current_path == m_current_path.root_path()) {
         m_parent_items.clear();
         m_parent_list->clear_items();
-        m_parent_title->set_text("Root (No Parent)");
+        m_parent_list->set_visibility(Visibility::Gone);
+        if (m_parent_root_hero) m_parent_root_hero->set_visibility(Visibility::Visible);
         return;
     }
 
-    std::string parent_name = parent_p.filename().empty() ? "/" : parent_p.filename().string();
-    m_parent_title->set_text(parent_name);
+    m_parent_list->set_visibility(Visibility::Visible);
+    if (m_parent_root_hero) m_parent_root_hero->set_visibility(Visibility::Gone);
 
     m_parent_items = FileItem::scan_directory(parent_p, m_show_hidden);
     m_parent_list->clear_items();
@@ -542,7 +726,7 @@ void FilesWindow::populate_parent_column() {
     m_parent_list->set_selected_index(found_selected);
 }
 
-void FilesWindow::apply_filter() {
+void FilesWindow::apply_filter(const std::string& target_select_name) {
     m_filtered_items.clear();
 
     if (m_filter_query.empty()) {
@@ -560,14 +744,10 @@ void FilesWindow::apply_filter() {
         }
     }
 
-    populate_current_column();
+    populate_current_column(target_select_name);
 }
 
-void FilesWindow::populate_current_column() {
-    std::string cur_name = m_current_path.filename().empty() ? "/" : m_current_path.filename().string();
-    std::string title_str = cur_name + " (" + std::to_string(m_filtered_items.size()) + ")";
-    m_current_title->set_text(title_str);
-
+void FilesWindow::populate_current_column(const std::string& target_select_name) {
     m_current_list->clear_items();
 
     for (const auto& item : m_filtered_items) {
@@ -580,7 +760,17 @@ void FilesWindow::populate_current_column() {
         m_current_list->add_item(view);
     }
 
-    set_selected_index(m_filtered_items.empty() ? -1 : 0);
+    int select_idx = 0;
+    if (!target_select_name.empty()) {
+        for (size_t i = 0; i < m_filtered_items.size(); ++i) {
+            if (m_filtered_items[i].name == target_select_name) {
+                select_idx = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+
+    set_selected_index(m_filtered_items.empty() ? -1 : select_idx);
 }
 
 void FilesWindow::set_selected_index(int index) {
@@ -593,6 +783,9 @@ void FilesWindow::set_selected_index(int index) {
     }
 
     update_preview_and_status();
+    if (m_window) {
+        m_window->schedule_redraw();
+    }
 }
 
 const FileItem* FilesWindow::get_selected_item() const {
@@ -605,14 +798,7 @@ const FileItem* FilesWindow::get_selected_item() const {
 void FilesWindow::update_preview_and_status() {
     const FileItem* item = get_selected_item();
 
-    if (item) {
-        m_preview_title->set_text(item->name);
-        m_preview_view->update_preview(item, m_show_hidden);
-    } else {
-        m_preview_title->set_text("Preview");
-        m_preview_view->update_preview(nullptr, m_show_hidden);
-    }
-
+    m_preview_view->update_preview(item, m_show_hidden);
     m_status_bar->update_stats(m_filtered_items, item, m_current_path);
 }
 
@@ -623,12 +809,7 @@ void FilesWindow::open_selected() {
     if (item->is_dir) {
         navigate_to(item->path);
     } else {
-        pid_t pid = fork();
-        if (pid == 0) {
-            setsid();
-            execlp("xdg-open", "xdg-open", item->path.c_str(), nullptr);
-            _exit(1);
-        }
+        open_external(item->path);
     }
 }
 

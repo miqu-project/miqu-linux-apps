@@ -15,6 +15,10 @@ FilesConfig& FilesConfig::get() {
     return s_files_config;
 }
 
+void FilesConfig::sync_defaults_from_toolkit() {
+    // Appearance tokens and metrics are sourced directly from Config::get()
+}
+
 static std::string trim_str(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\r\n\"'");
     if (first == std::string::npos) return "";
@@ -29,6 +33,7 @@ static bool parse_bool(const std::string& val) {
 }
 
 void FilesConfig::load(const std::string& custom_path) {
+    sync_defaults_from_toolkit();
     std::string target_path;
     if (!custom_path.empty() && fs::exists(custom_path)) {
         target_path = custom_path;

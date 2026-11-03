@@ -54,6 +54,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // 4. Hook up live dynamic theme change propagation across the desktop ecosystem
+    engine->add_theme_change_listener([&files_window]() {
+        FilesConfig::get().sync_defaults_from_toolkit();
+        if (files_window) {
+            files_window->sync_theme();
+        }
+    });
+
     files_window->show();
 
     return engine->enter_loop();

@@ -17,6 +17,8 @@
 
 namespace miqu {
 
+class ColumnCardView;
+
 class FilesWindow : public std::enable_shared_from_this<FilesWindow> {
 public:
     static std::shared_ptr<FilesWindow> create(std::shared_ptr<AppEngine> engine, const std::string& start_path = "");
@@ -25,14 +27,21 @@ public:
     bool init();
     void show();
 
-    void navigate_to(const std::filesystem::path& path, bool record_history = true);
+    void navigate_to(const std::filesystem::path& path, bool record_history = true, const std::string& target_select_name = "");
     void navigate_up();
     void navigate_back();
     void navigate_forward();
+    void on_left_action();
+    void on_right_action();
     void open_selected();
+    void open_external(const std::filesystem::path& path);
+    void enter_fullscreen_preview();
+    void exit_fullscreen_preview();
+    bool is_fullscreen_preview() const { return m_fullscreen_preview; }
     void toggle_hidden();
     void toggle_search();
     void refresh();
+    void sync_theme();
 
     void set_selected_index(int index);
     const FileItem* get_selected_item() const;
@@ -42,9 +51,9 @@ private:
 
     void build_ui();
     void populate_parent_column();
-    void populate_current_column();
+    void populate_current_column(const std::string& target_select_name = "");
     void update_preview_and_status();
-    void apply_filter();
+    void apply_filter(const std::string& target_select_name = "");
 
     std::shared_ptr<AppEngine> m_engine;
     std::shared_ptr<Window> m_window;
@@ -69,18 +78,27 @@ private:
     int m_last_clicked_index = -1;
 
     // UI Widgets
+    std::shared_ptr<LinearLayout> m_root_container;
     std::shared_ptr<Toolbar> m_toolbar;
+    std::shared_ptr<LinearLayout> m_path_strip;
+    std::shared_ptr<TextView> m_path_text;
     std::shared_ptr<SearchView> m_search_view;
     std::shared_ptr<LinearLayout> m_search_container;
-
-    std::shared_ptr<TextView> m_parent_title;
-    std::shared_ptr<TextView> m_current_title;
-    std::shared_ptr<TextView> m_preview_title;
 
     std::shared_ptr<ListView> m_parent_list;
     std::shared_ptr<ListView> m_current_list;
     std::shared_ptr<FilePreviewView> m_preview_view;
     std::shared_ptr<StatusBarView> m_status_bar;
+
+    std::shared_ptr<ColumnCardView> m_col_parent_card;
+    std::shared_ptr<LinearLayout> m_parent_root_hero;
+    std::shared_ptr<TextView> m_h1_title;
+    std::shared_ptr<TextView> m_hero_subtitle;
+
+    std::shared_ptr<ColumnCardView> m_col_current_card;
+    std::shared_ptr<ColumnCardView> m_col_preview_card;
+
+    bool m_fullscreen_preview = false;
 
     std::shared_ptr<ImageButton> m_btn_hidden;
     std::shared_ptr<ImageButton> m_btn_search;
