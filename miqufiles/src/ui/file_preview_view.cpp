@@ -139,9 +139,7 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
             ->itemHeight(36)
             ->spacing(4)
             ->itemCornerRadius(6)
-            ->selectable(false)
             ->build();
-        list->set_selectable(false);
         list->set_layout_params(LayoutParams(
             static_cast<int>(LayoutDimension::MatchParent),
             0,
@@ -159,7 +157,7 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
         }
         list->set_selected_index(-1);
 
-        list->set_on_item_click_listener([this, children](size_t idx, std::shared_ptr<View>) {
+        list->set_on_item_click_listener([this, children, list_weak = std::weak_ptr<ListView>(list)](size_t idx, std::shared_ptr<View>) {
             auto now = std::chrono::steady_clock::now();
             auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_item_click_time).count();
             if (m_last_item_clicked_index == static_cast<int>(idx) && diff < 400) {
@@ -169,6 +167,9 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
             } else {
                 m_last_item_click_time = now;
                 m_last_item_clicked_index = static_cast<int>(idx);
+                if (auto l = list_weak.lock()) {
+                    l->set_selected_index(-1);
+                }
             }
         });
 
