@@ -109,6 +109,25 @@ outline_variant = #d0c8da
 backdrop = #00000033
 ```
 
+### 🧩 Toolkit Resolution & Override Mechanism
+
+Understanding how configuration flows through `miqutoolkit` and `miqudm`:
+
+1. **Where `miqutoolkit` gets its widget baseline**:
+   - Because `miqudm-greeter` runs before login as the unprivileged system user `greeter` (`$HOME=/var/empty`), it cannot access any personal user directories (`~/.config/miqutoolkit/`).
+   - `miqutoolkit` therefore initializes its system baseline from:
+     ```
+     /usr/share/miqutoolkit/miqutoolkit.conf
+     ```
+   - From here, it establishes default typography (`font = Sans`, `font_size = 11`, `h1_size = 20`), default metrics (`border_width = 1`, `card_elevation = 1.0`), and generic fallback colors.
+
+2. **When and what gets overridden**:
+   - Immediately after toolkit initialization, `miqudm-greeter` loads `/etc/miqudm/miqudm.conf`.
+   - **Colors**: All tokens in the `[Theme]` block explicitly **overwrite** `miqutoolkit`'s baseline colors with `miqudm`'s dedicated palette.
+   - **Metrics & Geometry**: `card_radius`, `avatar_size`, and `wallpaper` in `[Greeter]` directly configure the login card and background.
+   - **Fallback Safety**: Any design token *not* explicitly redefined in `miqudm.conf` safely retains the consistent system baseline from `miqutoolkit`.
+
+
 ---
 
 ## 📦 Build & Installation
