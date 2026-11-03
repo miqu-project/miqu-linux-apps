@@ -1,5 +1,6 @@
 # Build directories
 build/
+.old_root_build/
 Build/
 build_*/
 bin/

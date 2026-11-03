@@ -14,8 +14,16 @@ echo "==> Build finished successfully! Binaries are at $BUILD_DIR/miqudm and $BU
 
 # If invoked with sudo/root, automatically install to system
 if [ "${EUID}" -eq 0 ]; then
+    echo "==> Ensuring greeter user and hardware groups (video, input, seat)..."
+    if ! id -u greeter >/dev/null 2>&1; then
+        useradd -r -s /usr/bin/nologin -d /var/empty -m -G video,input,seat greeter || true
+    else
+        usermod -a -G video,input,seat greeter || true
+    fi
+
     echo "==> Installing miqudm to system (/usr/bin, /etc)..."
     cmake --install "$BUILD_DIR"
+    systemctl daemon-reload 2>/dev/null || true
     echo "==> miqudm successfully installed."
 else
     echo "==> To install system-wide, run: sudo ./make.sh"

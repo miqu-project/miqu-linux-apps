@@ -1,14 +1,11 @@
 #pragma once
 
-#include "pam_auth.hpp"
-#include "session.hpp"
-#include "ipc.hpp"
-#include "config.hpp"
+#include "types.hpp"
+#include "pam_service.hpp"
 #include <string>
 #include <vector>
 #include <atomic>
-#include <thread>
-#include <memory>
+#include <sys/types.h>
 
 namespace miqudm {
 
@@ -28,20 +25,17 @@ private:
     void start_greeter();
     void stop_greeter();
 
-    void handle_client_connection(int client_fd);
-    void process_message(int client_fd, const IpcMessage& req);
+    void handle_client_message(int client_fd, const std::string& line);
+    void process_client(int client_fd);
 
-    void handle_login_request(int client_fd, const IpcMessage& req);
-    void handle_power_action(int client_fd, const IpcMessage& req);
-
-    std::string m_socket_path;
-    int m_server_socket_fd = -1;
+    std::string m_socket_path = "/run/miqudm/socket";
+    int m_server_fd = -1;
     pid_t m_greeter_pid = -1;
-    std::atomic<bool> m_running{false};
+    pid_t m_user_session_pid = -1;
 
-    std::unique_ptr<PamAuth> m_greeter_pam;
-    std::unique_ptr<PamAuth> m_active_pam;
-    SessionLauncher m_session_launcher;
+    std::atomic<bool> m_running{false};
+    std::unique_ptr<PamService> m_authenticated_pam;
+    std::string m_authenticated_user;
 
     std::vector<UserInfo> m_cached_users;
     std::vector<SessionInfo> m_cached_sessions;
