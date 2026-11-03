@@ -122,13 +122,15 @@ void FilesWindow::build_ui() {
     m_btn_hidden = m_toolbar->add_action(m_show_hidden ? "•*" : ".*", [this]() {
         toggle_hidden();
     });
-    m_btn_hidden->set_tooltip("Toggle Hidden Files (.)");
+    m_btn_hidden->set_tooltip("Toggle Hidden Files");
+    m_btn_hidden->set_tooltip_shortcut(". / Ctrl+H");
 
     // Search action
     m_btn_search = m_toolbar->add_action(icons::SEARCH, [this]() {
         toggle_search();
     });
-    m_btn_search->set_tooltip("Filter / Search Files (/)");
+    m_btn_search->set_tooltip("Filter / Search Files");
+    m_btn_search->set_tooltip_shortcut("/ / Ctrl+F");
 
     // 2. Dedicated Full-Path Text Strip just below the toolbar
     m_path_strip = std::make_shared<LinearLayout>(Orientation::Horizontal);
@@ -374,6 +376,22 @@ void FilesWindow::build_ui() {
         ->onKey([this](const KeyPressEvent& ev) {
             if (!ev.pressed) return;
 
+            // Priority modifier shortcuts (Ctrl+...)
+            if (ev.modifiers & static_cast<uint32_t>(KeyboardModifier::Control)) {
+                if (ev.keysym == XKB_KEY_h || ev.keysym == XKB_KEY_H) {
+                    toggle_hidden();
+                    return;
+                }
+                if (ev.keysym == XKB_KEY_r || ev.keysym == XKB_KEY_R) {
+                    refresh();
+                    return;
+                }
+                if (ev.keysym == XKB_KEY_f || ev.keysym == XKB_KEY_F) {
+                    toggle_search();
+                    return;
+                }
+            }
+
             // Handle key events for search view when visible
             if (m_search_visible) {
                 if (ev.keysym == XKB_KEY_Escape) {
@@ -525,21 +543,6 @@ void FilesWindow::build_ui() {
                     return;
 
                 default:
-                    // Check Ctrl shortcuts
-                    if (ev.modifiers & static_cast<uint32_t>(KeyboardModifier::Control)) {
-                        if (ev.keysym == XKB_KEY_h || ev.keysym == XKB_KEY_H) {
-                            toggle_hidden();
-                            return;
-                        }
-                        if (ev.keysym == XKB_KEY_r || ev.keysym == XKB_KEY_R) {
-                            refresh();
-                            return;
-                        }
-                        if (ev.keysym == XKB_KEY_f || ev.keysym == XKB_KEY_F) {
-                            toggle_search();
-                            return;
-                        }
-                    }
                     break;
             }
         })
@@ -672,13 +675,20 @@ void FilesWindow::navigate_forward() {
 }
 
 void FilesWindow::refresh() {
-    navigate_to(m_current_path, false);
+    std::string current_name;
+    const FileItem* cur = get_selected_item();
+    if (cur) {
+        current_name = cur->name;
+    }
+    navigate_to(m_current_path, false, current_name);
 }
 
 void FilesWindow::toggle_hidden() {
     m_show_hidden = !m_show_hidden;
+    FilesConfig::get().show_hidden = m_show_hidden;
     if (m_btn_hidden) {
         m_btn_hidden->set_icon(m_show_hidden ? "•*" : ".*");
+        m_btn_hidden->request_redraw();
     }
     refresh();
 }
@@ -711,6 +721,26 @@ void FilesWindow::populate_parent_column() {
     if (m_parent_root_hero) m_parent_root_hero->set_visibility(Visibility::Gone);
 
     m_parent_items = FileItem::scan_directory(parent_p, m_show_hidden);
+    if (!m_show_hidden && !m_current_path.filename().string().empty() && m_current_path.filename().string()[0] == '.') {
+        // If the active directory itself is hidden, ensure it remains visible in the parent column
+        bool exists_in_parent = false;
+        for (const auto& item : m_parent_items) {
+            if (item.path == m_current_path) {
+                exists_in_parent = true;
+                break;
+            }
+        }
+        if (!exists_in_parent) {
+            m_parent_items.push_back(FileItem::from_path(m_current_path));
+            std::sort(m_parent_items.begin(), m_parent_items.end(), [](const FileItem& a, const FileItem& b) {
+                if (a.is_dir != b.is_dir) return a.is_dir > b.is_dir;
+                std::string a_lower = a.name, b_lower = b.name;
+                std::transform(a_lower.begin(), a_lower.end(), a_lower.begin(), ::tolower);
+                std::transform(b_lower.begin(), b_lower.end(), b_lower.begin(), ::tolower);
+                return a_lower < b_lower;
+            });
+        }
+    }
     m_parent_list->clear_items();
 
     int found_selected = -1;
@@ -769,11 +799,16 @@ void FilesWindow::populate_current_column(const std::string& target_select_name)
 
     int select_idx = 0;
     if (!target_select_name.empty()) {
+        bool found = false;
         for (size_t i = 0; i < m_filtered_items.size(); ++i) {
             if (m_filtered_items[i].name == target_select_name) {
                 select_idx = static_cast<int>(i);
+                found = true;
                 break;
             }
+        }
+        if (!found && m_selected_index >= 0 && !m_filtered_items.empty()) {
+            select_idx = std::clamp(m_selected_index, 0, static_cast<int>(m_filtered_items.size()) - 1);
         }
     }
 
