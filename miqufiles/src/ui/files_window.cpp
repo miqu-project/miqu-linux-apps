@@ -214,8 +214,15 @@ void FilesWindow::build_ui() {
         static_cast<int>(LayoutDimension::MatchParent)
     ));
     m_parent_list->set_on_item_click_listener([this](size_t idx, std::shared_ptr<View>) {
-        if (idx < m_parent_items.size() && m_parent_items[idx].is_dir) {
-            navigate_to(m_parent_items[idx].path);
+        auto now = std::chrono::steady_clock::now();
+        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_parent_click_time).count();
+        if (m_last_parent_clicked_index == static_cast<int>(idx) && diff < 400) {
+            if (idx < m_parent_items.size() && m_parent_items[idx].is_dir) {
+                navigate_to(m_parent_items[idx].path);
+            }
+        } else {
+            m_last_parent_click_time = now;
+            m_last_parent_clicked_index = static_cast<int>(idx);
         }
     });
     m_col_parent_card->add_view(m_parent_list);

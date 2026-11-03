@@ -160,8 +160,15 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
         list->set_selected_index(-1);
 
         list->set_on_item_click_listener([this, children](size_t idx, std::shared_ptr<View>) {
-            if (idx < children.size() && m_on_item_click) {
-                m_on_item_click(children[idx]);
+            auto now = std::chrono::steady_clock::now();
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_item_click_time).count();
+            if (m_last_item_clicked_index == static_cast<int>(idx) && diff < 400) {
+                if (idx < children.size() && m_on_item_click) {
+                    m_on_item_click(children[idx]);
+                }
+            } else {
+                m_last_item_click_time = now;
+                m_last_item_clicked_index = static_cast<int>(idx);
             }
         });
 
@@ -249,8 +256,14 @@ bool FilePreviewView::on_mouse_button(int lx, int ly, MouseButton button, bool p
             return true;
         } else if (m_pressed) {
             m_pressed = false;
-            if (m_current_item && !m_current_item->is_dir && m_on_preview_click) {
-                m_on_preview_click(*m_current_item);
+            auto now = std::chrono::steady_clock::now();
+            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_preview_click_time).count();
+            if (diff < 400) {
+                if (m_current_item && !m_current_item->is_dir && m_on_preview_click) {
+                    m_on_preview_click(*m_current_item);
+                }
+            } else {
+                m_last_preview_click_time = now;
             }
             return true;
         }

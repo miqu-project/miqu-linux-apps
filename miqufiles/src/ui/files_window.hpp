@@ -76,6 +76,8 @@ private:
     // Double click tracking
     std::chrono::steady_clock::time_point m_last_click_time{};
     int m_last_clicked_index = -1;
+    std::chrono::steady_clock::time_point m_last_parent_click_time{};
+    int m_last_parent_clicked_index = -1;
 
     // UI Widgets
     std::shared_ptr<LinearLayout> m_root_container;

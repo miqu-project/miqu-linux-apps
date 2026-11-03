@@ -38,11 +38,14 @@ private:
 
     std::shared_ptr<View> m_current_content;
     std::shared_ptr<ScrollView> m_text_scroll;
-    std::function<void(const std::filesystem::path&)> m_on_open;
     std::function<void(const FileItem&)> m_on_item_click;
     std::function<void(const FileItem&)> m_on_preview_click;
     std::shared_ptr<FileItem> m_current_item;
     bool m_pressed = false;
+
+    std::chrono::steady_clock::time_point m_last_item_click_time{};
+    int m_last_item_clicked_index = -1;
+    std::chrono::steady_clock::time_point m_last_preview_click_time{};
 };
 
 } // namespace miqu
