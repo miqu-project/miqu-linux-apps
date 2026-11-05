@@ -173,6 +173,12 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
             }
         });
 
+        list->set_on_item_context_click_listener([this, children](size_t idx, std::shared_ptr<View>, int x, int y) {
+            if (idx < children.size() && m_on_context_click) {
+                m_on_context_click(children[idx], x, y);
+            }
+        });
+
         root->add_view(list);
     }
 
@@ -195,6 +201,11 @@ void FilePreviewView::show_image_preview(const FileItem& item) {
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
     ));
+    aspect_img->set_on_context_click_listener([this, item](int x, int y) {
+        if (m_on_context_click) {
+            m_on_context_click(item, x, y);
+        }
+    });
 
     scroll->set_content_view(aspect_img);
 
@@ -251,22 +262,29 @@ bool FilePreviewView::on_mouse_button(int lx, int ly, MouseButton button, bool p
     }
 
     // If not consumed by a child view, handle clicking on single file / image preview
-    if (button == MouseButton::Left && bounds.contains(Point(lx, ly))) {
-        if (pressed) {
-            m_pressed = true;
-            return true;
-        } else if (m_pressed) {
-            m_pressed = false;
-            auto now = std::chrono::steady_clock::now();
-            auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_preview_click_time).count();
-            if (diff < 400) {
-                if (m_current_item && !m_current_item->is_dir && m_on_preview_click) {
-                    m_on_preview_click(*m_current_item);
-                }
-            } else {
-                m_last_preview_click_time = now;
+    if (bounds.contains(Point(lx, ly))) {
+        if (button == MouseButton::Right && pressed) {
+            if (m_current_item && m_on_context_click) {
+                m_on_context_click(*m_current_item, lx, ly);
+                return true;
             }
-            return true;
+        } else if (button == MouseButton::Left) {
+            if (pressed) {
+                m_pressed = true;
+                return true;
+            } else if (m_pressed) {
+                m_pressed = false;
+                auto now = std::chrono::steady_clock::now();
+                auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_preview_click_time).count();
+                if (diff < 400) {
+                    if (m_current_item && !m_current_item->is_dir && m_on_preview_click) {
+                        m_on_preview_click(*m_current_item);
+                    }
+                } else {
+                    m_last_preview_click_time = now;
+                }
+                return true;
+            }
         }
     }
 

@@ -19,7 +19,36 @@ namespace miqudesk {
 
 namespace fs = std::filesystem;
 
-CanvasRootView::CanvasRootView(DesktopCanvas* canvas) : m_canvas(canvas) {}
+CanvasRootView::CanvasRootView(DesktopCanvas* canvas) : m_canvas(canvas) {
+    set_context_menu_builder([this](int, int) -> std::shared_ptr<miqu::PopupMenu> {
+        if (!m_canvas) return nullptr;
+        return miqu::ActionMenuBuilder::create()
+            ->item("Open Terminal", "utilities-terminal", []() {
+                if (fork() == 0) {
+                    execlp("kitty", "kitty", nullptr);
+                    execlp("alacritty", "alacritty", nullptr);
+                    _exit(1);
+                }
+            })
+            ->item("Open File Manager", "system-file-manager", []() {
+                if (fork() == 0) {
+                    execlp("miqufiles", "miqufiles", nullptr);
+                    _exit(1);
+                }
+            })
+            ->separator()
+            ->item(m_canvas->is_edit_mode() ? "Lock Widgets" : "Edit Widgets", "preferences-desktop", [this]() {
+                m_canvas->toggle_edit_mode();
+            })
+            ->item("Change Appearance", "preferences-desktop-wallpaper", []() {
+                if (fork() == 0) {
+                    execlp("miqutheme", "miqutheme", nullptr);
+                    _exit(1);
+                }
+            })
+            ->build();
+    });
+}
 
 void CanvasRootView::draw(cairo_t* cr, const miqu::Rect& bounds) {
     if (!cr || !m_canvas) return;
@@ -47,6 +76,12 @@ bool CanvasRootView::on_mouse_button(int lx, int ly, miqu::MouseButton button, b
                     return true;
                 }
                 break;
+            }
+        }
+
+        if (button == miqu::MouseButton::Right) {
+            if (handle_context_click(lx, ly, bounds)) {
+                return true;
             }
         }
     } else {

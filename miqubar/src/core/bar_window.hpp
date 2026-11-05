@@ -3,6 +3,7 @@
 #include "miqutoolkit/view/frame_layout.hpp"
 #include "miqutoolkit/view/linear_layout.hpp"
 #include "miqutoolkit/view/card_view.hpp"
+#include "miqutoolkit/view/popup_window.hpp"
 #include "miqutoolkit/core/window.hpp"
 #include "../modules/start_button.hpp"
 #include "../modules/workspace_button.hpp"
@@ -69,12 +70,10 @@ private:
     std::shared_ptr<ClockModuleView> m_clock;
     std::shared_ptr<PowerButtonView> m_power;
 
-    std::shared_ptr<miqu::Window> m_network_win;
-    std::shared_ptr<miqu::Window> m_bluetooth_win;
-    std::shared_ptr<miqu::Window> m_sound_win;
-    std::shared_ptr<miqu::Window> m_brightness_win;
-    std::shared_ptr<miqu::Window> m_calendar_win;
-    std::shared_ptr<miqu::Window> m_power_win;
+    enum class PopupType { None, Network, Bluetooth, Sound, Brightness, Calendar, Power };
+    PopupType m_active_popup_type = PopupType::None;
+    std::shared_ptr<miqu::PopupWindow> m_popup;
+    void show_flyout(PopupType type, std::shared_ptr<miqu::View> anchor, std::shared_ptr<miqu::View> content, int width, int height);
 
     int m_last_mouse_x = -1;
     int m_last_mouse_y = -1;

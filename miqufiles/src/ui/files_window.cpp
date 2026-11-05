@@ -8,10 +8,82 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <iostream>
+#include <fstream>
+#include <set>
+#include <cstdlib>
 
 namespace miqu {
 
 namespace fs = std::filesystem;
+
+namespace {
+
+struct AppChoice {
+    std::string name;
+    std::string desktop_id;
+    std::string icon;
+};
+
+std::string get_file_content_type(const fs::path& path) {
+    std::string cmd = "gio info -a \"standard::content-type\" \"" + path.string() + "\" 2>/dev/null";
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (fp) {
+        char buf[256];
+        while (fgets(buf, sizeof(buf), fp)) {
+            std::string line(buf);
+            auto pos = line.find("standard::content-type:");
+            if (pos != std::string::npos) {
+                std::string ct = line.substr(pos + 23);
+                while (!ct.empty() && (ct.back() == '\n' || ct.back() == '\r' || ct.back() == ' ')) ct.pop_back();
+                while (!ct.empty() && ct.front() == ' ') ct.erase(ct.begin());
+                pclose(fp);
+                return ct;
+            }
+        }
+        pclose(fp);
+    }
+    return "";
+}
+
+std::vector<AppChoice> get_apps_for_type(const std::string& content_type) {
+    std::vector<AppChoice> apps;
+    if (content_type.empty()) return apps;
+
+    std::string cmd = "gio mime \"" + content_type + "\" 2>/dev/null";
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (!fp) return apps;
+
+    char buf[256];
+    std::set<std::string> seen;
+    while (fgets(buf, sizeof(buf), fp)) {
+        std::string line(buf);
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r' || line.back() == ' ')) line.pop_back();
+        while (!line.empty() && (line.front() == '\t' || line.front() == ' ')) line.erase(line.begin());
+        if (line.ends_with(".desktop")) {
+            if (seen.insert(line).second) {
+                std::string app_name = line.substr(0, line.size() - 8);
+                std::string app_icon = "application-x-executable-symbolic";
+                std::ifstream df("/usr/share/applications/" + line);
+                if (df.is_open()) {
+                    std::string df_line;
+                    while (std::getline(df, df_line)) {
+                        if (df_line.starts_with("Name=")) {
+                            app_name = df_line.substr(5);
+                        } else if (df_line.starts_with("Icon=")) {
+                            app_icon = df_line.substr(5);
+                        }
+                    }
+                }
+                apps.push_back({app_name, line, app_icon});
+                if (apps.size() >= 6) break;
+            }
+        }
+    }
+    pclose(fp);
+    return apps;
+}
+
+} // namespace
 
 std::shared_ptr<FilesWindow> FilesWindow::create(std::shared_ptr<AppEngine> engine, const std::string& start_path) {
     std::string initial_path = start_path;
@@ -227,6 +299,11 @@ void FilesWindow::build_ui() {
             m_last_parent_clicked_index = static_cast<int>(idx);
         }
     });
+    m_parent_list->set_on_item_context_click_listener([this](size_t idx, std::shared_ptr<View>, int x, int y) {
+        if (idx < m_parent_items.size()) {
+            show_item_context_menu(m_parent_items[idx], x, y);
+        }
+    });
     m_col_parent_card->add_view(m_parent_list);
 
     // Root Hero: Big H1 App Name centered in 1st pillar when at root (no parent)
@@ -309,6 +386,15 @@ void FilesWindow::build_ui() {
             set_selected_index(static_cast<int>(idx));
         }
     });
+    m_current_list->set_on_item_context_click_listener([this](size_t idx, std::shared_ptr<View>, int x, int y) {
+        if (idx < m_filtered_items.size()) {
+            set_selected_index(static_cast<int>(idx));
+            show_item_context_menu(m_filtered_items[idx], x, y);
+        }
+    });
+    m_current_list->set_on_empty_context_click_listener([this](int x, int y) {
+        show_empty_context_menu(x, y);
+    });
     m_col_current_card->add_view(m_current_list);
 
     // --- RIGHT COLUMN: Preview & Child View (weight 2.0) [NO SELECTION] ---
@@ -341,6 +427,9 @@ void FilesWindow::build_ui() {
         if (!item.is_dir) {
             enter_fullscreen_preview();
         }
+    });
+    m_preview_view->set_on_context_click_listener([this](const FileItem& item, int x, int y) {
+        show_item_context_menu(item, x, y);
     });
     m_col_preview_card->add_view(m_preview_view);
 
@@ -852,6 +941,182 @@ void FilesWindow::open_selected() {
         navigate_to(item->path);
     } else {
         open_external(item->path);
+    }
+}
+
+void FilesWindow::show_item_context_menu(const FileItem& item, int x, int y) {
+    if (!m_window) return;
+
+    auto b = ActionMenuBuilder::create();
+
+    if (item.is_dir) {
+        b->item("Open", "document-open-symbolic", [this, item]() {
+            navigate_to(item.path);
+        });
+        b->item("Open in Terminal", "utilities-terminal-symbolic", [this, item]() {
+            open_in_terminal(item.path);
+        });
+    } else {
+        b->item("Open", "document-open-symbolic", [this, item]() {
+            open_external(item.path);
+        });
+        b->item("Open With...", "system-run-symbolic", [this, item, x, y]() {
+            show_open_with_menu(item, x, y);
+        });
+        b->item("Open in Terminal", "utilities-terminal-symbolic", [this, item]() {
+            open_in_terminal(item.path.parent_path());
+        });
+    }
+
+    b->separator();
+    b->item("Copy Path", "edit-copy-symbolic", [this, item]() {
+        copy_path(item.path);
+    });
+    b->item("Share", "emblem-shared-symbolic", [this, item]() {
+        share_item(item);
+    });
+    b->separator();
+    b->destructive("Move to Trash", "user-trash-symbolic", [this, item]() {
+        move_to_trash(item.path);
+    });
+
+    m_context_menu = b->minWidth(190)->build();
+    m_context_menu->show_at_location(m_window.get(), x, y);
+}
+
+void FilesWindow::show_open_with_menu(const FileItem& item, int x, int y) {
+    if (!m_window) return;
+
+    std::string content_type = get_file_content_type(item.path);
+    auto apps = get_apps_for_type(content_type);
+
+    auto b = ActionMenuBuilder::create();
+    b->section("Open With");
+
+    for (const auto& app : apps) {
+        b->item(app.name, app.icon, [app, item]() {
+            pid_t pid = fork();
+            if (pid == 0) {
+                setsid();
+                execlp("gtk-launch", "gtk-launch", app.desktop_id.c_str(), item.path.c_str(), nullptr);
+                _exit(1);
+            }
+        });
+    }
+
+    if (!apps.empty()) {
+        b->separator();
+    }
+
+    b->item("System Default", "document-open-symbolic", [this, item]() {
+        open_external(item.path);
+    });
+    b->item("Open in Terminal", "utilities-terminal-symbolic", [this, item]() {
+        open_in_terminal(item.path.parent_path());
+    });
+
+    m_context_menu = b->minWidth(210)->build();
+    m_context_menu->show_at_location(m_window.get(), x, y);
+}
+
+void FilesWindow::show_empty_context_menu(int x, int y) {
+    if (!m_window) return;
+
+    auto b = ActionMenuBuilder::create();
+    b->item("New Folder", "folder-new-symbolic", [this]() {
+        prompt_new_folder();
+    });
+    b->item("Open in Terminal", "utilities-terminal-symbolic", [this]() {
+        open_in_terminal(m_current_path);
+    });
+    b->separator();
+    b->item("Copy Folder Path", "edit-copy-symbolic", [this]() {
+        copy_path(m_current_path);
+    });
+    b->item("Refresh", "view-refresh-symbolic", "F5", [this]() {
+        refresh();
+    });
+    b->item(m_show_hidden ? "Hide Hidden Files" : "Show Hidden Files",
+            m_show_hidden ? "visibility-off-symbolic" : "visibility-symbolic",
+            ".",
+            [this]() {
+                toggle_hidden();
+            });
+
+    m_context_menu = b->minWidth(190)->build();
+    m_context_menu->show_at_location(m_window.get(), x, y);
+}
+
+void FilesWindow::open_in_terminal(const fs::path& target_dir) {
+    fs::path dir = target_dir;
+    std::error_code ec;
+    if (!fs::is_directory(dir, ec)) {
+        dir = dir.parent_path();
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        chdir(dir.c_str());
+        const char* term = std::getenv("TERMINAL");
+        if (term && term[0]) {
+            execlp(term, term, nullptr);
+        }
+        execlp("kitty", "kitty", nullptr);
+        execlp("alacritty", "alacritty", nullptr);
+        execlp("foot", "foot", nullptr);
+        execlp("xterm", "xterm", nullptr);
+        _exit(1);
+    }
+}
+
+void FilesWindow::copy_path(const fs::path& path) {
+    std::string s = path.string();
+    pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        execlp("wl-copy", "wl-copy", s.c_str(), nullptr);
+        _exit(1);
+    }
+    if (m_status_bar) {
+        update_preview_and_status();
+    }
+}
+
+void FilesWindow::share_item(const FileItem& item) {
+    copy_path(item.path);
+    pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        std::string title = "Shared: " + item.name;
+        std::string body = "Path copied to clipboard:\n" + item.path.string();
+        execlp("notify-send", "notify-send", "-a", "Miqu Files", "-i", "emblem-shared-symbolic", title.c_str(), body.c_str(), nullptr);
+        _exit(1);
+    }
+}
+
+void FilesWindow::move_to_trash(const fs::path& path) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        execlp("gio", "gio", "trash", path.c_str(), nullptr);
+        _exit(1);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    refresh();
+}
+
+void FilesWindow::prompt_new_folder() {
+    std::string base = "New Folder";
+    fs::path new_dir = m_current_path / base;
+    int counter = 2;
+    while (fs::exists(new_dir)) {
+        new_dir = m_current_path / (base + " " + std::to_string(counter++));
+    }
+    std::error_code ec;
+    if (fs::create_directory(new_dir, ec)) {
+        refresh();
+        populate_current_column(new_dir.filename().string());
     }
 }
 

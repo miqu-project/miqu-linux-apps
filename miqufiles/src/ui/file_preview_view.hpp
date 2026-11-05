@@ -27,6 +27,9 @@ public:
     void set_on_preview_click_listener(std::function<void(const FileItem&)> cb) {
         m_on_preview_click = std::move(cb);
     }
+    void set_on_context_click_listener(std::function<void(const FileItem&, int, int)> cb) {
+        m_on_context_click = std::move(cb);
+    }
 
     bool on_mouse_button(int lx, int ly, MouseButton button, bool pressed, const Rect& bounds) override;
 
@@ -40,6 +43,7 @@ private:
     std::shared_ptr<ScrollView> m_text_scroll;
     std::function<void(const FileItem&)> m_on_item_click;
     std::function<void(const FileItem&)> m_on_preview_click;
+    std::function<void(const FileItem&, int, int)> m_on_context_click;
     std::shared_ptr<FileItem> m_current_item;
     bool m_pressed = false;
 

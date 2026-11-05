@@ -10,6 +10,7 @@
 #include <miqutoolkit/view/card_view.hpp>
 #include <miqutoolkit/view/linear_layout.hpp>
 #include <miqutoolkit/view/search_view.hpp>
+#include <miqutoolkit/view/popup_menu.hpp>
 #include <memory>
 #include <vector>
 #include <filesystem>
@@ -104,6 +105,17 @@ private:
 
     std::shared_ptr<ImageButton> m_btn_hidden;
     std::shared_ptr<ImageButton> m_btn_search;
+
+    std::shared_ptr<PopupMenu> m_context_menu;
+
+    void show_item_context_menu(const FileItem& item, int x, int y);
+    void show_empty_context_menu(int x, int y);
+    void show_open_with_menu(const FileItem& item, int x, int y);
+    void open_in_terminal(const std::filesystem::path& target_dir);
+    void copy_path(const std::filesystem::path& path);
+    void share_item(const FileItem& item);
+    void move_to_trash(const std::filesystem::path& path);
+    void prompt_new_folder();
 };
 
 } // namespace miqu
