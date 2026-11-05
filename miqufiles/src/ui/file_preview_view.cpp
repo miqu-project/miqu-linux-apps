@@ -168,7 +168,7 @@ void FilePreviewView::show_directory_preview(const FileItem& item, bool show_hid
                 m_last_item_click_time = now;
                 m_last_item_clicked_index = static_cast<int>(idx);
                 if (auto l = list_weak.lock()) {
-                    l->set_selected_index(-1);
+                    l->set_selected_index(static_cast<int>(idx));
                 }
             }
         });

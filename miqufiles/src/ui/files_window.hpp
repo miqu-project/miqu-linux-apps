@@ -45,6 +45,7 @@ public:
     void sync_theme();
 
     void set_selected_index(int index);
+    void select_item_without_preview(int index);
     const FileItem* get_selected_item() const;
 
 private:

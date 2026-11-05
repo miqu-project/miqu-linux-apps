@@ -33,6 +33,10 @@ public:
 
     bool on_mouse_button(int lx, int ly, MouseButton button, bool pressed, const Rect& bounds) override;
 
+    std::filesystem::path get_current_path() const {
+        return m_current_item ? m_current_item->path : std::filesystem::path();
+    }
+
 private:
     void show_empty_state(const std::string& message = "No selection");
     void show_directory_preview(const FileItem& item, bool show_hidden);

@@ -379,11 +379,16 @@ void FilesWindow::build_ui() {
         auto now = std::chrono::steady_clock::now();
         auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_click_time).count();
         if (m_last_clicked_index == static_cast<int>(idx) && diff < 400) {
-            open_selected();
+            if (idx < m_filtered_items.size() && m_preview_view &&
+                m_preview_view->get_current_path() == m_filtered_items[idx].path) {
+                open_selected();
+            } else {
+                set_selected_index(static_cast<int>(idx));
+            }
         } else {
             m_last_click_time = now;
             m_last_clicked_index = static_cast<int>(idx);
-            set_selected_index(static_cast<int>(idx));
+            select_item_without_preview(static_cast<int>(idx));
         }
     });
     m_current_list->set_on_item_context_click_listener([this](size_t idx, std::shared_ptr<View>, int x, int y) {
@@ -914,6 +919,22 @@ void FilesWindow::set_selected_index(int index) {
     }
 
     update_preview_and_status();
+    if (m_window) {
+        m_window->schedule_redraw();
+    }
+}
+
+void FilesWindow::select_item_without_preview(int index) {
+    if (m_filtered_items.empty()) {
+        m_selected_index = -1;
+        m_current_list->set_selected_index(-1);
+    } else {
+        m_selected_index = std::clamp(index, 0, static_cast<int>(m_filtered_items.size()) - 1);
+        m_current_list->set_selected_index(m_selected_index);
+    }
+
+    const FileItem* item = get_selected_item();
+    m_status_bar->update_stats(m_filtered_items, item, m_current_path);
     if (m_window) {
         m_window->schedule_redraw();
     }
