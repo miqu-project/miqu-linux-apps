@@ -205,7 +205,7 @@ void BarRootView::toggle_bluetooth() {
     auto content = std::make_shared<BluetoothPopupView>([this]() {
         if (m_popup) m_popup->dismiss();
     });
-    show_flyout(PopupType::Bluetooth, m_bluetooth, content, 340, 300);
+    show_flyout(PopupType::Bluetooth, m_bluetooth, content, 340, 340);
 }
 
 void BarRootView::toggle_sound() {

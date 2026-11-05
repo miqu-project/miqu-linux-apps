@@ -192,6 +192,26 @@ void BluetoothPopupView::setup_ui() {
         root->add_view(m_device_list);
     }
 
+    // Enter / More Settings button
+    auto btn_settings = ButtonBuilder::create()
+        ->text("More Bluetooth Settings...")
+        ->icon("preferences-system")
+        ->iconSize(16)
+        ->textSize(base_font_size)
+        ->build();
+    btn_settings->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        36
+    ));
+    btn_settings->set_margin(0, 8, 0, 0);
+    btn_settings->set_content_gravity(Gravity::Center);
+    btn_settings->set_flat(true);
+    btn_settings->set_on_click_listener([this]() {
+        std::system("miqusettings bluetooth 2>/dev/null || miqusettings 2>/dev/null &");
+        if (m_on_close) m_on_close();
+    });
+    root->add_view(btn_settings);
+
     add_view(root);
 }
 
@@ -208,11 +228,11 @@ void BluetoothPopupView::set_bluetooth_powered(bool powered) {
 
 miqu::Size BluetoothPopupView::measure_size() const {
     if (!m_powered) {
-        return {340, 130};
+        return {340, 160};
     }
     int rows = std::min(6, static_cast<int>(m_devices.size()));
-    int h = 100 + std::max(1, rows) * 44;
-    return {340, std::max(180, h)};
+    int h = 135 + std::max(1, rows) * 44;
+    return {340, std::max(220, h)};
 }
 
 } // namespace miqubar

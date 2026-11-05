@@ -27,6 +27,7 @@ APPS=(
     "miqudm"
     "miqutheme"
     "miqufiles"
+    "miqusettings"
     "miqutest"
 )
 
