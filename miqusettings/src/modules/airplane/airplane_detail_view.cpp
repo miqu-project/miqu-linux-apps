@@ -12,12 +12,9 @@ AirplaneDetailView::AirplaneDetailView() {
     ));
     load_data();
     setup_ui();
-    start_polling();
 }
 
-AirplaneDetailView::~AirplaneDetailView() {
-    stop_polling();
-}
+AirplaneDetailView::~AirplaneDetailView() = default;
 
 void AirplaneDetailView::set_is_fullscreen(bool fullscreen) {
     m_is_fullscreen = fullscreen;
@@ -31,28 +28,6 @@ void AirplaneDetailView::refresh_state() {
 
 void AirplaneDetailView::load_data() {
     m_status = AirplaneBackend::get_status();
-}
-
-void AirplaneDetailView::start_polling() {
-    stop_polling();
-    auto engine = AppEngine::instance();
-    if (!engine) return;
-
-    m_poll_timer_id = engine->post_delayed(3000, [this]() {
-        m_poll_timer_id = 0;
-        load_data();
-        setup_ui();
-        start_polling();
-    });
-}
-
-void AirplaneDetailView::stop_polling() {
-    if (m_poll_timer_id != 0) {
-        if (auto engine = AppEngine::instance()) {
-            engine->cancel_delayed(m_poll_timer_id);
-        }
-        m_poll_timer_id = 0;
-    }
 }
 
 void AirplaneDetailView::on_toggle_mode(bool enabled) {

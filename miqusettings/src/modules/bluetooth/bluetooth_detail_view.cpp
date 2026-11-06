@@ -64,6 +64,15 @@ void BluetoothDetailView::start_polling() {
     m_poll_timer_id = engine->post_delayed(2000, [this]() {
         m_poll_timer_id = 0;
         if (m_scanning && m_powered) {
+            m_scan_ticks++;
+            if (m_scan_ticks >= 10) { // Bounded scan window: auto-stop after 20s for 0% idle dormancy
+                m_scanning = false;
+                m_scan_ticks = 0;
+                BluetoothBackend::stop_scan();
+                load_devices();
+                setup_ui();
+                return;
+            }
             if (!BluetoothBackend::is_scanning()) {
                 BluetoothBackend::start_scan();
             }
@@ -933,6 +942,7 @@ void BluetoothDetailView::on_receive_file() {
 void BluetoothDetailView::toggle_scan() {
     m_scanning = !m_scanning;
     if (m_scanning) {
+        m_scan_ticks = 0;
         BluetoothBackend::start_scan();
         start_polling();
     } else {

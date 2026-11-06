@@ -1,6 +1,7 @@
 #include "modules/bluetooth/bluetooth_backend.hpp"
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <filesystem>
 #include <sstream>
 #include <algorithm>
@@ -10,16 +11,21 @@ namespace miqu {
 
 namespace fs = std::filesystem;
 
+struct PipeCloser {
+    void operator()(FILE* fp) const {
+        if (fp) pclose(fp);
+    }
+};
+
 std::string BluetoothBackend::run_cmd(const std::string& cmd) {
     std::string result;
-    FILE* fp = popen(cmd.c_str(), "r");
-    if (!fp) return result;
+    std::unique_ptr<FILE, PipeCloser> pipe(popen(cmd.c_str(), "r"));
+    if (!pipe) return result;
 
     char buffer[256];
-    while (fgets(buffer, sizeof(buffer), fp)) {
+    while (fgets(buffer, sizeof(buffer), pipe.get())) {
         result += buffer;
     }
-    pclose(fp);
     return result;
 }
 

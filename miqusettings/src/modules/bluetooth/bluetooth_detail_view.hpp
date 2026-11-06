@@ -59,6 +59,7 @@ private:
     bool m_powered = true;
     bool m_scanning = false;
     bool m_is_fullscreen = false;
+    int m_scan_ticks = 0;
     uint64_t m_poll_timer_id = 0;
 
     std::unique_ptr<BluetoothAgent> m_agent;

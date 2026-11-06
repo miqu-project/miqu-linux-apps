@@ -12,8 +12,6 @@
 #include <miqutoolkit/view/button.hpp>
 #include <memory>
 #include <functional>
-#include <chrono>
-
 namespace miqu {
 
 class SettingDetailView : public FrameLayout {
@@ -54,9 +52,6 @@ private:
     std::function<void(const std::shared_ptr<SettingItem>&)> m_on_navigate_into;
     std::function<void(const std::shared_ptr<SettingItem>&)> m_on_setting_changed;
     std::function<void()> m_on_request_fullscreen;
-
-    std::chrono::steady_clock::time_point m_last_item_click_time{};
-    int m_last_item_clicked_index = -1;
 };
 
 } // namespace miqu

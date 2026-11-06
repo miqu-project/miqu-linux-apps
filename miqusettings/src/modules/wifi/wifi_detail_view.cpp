@@ -14,12 +14,9 @@ WifiDetailView::WifiDetailView() {
     ));
     load_data();
     setup_ui();
-    start_polling();
 }
 
-WifiDetailView::~WifiDetailView() {
-    stop_polling();
-}
+WifiDetailView::~WifiDetailView() = default;
 
 void WifiDetailView::set_is_fullscreen(bool fullscreen) {
     m_is_fullscreen = fullscreen;
@@ -37,30 +34,6 @@ void WifiDetailView::load_data() {
         m_networks = WifiBackend::scan_nearby_networks();
     } else {
         m_networks.clear();
-    }
-}
-
-void WifiDetailView::start_polling() {
-    stop_polling();
-    auto engine = AppEngine::instance();
-    if (!engine) return;
-
-    m_poll_timer_id = engine->post_delayed(3500, [this]() {
-        m_poll_timer_id = 0;
-        if (!m_active_modal && m_adapter.radio_enabled) {
-            load_data();
-            setup_ui();
-        }
-        start_polling();
-    });
-}
-
-void WifiDetailView::stop_polling() {
-    if (m_poll_timer_id != 0) {
-        if (auto engine = AppEngine::instance()) {
-            engine->cancel_delayed(m_poll_timer_id);
-        }
-        m_poll_timer_id = 0;
     }
 }
 

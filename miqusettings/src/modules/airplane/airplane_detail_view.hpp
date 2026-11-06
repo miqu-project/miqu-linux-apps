@@ -31,8 +31,6 @@ public:
 private:
     void setup_ui();
     void load_data();
-    void start_polling();
-    void stop_polling();
 
     std::shared_ptr<View> create_hero_card();
     std::shared_ptr<View> create_radios_card();
@@ -43,7 +41,6 @@ private:
     void on_toggle_mode(bool enabled);
 
     bool m_is_fullscreen = false;
-    uint64_t m_poll_timer_id = 0;
     AirplaneStatus m_status;
 
     std::shared_ptr<ScrollView> m_scroll;

@@ -126,19 +126,9 @@ void SettingDetailView::show_category_preview(const std::shared_ptr<SettingItem>
     }
     list->set_selected_index(-1);
 
-    list->set_on_item_click_listener([this, children, list_weak = std::weak_ptr<ListView>(list)](size_t idx, std::shared_ptr<View>) {
-        auto now = std::chrono::steady_clock::now();
-        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_item_click_time).count();
-        if (m_last_item_clicked_index == static_cast<int>(idx) && diff < 400) {
-            if (idx < children.size() && m_on_navigate_into) {
-                m_on_navigate_into(children[idx]);
-            }
-        } else {
-            m_last_item_click_time = now;
-            m_last_item_clicked_index = static_cast<int>(idx);
-            if (auto l = list_weak.lock()) {
-                l->set_selected_index(static_cast<int>(idx));
-            }
+    list->set_on_item_click_listener([this, children](size_t idx, std::shared_ptr<View>) {
+        if (idx < children.size() && m_on_navigate_into) {
+            m_on_navigate_into(children[idx]);
         }
     });
 

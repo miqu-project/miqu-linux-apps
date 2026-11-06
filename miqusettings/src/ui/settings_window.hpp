@@ -17,7 +17,6 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <chrono>
 
 namespace miqu {
 
@@ -45,7 +44,6 @@ public:
     void navigate_to_id(const std::string& target_id);
 
     void set_selected_index(int index);
-    void select_item_without_preview(int index);
     std::shared_ptr<SettingItem> get_selected_item() const;
 
 private:
@@ -94,11 +92,6 @@ private:
 
     std::shared_ptr<ColumnCardView> m_col_preview_card;
     std::shared_ptr<SettingDetailView> m_detail_view;
-
-    std::chrono::steady_clock::time_point m_last_click_time{};
-    int m_last_clicked_index = -1;
-    std::chrono::steady_clock::time_point m_last_parent_click_time{};
-    int m_last_parent_clicked_index = -1;
 };
 
 } // namespace miqu

@@ -14,12 +14,9 @@ EthernetDetailView::EthernetDetailView() {
     ));
     load_data();
     setup_ui();
-    start_polling();
 }
 
-EthernetDetailView::~EthernetDetailView() {
-    stop_polling();
-}
+EthernetDetailView::~EthernetDetailView() = default;
 
 void EthernetDetailView::set_is_fullscreen(bool fullscreen) {
     m_is_fullscreen = fullscreen;
@@ -33,30 +30,6 @@ void EthernetDetailView::refresh_state() {
 
 void EthernetDetailView::load_data() {
     m_device = EthernetBackend::get_device();
-}
-
-void EthernetDetailView::start_polling() {
-    stop_polling();
-    auto engine = AppEngine::instance();
-    if (!engine) return;
-
-    m_poll_timer_id = engine->post_delayed(3000, [this]() {
-        m_poll_timer_id = 0;
-        if (!m_active_modal) {
-            load_data();
-            setup_ui();
-        }
-        start_polling();
-    });
-}
-
-void EthernetDetailView::stop_polling() {
-    if (m_poll_timer_id != 0) {
-        if (auto engine = AppEngine::instance()) {
-            engine->cancel_delayed(m_poll_timer_id);
-        }
-        m_poll_timer_id = 0;
-    }
 }
 
 void EthernetDetailView::setup_ui() {

@@ -33,8 +33,6 @@ public:
 private:
     void setup_ui();
     void load_data();
-    void start_polling();
-    void stop_polling();
 
     std::shared_ptr<View> create_hero_card();
     std::shared_ptr<View> create_connected_section();
@@ -51,7 +49,6 @@ private:
 
     bool m_is_fullscreen = false;
     bool m_scanning = false;
-    uint64_t m_poll_timer_id = 0;
 
     WifiAdapterInfo m_adapter;
     std::vector<WifiNetwork> m_networks;

@@ -198,20 +198,7 @@ void SettingsWindow::build_ui() {
     ));
 
     m_current_list->set_on_item_click_listener([this](size_t idx, std::shared_ptr<View>) {
-        auto now = std::chrono::steady_clock::now();
-        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_click_time).count();
-        if (m_last_clicked_index == static_cast<int>(idx) && diff < 400) {
-            if (idx < m_filtered_items.size() && m_detail_view &&
-                m_detail_view->get_current_id() == m_filtered_items[idx]->id) {
-                open_selected();
-            } else {
-                set_selected_index(static_cast<int>(idx));
-            }
-        } else {
-            m_last_click_time = now;
-            m_last_clicked_index = static_cast<int>(idx);
-            select_item_without_preview(static_cast<int>(idx));
-        }
+        set_selected_index(static_cast<int>(idx));
     });
 
     m_col_current_card->add_view(m_current_list);
@@ -699,19 +686,6 @@ void SettingsWindow::set_selected_index(int index) {
     }
 }
 
-void SettingsWindow::select_item_without_preview(int index) {
-    if (m_filtered_items.empty()) {
-        m_selected_index = -1;
-        m_current_list->set_selected_index(-1);
-    } else {
-        m_selected_index = std::clamp(index, 0, static_cast<int>(m_filtered_items.size()) - 1);
-        m_current_list->set_selected_index(m_selected_index);
-    }
-
-    if (m_window) {
-        m_window->schedule_redraw();
-    }
-}
 
 std::shared_ptr<SettingItem> SettingsWindow::get_selected_item() const {
     if (m_selected_index >= 0 && m_selected_index < static_cast<int>(m_filtered_items.size())) {
