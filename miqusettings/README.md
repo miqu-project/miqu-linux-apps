@@ -27,8 +27,8 @@ It adopts an ergonomic **3-pillar Miller Columns architecture**:
 ## 🔌 Modules & Features
 
 - **Applications & Defaults**:
-  - Preferred default applications (Web Browser, File Manager, Terminal, Email, Video/Audio Players).
-  - Native `.desktop` parsing, MIME association detection, and direct fallback handlers.
+  - **Apps (Installed Applications)**: Android-style complete application manager listing all installed system and user applications with search filtering, large hero cards, storage footprint inspection, version telemetry, direct launcher, safe uninstallation modal dialogs, and dead-end pillar fullscreen expansion (`⛶`).
+  - **Default Apps**: Full native Linux XDG defaults management (`~/.config/mimeapps.list` and `xdg-mime`/`xdg-settings`) across 9 standard roles: Web Browser, File Manager, Terminal Emulator, Mail Client, Music Player, Video Player, Image Viewer, Text Editor, and PDF Document Viewer with candidate application detection and 1-click default assignment.
 - **Wireless & Network**:
   - **Airplane Mode**: Master radio kill-switch coordinating `rfkill`, NetworkManager Wi-Fi/WWAN radios, and BlueZ Bluetooth controllers with live per-subsystem telemetry.
   - **Wi-Fi**: Instant cached network scanning (`--rescan no` for sub-second startup), active network telemetry, secure WPA2/WPA3 and 802.1x Enterprise authentication modals, and QR sharing.

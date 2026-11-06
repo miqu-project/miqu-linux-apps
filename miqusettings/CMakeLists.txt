@@ -26,6 +26,9 @@ add_executable(miqusettings
     src/modules/wifi/wifi_detail_view.cpp
     src/modules/airplane/airplane_backend.cpp
     src/modules/airplane/airplane_detail_view.cpp
+    src/modules/applications/apps_backend.cpp
+    src/modules/applications/app_detail_view.cpp
+    src/modules/applications/default_app_detail_view.cpp
     src/ui/setting_detail_view.cpp
     src/ui/settings_window.cpp
 )

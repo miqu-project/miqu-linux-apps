@@ -3,6 +3,8 @@
 #include "modules/ethernet/ethernet_detail_view.hpp"
 #include "modules/wifi/wifi_detail_view.hpp"
 #include "modules/airplane/airplane_detail_view.hpp"
+#include "modules/applications/app_detail_view.hpp"
+#include "modules/applications/default_app_detail_view.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/linear_layout.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
@@ -52,6 +54,16 @@ void SettingDetailView::update_item(const std::shared_ptr<SettingItem>& item, bo
 
     if (item->id == "ethernet" || item->id.rfind("eth_", 0) == 0) {
         show_ethernet_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id.rfind("app_", 0) == 0) {
+        show_app_detail(item, is_fullscreen);
+        return;
+    }
+
+    if (item->id.rfind("defrole_", 0) == 0) {
+        show_default_role_detail(item, is_fullscreen);
         return;
     }
 
@@ -466,6 +478,37 @@ void SettingDetailView::show_airplane_detail(bool is_fullscreen) {
     });
     m_current_content = airplane_view;
     add_view(airplane_view);
+}
+
+void SettingDetailView::show_app_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen) {
+    auto app_view = std::make_shared<AppDetailView>();
+    std::string desktop_id = item->id.size() > 4 ? item->id.substr(4) : item->id;
+    app_view->set_app_id(desktop_id);
+    app_view->set_is_fullscreen(is_fullscreen);
+    app_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    app_view->set_on_app_uninstalled([this, item](const std::string&) {
+        if (m_on_setting_changed) m_on_setting_changed(item);
+    });
+    m_current_content = app_view;
+    add_view(app_view);
+}
+
+void SettingDetailView::show_default_role_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen) {
+    auto def_view = std::make_shared<DefaultAppDetailView>();
+    std::string role_id = item->id.size() > 8 ? item->id.substr(8) : item->id;
+    def_view->set_role_id(role_id);
+    def_view->set_is_fullscreen(is_fullscreen);
+    def_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    def_view->set_on_default_changed([this, item](const std::string&, const std::string& new_default_name) {
+        item->subtitle = new_default_name;
+        if (m_on_setting_changed) m_on_setting_changed(item);
+    });
+    m_current_content = def_view;
+    add_view(def_view);
 }
 
 } // namespace miqu

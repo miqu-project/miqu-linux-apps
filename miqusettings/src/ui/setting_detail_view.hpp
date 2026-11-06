@@ -41,6 +41,8 @@ private:
     void show_empty_state();
     void show_category_preview(const std::shared_ptr<SettingItem>& item);
     void show_leaf_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen);
+    void show_app_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen);
+    void show_default_role_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen);
     void show_bluetooth_detail(bool is_fullscreen);
     void show_ethernet_detail(bool is_fullscreen);
     void show_wifi_detail(bool is_fullscreen);

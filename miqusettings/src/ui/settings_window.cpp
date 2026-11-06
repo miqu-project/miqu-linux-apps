@@ -247,6 +247,18 @@ void SettingsWindow::build_ui() {
                 }
             }
         }
+
+        if (changed && changed->id.rfind("app_", 0) == 0) {
+            if (m_current_node && m_current_node->id == "apps_list") {
+                auto& ch = m_current_node->children;
+                ch.erase(std::remove_if(ch.begin(), ch.end(), [&](const std::shared_ptr<SettingItem>& it) {
+                    return it->id == changed->id;
+                }), ch.end());
+                m_current_node->subtitle = std::to_string(ch.size()) + " applications installed";
+                apply_filter();
+                return;
+            }
+        }
         populate_current_column();
     });
 
@@ -517,7 +529,8 @@ void SettingsWindow::open_selected() {
     if (!item) return;
 
     if (item->id == "bluetooth" || item->id == "ethernet" || item->id == "wifi" ||
-        item->id == "airplane_mode" || item->id == "airplane") {
+        item->id == "airplane_mode" || item->id == "airplane" ||
+        item->id.rfind("app_", 0) == 0 || item->id.rfind("defrole_", 0) == 0) {
         enter_fullscreen_detail();
         return;
     }

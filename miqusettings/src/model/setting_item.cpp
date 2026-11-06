@@ -2,6 +2,7 @@
 #include "modules/ethernet/ethernet_backend.hpp"
 #include "modules/wifi/wifi_backend.hpp"
 #include "modules/airplane/airplane_backend.hpp"
+#include "modules/applications/apps_backend.hpp"
 #include <sstream>
 #include <iomanip>
 
@@ -47,49 +48,50 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto apps = std::make_shared<SettingItem>();
         apps->id = "apps";
         apps->title = "Applications & Defaults";
-        apps->subtitle = "Default Browser, Terminal, File Manager, Player";
+        apps->subtitle = "Apps, Default Applications";
         apps->icon_name = "system-software-install";
         apps->type = SettingType::Category;
 
-        auto browser = std::make_shared<SettingItem>();
-        browser->id = "def_browser";
-        browser->title = "Default Web Browser";
-        browser->subtitle = "Preferred application for opening web links";
-        browser->icon_name = "web-browser";
-        browser->type = SettingType::Selection;
-        browser->options = {"Firefox", "Chromium", "Brave", "Zen Browser"};
-        browser->selected_option_idx = 0;
-        apps->children.push_back(browser);
+        // Sub-section 1: Apps (Installed applications list)
+        auto apps_list = std::make_shared<SettingItem>();
+        apps_list->id = "apps_list";
+        apps_list->title = "Apps";
+        apps_list->icon_name = "applications-all";
+        apps_list->type = SettingType::Category;
 
-        auto filem = std::make_shared<SettingItem>();
-        filem->id = "def_files";
-        filem->title = "Default File Manager";
-        filem->subtitle = "Standard directory browser";
-        filem->icon_name = "system-file-manager";
-        filem->type = SettingType::Selection;
-        filem->options = {"Miqu Files (miqufiles)", "Thunar", "Nautilus"};
-        filem->selected_option_idx = 0;
-        apps->children.push_back(filem);
+        auto installed_apps = AppsBackend::get_installed_apps();
+        apps_list->subtitle = std::to_string(installed_apps.size()) + " applications installed";
 
-        auto term = std::make_shared<SettingItem>();
-        term->id = "def_term";
-        term->title = "Default Terminal Emulator";
-        term->subtitle = "Command-line terminal window";
-        term->icon_name = "utilities-terminal";
-        term->type = SettingType::Selection;
-        term->options = {"Kitty", "Foot", "Alacritty", "WezTerm"};
-        term->selected_option_idx = 0;
-        apps->children.push_back(term);
+        for (const auto& app : installed_apps) {
+            auto app_item = std::make_shared<SettingItem>();
+            app_item->id = "app_" + app.id;
+            app_item->title = app.name;
+            app_item->subtitle = !app.generic_name.empty() ? app.generic_name : app.categories;
+            app_item->icon_name = app.icon_name;
+            app_item->type = SettingType::Info;
+            apps_list->children.push_back(app_item);
+        }
+        apps->children.push_back(apps_list);
 
-        auto music = std::make_shared<SettingItem>();
-        music->id = "def_music";
-        music->title = "Default Music Player";
-        music->subtitle = "Audio playback application";
-        music->icon_name = "audio-player";
-        music->type = SettingType::Selection;
-        music->options = {"Miqu Music (miqumusic)", "MPD Client", "VLC Media Player"};
-        music->selected_option_idx = 0;
-        apps->children.push_back(music);
+        // Sub-section 2: Default Apps (Common Linux XDG defaults)
+        auto def_apps = std::make_shared<SettingItem>();
+        def_apps->id = "default_apps";
+        def_apps->title = "Default Apps";
+        def_apps->subtitle = "Web Browser, File Manager, Terminal, Media";
+        def_apps->icon_name = "preferences-desktop-default-applications";
+        def_apps->type = SettingType::Category;
+
+        auto roles = AppsBackend::get_default_roles();
+        for (const auto& role : roles) {
+            auto role_item = std::make_shared<SettingItem>();
+            role_item->id = "defrole_" + role.role_id;
+            role_item->title = role.title;
+            role_item->subtitle = !role.current_default_name.empty() ? role.current_default_name : "None configured";
+            role_item->icon_name = role.icon_name;
+            role_item->type = SettingType::Info;
+            def_apps->children.push_back(role_item);
+        }
+        apps->children.push_back(def_apps);
 
         root->children.push_back(apps);
     }
