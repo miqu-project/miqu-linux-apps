@@ -14,6 +14,7 @@
 #include <miqutoolkit/view/image_view.hpp>
 #include <miqutoolkit/view/image_button.hpp>
 #include <miqutoolkit/view/button.hpp>
+#include <miqutoolkit/view/divider_view.hpp>
 #include <memory>
 #include <vector>
 #include <string>
@@ -82,13 +83,16 @@ private:
     std::shared_ptr<ImageButton> m_btn_search;
     std::shared_ptr<LinearLayout> m_search_container;
     std::shared_ptr<SearchView> m_search_view;
+    std::shared_ptr<DividerView> m_header_divider;
 
     std::shared_ptr<LinearLayout> m_columns_container;
     std::shared_ptr<ColumnCardView> m_col_parent_card;
+    std::shared_ptr<DividerView> m_divider_1;
     std::shared_ptr<ListView> m_parent_list;
     std::shared_ptr<LinearLayout> m_parent_root_hero;
 
     std::shared_ptr<ColumnCardView> m_col_current_card;
+    std::shared_ptr<DividerView> m_divider_2;
     std::shared_ptr<ListView> m_current_list;
 
     std::shared_ptr<ColumnCardView> m_col_preview_card;

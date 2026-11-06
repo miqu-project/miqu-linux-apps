@@ -4,6 +4,7 @@
 #include "ui/common/modal_overlay.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/core/app_engine.hpp>
+#include <miqutoolkit/view/divider_view.hpp>
 #include <cstdlib>
 
 namespace miqu {
@@ -183,9 +184,9 @@ void BluetoothDetailView::setup_ui() {
     // Dependency check: BlueZ suite
     if (!BluetoothBackend::is_bluetooth_installed()) {
         auto card = std::make_shared<CardView>();
-        card->set_card_background_color(config->colors.surface);
-        card->set_radius(config->metrics.corner_radius);
-        card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
+        card->set_card_background_color(config->colors.surface_variant);
+        card->set_radius(12);
+        card->set_stroke(0, Color());
         card->set_padding(20);
 
         auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -207,8 +208,9 @@ void BluetoothDetailView::setup_ui() {
         col->add_view(desc);
 
         auto code_box = std::make_shared<CardView>();
-        code_box->set_card_background_color(config->colors.surface_variant);
-        code_box->set_radius(std::max(4, config->metrics.corner_radius - 4));
+        code_box->set_card_background_color(config->colors.surface);
+        code_box->set_radius(6);
+        code_box->set_stroke(0, Color());
         code_box->set_padding(10);
         auto code_text = TextViewBuilder::create()
             ->text("sudo pacman -S bluez bluez-utils && sudo systemctl enable --now bluetooth")
@@ -223,6 +225,7 @@ void BluetoothDetailView::setup_ui() {
             ->text("Copy Install Command")
             ->textSize(config->metrics.font_size)
             ->primary(true)
+            ->cornerRadius(16)
             ->padding(14, 6)
             ->onClick([]() {
                 BluetoothBackend::copy_to_clipboard("sudo pacman -S bluez bluez-utils && sudo systemctl enable --now bluetooth");
@@ -237,62 +240,47 @@ void BluetoothDetailView::setup_ui() {
         return;
     }
 
-    // 1. Adapter Hero
+    // 1. Modern Adapter Hero Header
     m_content_layout->add_view(create_hero_card());
 
     if (m_powered) {
-        // 2. Action Row (Send File, Receive Files, Pair Device)
+        // 2. Quick Action Chips (Search, Send, Receive)
         m_content_layout->add_view(create_action_row());
 
-        // 3. Discovery Banner if scanning
-        if (m_scanning) {
-            m_content_layout->add_view(create_discovery_card());
-        }
-
-        // 4. Paired Device Groups
-        bool has_audio = false;
-        bool has_input = false;
-        bool has_other = false;
+        // 3. Separate connected vs saved accessories
+        std::vector<BluetoothDeviceItem> connected_devs;
+        std::vector<BluetoothDeviceItem> saved_devs;
         for (const auto& dev : m_paired_devices) {
-            if (dev.category == BluetoothDeviceCategory::Audio) has_audio = true;
-            else if (dev.category == BluetoothDeviceCategory::Input) has_input = true;
-            else has_other = true;
+            if (dev.is_connected) connected_devs.push_back(dev);
+            else saved_devs.push_back(dev);
         }
 
-        if (has_audio) {
-            m_content_layout->add_view(create_category_section("AUDIO DEVICES", BluetoothDeviceCategory::Audio));
-        }
-        if (has_input) {
-            m_content_layout->add_view(create_category_section("MOUSE, KEYBOARD & PEN", BluetoothDeviceCategory::Input));
-        }
-        if (has_other) {
-            m_content_layout->add_view(create_category_section("OTHER PAIRED DEVICES", BluetoothDeviceCategory::Other));
+        if (!connected_devs.empty()) {
+            m_content_layout->add_view(create_device_section("CONNECTED ACCESSORIES", connected_devs, true));
         }
 
-        // 5. Empty state if no paired devices
+        if (!saved_devs.empty()) {
+            m_content_layout->add_view(create_device_section("PAIRED ACCESSORIES", saved_devs, false));
+        }
+
+        // 4. Empty state if no paired devices
         if (m_paired_devices.empty() && !m_scanning) {
-            auto card = std::make_shared<CardView>();
-            card->set_card_background_color(config->colors.surface);
-            card->set_radius(config->metrics.corner_radius);
-            card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-            card->set_padding(18);
-
             auto empty_text = TextViewBuilder::create()
-                ->text("No paired devices found.\nPut your Bluetooth headphones, mouse, keyboard, or stylus into pairing mode and click 'Scan for Devices' to pair.")
+                ->text("No paired accessories found.\nPut your Bluetooth headphones, mouse, keyboard, or stylus into pairing mode and click 'Search for Devices'.")
                 ->textSize(config->metrics.font_size)
                 ->textColor(config->colors.on_surface_variant)
                 ->center(true)
+                ->padding(16, 20)
                 ->build();
-            card->add_view(empty_text);
-            m_content_layout->add_view(card);
+            m_content_layout->add_view(empty_text);
         }
 
-        // 6. Available Devices Section
+        // 5. Available / Nearby Devices Section
         if (!m_available_devices.empty() || m_scanning) {
             m_content_layout->add_view(create_available_section());
         }
 
-        // 7. File Transfer Information & Settings
+        // 6. File Transfer Information
         m_content_layout->add_view(create_file_transfer_card());
     } else {
         // Disabled state view
@@ -307,15 +295,37 @@ void BluetoothDetailView::setup_ui() {
     }
 }
 
+static std::shared_ptr<View> create_icon_badge(const std::string& icon_name, const Color& bg_color, int size = 36, int icon_sz = 20) {
+    auto card = std::make_shared<CardView>();
+    card->set_card_background_color(bg_color);
+    card->set_radius(size / 2);
+    card->set_stroke(0, Color());
+    card->set_elevation(0);
+    LayoutParams lp(size, size);
+    lp.gravity = Gravity::CenterVertical;
+    card->set_layout_params(lp);
+
+    auto img = std::make_shared<ImageView>(icon_name.empty() ? "bluetooth" : icon_name);
+    img->set_target_size(icon_sz);
+    LayoutParams img_lp(icon_sz, icon_sz);
+    img_lp.gravity = Gravity::Center;
+    card->add_view(img, img_lp);
+    return card;
+}
+
 std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
     auto config = Config::get();
-    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
 
-    auto hero = std::make_shared<CardView>();
-    hero->set_card_background_color(config->colors.surface);
-    hero->set_radius(config->metrics.corner_radius);
-    hero->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-    hero->set_padding(16);
+    auto card = std::make_shared<CardView>();
+    card->set_card_background_color(config->colors.surface_variant);
+    card->set_radius(16);
+    card->set_stroke(0, Color());
+    card->set_elevation(0);
+    card->set_padding(16, 16);
+    card->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
 
     auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     row->set_layout_params(LayoutParams(
@@ -325,20 +335,17 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
     row->set_divider_spacing(14);
     row->set_gravity(Gravity::CenterVertical);
 
-    // Bluetooth Icon
-    auto icon = std::make_shared<ImageView>(m_powered ? "bluetooth-active" : "bluetooth");
-    icon->set_target_size(m_is_fullscreen ? 38 : 32);
-    LayoutParams icon_lp(m_is_fullscreen ? 38 : 32, m_is_fullscreen ? 38 : 32);
-    icon_lp.gravity = Gravity::CenterVertical;
-    row->add_view(icon, icon_lp);
+    // Circular glyph badge (44x44)
+    Color badge_bg = m_powered ? config->colors.primary_container : config->colors.surface;
+    std::string icon_src = m_powered ? "bluetooth-active" : "bluetooth";
+    auto badge = create_icon_badge(icon_src, badge_bg, 44, 24);
+    row->add_view(badge);
 
     // Text column
     auto text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    LayoutParams text_lp;
-    text_lp.width = 0;
-    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.weight = 1.0f;
+    LayoutParams text_lp(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f);
     text_col->set_layout_params(text_lp);
+    text_col->set_divider_spacing(2);
 
     auto title = TextViewBuilder::create()
         ->text("Bluetooth")
@@ -348,19 +355,26 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
         ->build();
     text_col->add_view(title);
 
-    std::string sub;
+    std::string sub_text;
+    Color sub_color = config->colors.on_surface_variant;
     if (!m_adapter_info.available) {
-        sub = "No controller detected · Connect a Bluetooth adapter";
+        sub_text = "No controller hardware detected";
     } else if (m_powered) {
-        sub = "Discoverable as \"" + m_adapter_info.name + "\" · Active";
+        std::string alias = m_adapter_info.name.empty() ? "This Device" : m_adapter_info.name;
+        if (m_scanning) {
+            sub_text = "● Searching for nearby accessories...";
+            sub_color = config->colors.primary;
+        } else {
+            sub_text = "● Discoverable as \"" + alias + "\"";
+        }
     } else {
-        sub = "Disabled · Radios Powered Off";
+        sub_text = "Turn on to connect headphones, mouse, keyboard & accessories";
     }
 
     auto subtitle = TextViewBuilder::create()
-        ->text(sub)
+        ->text(sub_text)
         ->textSize(config->metrics.caption_size)
-        ->textColor(config->colors.on_surface_variant)
+        ->textColor(sub_color)
         ->build();
     text_col->add_view(subtitle);
     row->add_view(text_col);
@@ -372,6 +386,9 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
             toggle_power(checked);
         })
         ->build();
+    LayoutParams sw_lp;
+    sw_lp.gravity = Gravity::CenterVertical;
+    sw->set_layout_params(sw_lp);
     row->add_view(sw);
 
     // Fullscreen toggle button if in 3-pillar mode
@@ -380,8 +397,8 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
             ->text("⛶")
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.primary)
-            ->backgroundColor(config->colors.surface_variant)
-            ->cornerRadius(btn_radius)
+            ->flat(true)
+            ->cornerRadius(6)
             ->onClick([this]() {
                 if (m_on_request_fullscreen) m_on_request_fullscreen();
             })
@@ -391,82 +408,79 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
         row->add_view(btn_expand);
     }
 
-    hero->add_view(row);
-    return hero;
+    card->add_view(row);
+    return card;
 }
 
 std::shared_ptr<View> BluetoothDetailView::create_action_row() {
     auto config = Config::get();
-    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
 
     auto action_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     action_row->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    action_row->set_divider_spacing(10);
+    action_row->set_divider_spacing(8);
 
-    // 1. Send File button
+    // 1. Scan for Devices button
+    auto btn_pair = ButtonBuilder::create()
+        ->text(m_scanning ? "Stop Searching" : "Search for Devices")
+        ->icon(m_scanning ? "network-wireless-acquiring" : "list-add")
+        ->iconSize(14)
+        ->textSize(config->metrics.font_size)
+        ->primary(!m_scanning)
+        ->flat(m_scanning)
+        ->cornerRadius(16)
+        ->padding(12, 6)
+        ->onClick([this]() { toggle_scan(); })
+        ->build();
+    LayoutParams pair_lp(0, 36, 1.2f);
+    btn_pair->set_layout_params(pair_lp);
+    action_row->add_view(btn_pair);
+
+    // 2. Send File button
     auto btn_send = ButtonBuilder::create()
-        ->text("↗ Send File")
+        ->text("Send File")
         ->icon("document-send")
-        ->iconSize(16)
+        ->iconSize(14)
         ->textSize(config->metrics.font_size)
         ->textColor(config->colors.on_surface)
-        ->backgroundColor(config->colors.surface)
-        ->bordered(true)
-        ->borderColor(config->colors.outline_variant)
-        ->borderWidth(config->metrics.border_width)
-        ->cornerRadius(btn_radius)
-        ->padding(12, 8)
+        ->backgroundColor(config->colors.surface_variant)
+        ->cornerRadius(16)
+        ->padding(12, 6)
         ->onClick([this]() { on_send_file(); })
         ->build();
-    LayoutParams send_lp(0, 38, 1.0f);
+    LayoutParams send_lp(0, 36, 1.0f);
     btn_send->set_layout_params(send_lp);
     action_row->add_view(btn_send);
 
-    // 2. Receive Files button
+    // 3. Receive Files button
     auto btn_recv = ButtonBuilder::create()
-        ->text("↙ Receive Files")
+        ->text("Receive")
         ->icon("folder-download")
-        ->iconSize(16)
+        ->iconSize(14)
         ->textSize(config->metrics.font_size)
         ->textColor(config->colors.on_surface)
-        ->backgroundColor(config->colors.surface)
-        ->bordered(true)
-        ->borderColor(config->colors.outline_variant)
-        ->borderWidth(config->metrics.border_width)
-        ->cornerRadius(btn_radius)
-        ->padding(12, 8)
+        ->backgroundColor(config->colors.surface_variant)
+        ->cornerRadius(16)
+        ->padding(12, 6)
         ->onClick([this]() { on_receive_file(); })
         ->build();
-    LayoutParams recv_lp(0, 38, 1.0f);
+    LayoutParams recv_lp(0, 36, 1.0f);
     btn_recv->set_layout_params(recv_lp);
     action_row->add_view(btn_recv);
-
-    // 3. Scan for Devices button
-    auto btn_pair = ButtonBuilder::create()
-        ->text(m_scanning ? "󰐕 Scanning..." : "󰐕 Scan for Devices")
-        ->icon(m_scanning ? "network-wireless-acquiring" : "list-add")
-        ->iconSize(16)
-        ->textSize(config->metrics.font_size)
-        ->primary(!m_scanning)
-        ->bordered(m_scanning)
-        ->borderColor(config->colors.primary)
-        ->borderWidth(config->metrics.border_width)
-        ->cornerRadius(btn_radius)
-        ->padding(12, 8)
-        ->onClick([this]() { toggle_scan(); })
-        ->build();
-    LayoutParams pair_lp(0, 38, 1.0f);
-    btn_pair->set_layout_params(pair_lp);
-    action_row->add_view(btn_pair);
 
     return action_row;
 }
 
-std::shared_ptr<View> BluetoothDetailView::create_category_section(const std::string& title, BluetoothDeviceCategory cat) {
+std::shared_ptr<View> BluetoothDetailView::create_device_section(
+    const std::string& title,
+    const std::vector<BluetoothDeviceItem>& devs,
+    bool is_connected_group
+) {
+    if (devs.empty()) return nullptr;
     auto config = Config::get();
+
     auto sec_container = std::make_shared<LinearLayout>(Orientation::Vertical);
     sec_container->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
@@ -479,28 +493,35 @@ std::shared_ptr<View> BluetoothDetailView::create_category_section(const std::st
         ->text(title)
         ->bold(true)
         ->textSize(config->metrics.caption_size)
-        ->textColor(config->colors.on_surface_variant)
+        ->textColor(is_connected_group ? config->colors.primary : config->colors.on_surface_variant)
+        ->padding(4, 2)
         ->build();
     sec_container->add_view(lbl);
 
-    // Card wrapping device rows
+    // Inset grouped card container (Apple/Android modern style)
     auto card = std::make_shared<CardView>();
-    card->set_card_background_color(config->colors.surface);
-    card->set_radius(config->metrics.corner_radius);
-    card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-    card->set_padding(8);
+    card->set_card_background_color(config->colors.surface_variant);
+    card->set_radius(14);
+    card->set_stroke(0, Color());
+    card->set_elevation(0);
+    card->set_padding(8, 4);
 
     auto list_box = std::make_shared<LinearLayout>(Orientation::Vertical);
     list_box->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    list_box->set_divider_spacing(8);
 
-    for (auto& dev : m_paired_devices) {
-        if (dev.category == cat) {
-            list_box->add_view(create_device_row(dev));
+    bool first = true;
+    for (const auto& dev : devs) {
+        if (!first) {
+            auto div = std::make_shared<DividerView>(Orientation::Horizontal, 1);
+            div->set_color(config->colors.outline_variant);
+            div->set_margin(Margin(48, 2, 8, 2));
+            list_box->add_view(div);
         }
+        first = false;
+        list_box->add_view(create_device_row(dev, is_connected_group));
     }
 
     card->add_view(list_box);
@@ -508,9 +529,8 @@ std::shared_ptr<View> BluetoothDetailView::create_category_section(const std::st
     return sec_container;
 }
 
-std::shared_ptr<View> BluetoothDetailView::create_device_row(BluetoothDeviceItem& dev) {
+std::shared_ptr<View> BluetoothDetailView::create_device_row(const BluetoothDeviceItem& dev, bool is_connected_group) {
     auto config = Config::get();
-    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
 
     auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     row->set_layout_params(LayoutParams(
@@ -518,23 +538,19 @@ std::shared_ptr<View> BluetoothDetailView::create_device_row(BluetoothDeviceItem
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     row->set_padding(8, 6);
-    row->set_divider_spacing(10);
+    row->set_divider_spacing(12);
     row->set_gravity(Gravity::CenterVertical);
 
-    // Device Icon
-    auto icon = std::make_shared<ImageView>(dev.icon_name.empty() ? "bluetooth" : dev.icon_name);
-    icon->set_target_size(24);
-    LayoutParams icon_lp(24, 24);
-    icon_lp.gravity = Gravity::CenterVertical;
-    row->add_view(icon, icon_lp);
+    // Circular glyph badge (36x36)
+    Color badge_bg = is_connected_group ? config->colors.primary_container : config->colors.surface;
+    auto badge = create_icon_badge(dev.icon_name, badge_bg, 36, 20);
+    row->add_view(badge);
 
-    // Name & Subtitle
+    // Name & Status
     auto text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    LayoutParams text_lp;
-    text_lp.width = 0;
-    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.weight = 1.0f;
+    LayoutParams text_lp(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f);
     text_col->set_layout_params(text_lp);
+    text_col->set_divider_spacing(2);
 
     auto title = TextViewBuilder::create()
         ->text(dev.name)
@@ -544,10 +560,22 @@ std::shared_ptr<View> BluetoothDetailView::create_device_row(BluetoothDeviceItem
         ->build();
     text_col->add_view(title);
 
+    std::string status_text;
+    Color status_color = config->colors.on_surface_variant;
+    if (dev.is_connected) {
+        status_text = "● Connected";
+        status_color = config->colors.primary;
+        if (dev.battery_percentage >= 0) {
+            status_text += " · " + std::to_string(dev.battery_percentage) + "% Battery";
+        }
+    } else {
+        status_text = "Paired accessory";
+    }
+
     auto sub_view = TextViewBuilder::create()
-        ->text(dev.connection_info)
+        ->text(status_text)
         ->textSize(config->metrics.caption_size)
-        ->textColor(dev.is_connected ? config->colors.primary : config->colors.on_surface_variant)
+        ->textColor(status_color)
         ->build();
     text_col->add_view(sub_view);
     row->add_view(text_col);
@@ -556,24 +584,21 @@ std::shared_ptr<View> BluetoothDetailView::create_device_row(BluetoothDeviceItem
     auto action_btn = ButtonBuilder::create()
         ->text(dev.is_connected ? "Disconnect" : "Connect")
         ->textSize(config->metrics.caption_size)
-        ->cornerRadius(btn_radius)
-        ->padding(10, 4)
+        ->cornerRadius(14)
+        ->padding(12, 4)
         ->onClick([this, mac = dev.mac]() {
             toggle_connection(mac);
         });
 
     if (dev.is_connected) {
-        action_btn->bordered(true)
-                  ->borderColor(config->colors.outline_variant)
-                  ->borderWidth(config->metrics.border_width)
-                  ->backgroundColor(config->colors.surface_variant)
+        action_btn->backgroundColor(config->colors.surface)
                   ->textColor(config->colors.on_surface);
     } else {
         action_btn->primary(true);
     }
 
     auto btn_view = action_btn->build();
-    LayoutParams btn_lp(90, 30);
+    LayoutParams btn_lp(84, 28);
     btn_lp.gravity = Gravity::CenterVertical;
     btn_view->set_layout_params(btn_lp);
     row->add_view(btn_view);
@@ -582,14 +607,13 @@ std::shared_ptr<View> BluetoothDetailView::create_device_row(BluetoothDeviceItem
     auto btn_forget = ButtonBuilder::create()
         ->text("✕")
         ->textSize(config->metrics.caption_size)
-        ->cornerRadius(btn_radius)
-        ->backgroundColor(config->colors.surface_variant)
+        ->flat(true)
         ->textColor(config->colors.on_surface_variant)
         ->onClick([this, mac = dev.mac]() {
             on_forget_device(mac);
         })
         ->build();
-    LayoutParams forget_lp(30, 30);
+    LayoutParams forget_lp(28, 28);
     forget_lp.gravity = Gravity::CenterVertical;
     btn_forget->set_layout_params(forget_lp);
     row->add_view(btn_forget);
@@ -606,37 +630,65 @@ std::shared_ptr<View> BluetoothDetailView::create_available_section() {
     ));
     sec_container->set_divider_spacing(6);
 
+    auto header_row = std::make_shared<LinearLayout>(Orientation::Horizontal);
+    header_row->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
+    header_row->set_gravity(Gravity::CenterVertical);
+
     auto lbl = TextViewBuilder::create()
-        ->text("AVAILABLE DEVICES (NEARBY)")
+        ->text("NEARBY DEVICES")
         ->bold(true)
         ->textSize(config->metrics.caption_size)
         ->textColor(config->colors.on_surface_variant)
+        ->padding(4, 2)
         ->build();
-    sec_container->add_view(lbl);
+    header_row->add_view(lbl);
 
+    if (m_scanning) {
+        auto scan_lbl = TextViewBuilder::create()
+            ->text("Searching...")
+            ->textSize(config->metrics.caption_size)
+            ->textColor(config->colors.primary)
+            ->padding(8, 2)
+            ->build();
+        header_row->add_view(scan_lbl);
+    }
+    sec_container->add_view(header_row);
+
+    // Inset grouped card
     auto card = std::make_shared<CardView>();
-    card->set_card_background_color(config->colors.surface);
-    card->set_radius(config->metrics.corner_radius);
-    card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-    card->set_padding(8);
+    card->set_card_background_color(config->colors.surface_variant);
+    card->set_radius(14);
+    card->set_stroke(0, Color());
+    card->set_elevation(0);
+    card->set_padding(8, 4);
 
     auto list_box = std::make_shared<LinearLayout>(Orientation::Vertical);
     list_box->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    list_box->set_divider_spacing(8);
 
     if (m_available_devices.empty()) {
         auto msg = TextViewBuilder::create()
-            ->text(m_scanning ? "Scanning for nearby discoverable Bluetooth devices..." : "No new devices found nearby.")
+            ->text(m_scanning ? "Looking for nearby discoverable Bluetooth accessories..." : "No new devices found nearby.")
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.on_surface_variant)
-            ->padding(8)
+            ->padding(12, 12)
             ->build();
         list_box->add_view(msg);
     } else {
-        for (auto& dev : m_available_devices) {
+        bool first = true;
+        for (const auto& dev : m_available_devices) {
+            if (!first) {
+                auto div = std::make_shared<DividerView>(Orientation::Horizontal, 1);
+                div->set_color(config->colors.outline_variant);
+                div->set_margin(Margin(48, 2, 8, 2));
+                list_box->add_view(div);
+            }
+            first = false;
             list_box->add_view(create_available_row(dev));
         }
     }
@@ -646,9 +698,8 @@ std::shared_ptr<View> BluetoothDetailView::create_available_section() {
     return sec_container;
 }
 
-std::shared_ptr<View> BluetoothDetailView::create_available_row(BluetoothDeviceItem& dev) {
+std::shared_ptr<View> BluetoothDetailView::create_available_row(const BluetoothDeviceItem& dev) {
     auto config = Config::get();
-    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
 
     auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     row->set_layout_params(LayoutParams(
@@ -656,21 +707,17 @@ std::shared_ptr<View> BluetoothDetailView::create_available_row(BluetoothDeviceI
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     row->set_padding(8, 6);
-    row->set_divider_spacing(10);
+    row->set_divider_spacing(12);
     row->set_gravity(Gravity::CenterVertical);
 
-    auto icon = std::make_shared<ImageView>("bluetooth");
-    icon->set_target_size(24);
-    LayoutParams icon_lp(24, 24);
-    icon_lp.gravity = Gravity::CenterVertical;
-    row->add_view(icon, icon_lp);
+    // Circular glyph badge (36x36)
+    auto badge = create_icon_badge(dev.icon_name.empty() ? "bluetooth" : dev.icon_name, config->colors.surface, 36, 20);
+    row->add_view(badge);
 
     auto text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    LayoutParams text_lp;
-    text_lp.width = 0;
-    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.weight = 1.0f;
+    LayoutParams text_lp(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f);
     text_col->set_layout_params(text_lp);
+    text_col->set_divider_spacing(2);
 
     auto title = TextViewBuilder::create()
         ->text(dev.name)
@@ -681,7 +728,7 @@ std::shared_ptr<View> BluetoothDetailView::create_available_row(BluetoothDeviceI
     text_col->add_view(title);
 
     auto sub = TextViewBuilder::create()
-        ->text("MAC: " + dev.mac)
+        ->text("Ready to pair · " + dev.mac)
         ->textSize(config->metrics.caption_size)
         ->textColor(config->colors.on_surface_variant)
         ->build();
@@ -689,16 +736,16 @@ std::shared_ptr<View> BluetoothDetailView::create_available_row(BluetoothDeviceI
     row->add_view(text_col);
 
     auto btn_pair = ButtonBuilder::create()
-        ->text("Pair & Connect")
+        ->text("Pair")
         ->primary(true)
         ->textSize(config->metrics.caption_size)
-        ->cornerRadius(btn_radius)
-        ->padding(10, 4)
+        ->cornerRadius(14)
+        ->padding(14, 4)
         ->onClick([this, mac = dev.mac]() {
             on_pair_device(mac);
         })
         ->build();
-    LayoutParams btn_lp(110, 30);
+    LayoutParams btn_lp(72, 28);
     btn_lp.gravity = Gravity::CenterVertical;
     btn_pair->set_layout_params(btn_lp);
     row->add_view(btn_pair);
@@ -706,15 +753,14 @@ std::shared_ptr<View> BluetoothDetailView::create_available_row(BluetoothDeviceI
     return row;
 }
 
-std::shared_ptr<View> BluetoothDetailView::create_discovery_card() {
+std::shared_ptr<View> BluetoothDetailView::create_file_transfer_card() {
     auto config = Config::get();
-    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
 
     auto card = std::make_shared<CardView>();
     card->set_card_background_color(config->colors.surface_variant);
-    card->set_radius(config->metrics.corner_radius);
-    card->set_stroke(config->metrics.border_width, config->colors.primary);
-    card->set_padding(12);
+    card->set_radius(14);
+    card->set_stroke(0, Color());
+    card->set_padding(12, 14);
 
     auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
     row->set_layout_params(LayoutParams(
@@ -724,81 +770,17 @@ std::shared_ptr<View> BluetoothDetailView::create_discovery_card() {
     row->set_divider_spacing(12);
     row->set_gravity(Gravity::CenterVertical);
 
-    auto icon = std::make_shared<ImageView>("network-wireless-acquiring");
-    icon->set_target_size(24);
-    row->add_view(icon);
+    auto badge = create_icon_badge("folder-download", config->colors.surface, 36, 20);
+    row->add_view(badge);
 
     auto text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    LayoutParams text_lp;
-    text_lp.width = 0;
-    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.weight = 1.0f;
-    text_col->set_layout_params(text_lp);
-
-    auto title = TextViewBuilder::create()
-        ->text("Scanning for Nearby Devices...")
-        ->bold(true)
-        ->textSize(config->metrics.h3_size)
-        ->textColor(config->colors.primary)
-        ->build();
-    text_col->add_view(title);
-
-    auto sub = TextViewBuilder::create()
-        ->text("Put your Bluetooth mouse, headphones, or stylus into pairing mode.")
-        ->textSize(config->metrics.caption_size)
-        ->textColor(config->colors.on_surface_variant)
-        ->build();
-    text_col->add_view(sub);
-    row->add_view(text_col);
-
-    auto btn_stop = ButtonBuilder::create()
-        ->text("Stop")
-        ->textSize(config->metrics.caption_size)
-        ->cornerRadius(btn_radius)
-        ->padding(8, 4)
-        ->onClick([this]() { toggle_scan(); })
-        ->build();
-    LayoutParams btn_lp(64, 28);
-    btn_stop->set_layout_params(btn_lp);
-    row->add_view(btn_stop);
-
-    card->add_view(row);
-    return card;
-}
-
-std::shared_ptr<View> BluetoothDetailView::create_file_transfer_card() {
-    auto config = Config::get();
-    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
-
-    auto card = std::make_shared<CardView>();
-    card->set_card_background_color(config->colors.surface);
-    card->set_radius(config->metrics.corner_radius);
-    card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-    card->set_padding(14);
-
-    auto row = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    row->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    row->set_divider_spacing(12);
-    row->set_gravity(Gravity::CenterVertical);
-
-    auto icon = std::make_shared<ImageView>("folder-download");
-    icon->set_target_size(24);
-    row->add_view(icon);
-
-    auto text_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    LayoutParams text_lp;
-    text_lp.width = 0;
-    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.weight = 1.0f;
+    LayoutParams text_lp(0, static_cast<int>(LayoutDimension::WrapContent), 1.0f);
     text_col->set_layout_params(text_lp);
 
     auto title = TextViewBuilder::create()
         ->text("Bluetooth File Transfers")
         ->bold(true)
-        ->textSize(config->metrics.h3_size)
+        ->textSize(config->metrics.font_size)
         ->textColor(config->colors.on_surface)
         ->build();
     text_col->add_view(title);
@@ -815,19 +797,16 @@ std::shared_ptr<View> BluetoothDetailView::create_file_transfer_card() {
     auto btn_open = ButtonBuilder::create()
         ->text("Open Folder")
         ->textSize(config->metrics.caption_size)
-        ->cornerRadius(btn_radius)
-        ->padding(10, 4)
-        ->bordered(true)
-        ->borderColor(config->colors.outline_variant)
-        ->borderWidth(config->metrics.border_width)
-        ->backgroundColor(config->colors.surface_variant)
+        ->cornerRadius(14)
+        ->padding(12, 4)
+        ->backgroundColor(config->colors.surface)
         ->textColor(config->colors.on_surface)
         ->onClick([dl_dir]() {
             std::string cmd = "xdg-open \"" + dl_dir + "\" 2>/dev/null &";
             std::system(cmd.c_str());
         })
         ->build();
-    LayoutParams btn_lp(100, 30);
+    LayoutParams btn_lp(96, 28);
     btn_open->set_layout_params(btn_lp);
     row->add_view(btn_open);
 
@@ -837,21 +816,27 @@ std::shared_ptr<View> BluetoothDetailView::create_file_transfer_card() {
 
 std::shared_ptr<View> BluetoothDetailView::create_disabled_state() {
     auto config = Config::get();
-    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
+
+    auto card = std::make_shared<CardView>();
+    card->set_card_background_color(config->colors.surface_variant);
+    card->set_radius(16);
+    card->set_stroke(0, Color());
+    card->set_padding(32, 28);
+    card->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        static_cast<int>(LayoutDimension::WrapContent)
+    ));
 
     auto box = std::make_shared<LinearLayout>(Orientation::Vertical);
     box->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::WrapContent)
     ));
-    box->set_divider_spacing(14);
-    box->set_padding(24);
+    box->set_divider_spacing(12);
     box->set_gravity(Gravity::CenterHorizontal);
 
-    auto empty_icon = std::make_shared<ImageView>("bluetooth");
-    empty_icon->set_target_size(48);
-    empty_icon->set_dim(0.3f);
-    box->add_view(empty_icon);
+    auto badge = create_icon_badge("bluetooth", config->colors.surface, 56, 32);
+    box->add_view(badge);
 
     auto title = TextViewBuilder::create()
         ->text("Bluetooth is Turned Off")
@@ -863,7 +848,7 @@ std::shared_ptr<View> BluetoothDetailView::create_disabled_state() {
     box->add_view(title);
 
     auto desc = TextViewBuilder::create()
-        ->text("Turn on Bluetooth to discover and connect your headphones, mouse, keyboard, or transfer files.")
+        ->text("Turn on Bluetooth to discover and connect your wireless headphones, mice, keyboards, and other accessories.")
         ->textSize(config->metrics.font_size)
         ->center(true)
         ->textColor(config->colors.on_surface_variant)
@@ -874,15 +859,16 @@ std::shared_ptr<View> BluetoothDetailView::create_disabled_state() {
         ->text("Turn On Bluetooth")
         ->primary(true)
         ->textSize(config->metrics.font_size)
-        ->cornerRadius(btn_radius)
-        ->padding(16, 8)
+        ->cornerRadius(18)
+        ->padding(20, 8)
         ->onClick([this]() {
             toggle_power(true);
         })
         ->build();
     box->add_view(btn_on);
 
-    return box;
+    card->add_view(box);
+    return card;
 }
 
 void BluetoothDetailView::toggle_power(bool power) {

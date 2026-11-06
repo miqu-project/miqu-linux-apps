@@ -123,7 +123,7 @@ void SettingDetailView::show_category_preview(const std::shared_ptr<SettingItem>
         auto subtitle = TextViewBuilder::create()
             ->text(item->subtitle)
             ->textSize(12)
-            ->textColor(config->colors.outline)
+            ->textColor(config->colors.on_surface_variant)
             ->build();
         title_col->add_view(subtitle);
     }
@@ -191,9 +191,9 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
 
     // 1. Header Card (Hero)
     auto hero_card = std::make_shared<CardView>();
-    hero_card->set_card_background_color(config->colors.surface);
-    hero_card->set_radius(10);
-    hero_card->set_stroke(1, config->colors.outline_variant);
+    hero_card->set_card_background_color(config->colors.surface_variant);
+    hero_card->set_radius(12);
+    hero_card->set_stroke(0, Color());
     hero_card->set_padding(20);
     LayoutParams hero_lp;
     hero_lp.width = static_cast<int>(LayoutDimension::MatchParent);
@@ -234,7 +234,7 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
         auto subtitle = TextViewBuilder::create()
             ->text(item->subtitle)
             ->textSize(13)
-            ->textColor(config->colors.outline)
+            ->textColor(config->colors.on_surface_variant)
             ->build();
         text_col->add_view(subtitle);
     }
@@ -245,7 +245,7 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
             ->text("⛶")
             ->textSize(14)
             ->textColor(config->colors.primary)
-            ->backgroundColor(config->colors.surface_variant)
+            ->flat(true)
             ->cornerRadius(6)
             ->onClick([this]() {
                 if (m_on_request_fullscreen) m_on_request_fullscreen();
@@ -264,9 +264,9 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
 
     // 2. Control Card based on SettingType
     auto control_card = std::make_shared<CardView>();
-    control_card->set_card_background_color(config->colors.surface);
-    control_card->set_radius(10);
-    control_card->set_stroke(1, config->colors.outline_variant);
+    control_card->set_card_background_color(config->colors.surface_variant);
+    control_card->set_radius(12);
+    control_card->set_stroke(0, Color());
     control_card->set_padding(20);
     LayoutParams ctrl_lp;
     ctrl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
@@ -299,7 +299,7 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
         auto status_lbl = TextViewBuilder::create()
             ->text(item->bool_val ? "Status: Active" : "Status: Inactive")
             ->textSize(13)
-            ->textColor(item->bool_val ? config->colors.primary : config->colors.outline)
+            ->textColor(item->bool_val ? config->colors.primary : config->colors.on_surface_variant)
             ->build();
         lbl_col->add_view(status_lbl);
         toggle_row->add_view(lbl_col);

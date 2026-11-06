@@ -109,33 +109,33 @@ void SettingsWindow::build_ui() {
     });
     m_search_container->add_view(m_search_view);
 
-    // 4. 3-PILLAR MILLER COLUMNS CONTAINER
+    // 4. 3-PILLAR MILLER COLUMNS CONTAINER (Seamless borderless panes)
     m_columns_container = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    m_columns_container->set_padding(12);
-    m_columns_container->set_divider_spacing(12);
+    m_columns_container->set_padding(0);
+    m_columns_container->set_divider_spacing(0);
     LayoutParams cols_lp;
     cols_lp.width = static_cast<int>(LayoutDimension::MatchParent);
     cols_lp.height = 0;
     cols_lp.weight = 1.0f;
     m_columns_container->set_layout_params(cols_lp);
 
-    // LEFT COLUMN: Parent / Hero Card (weight 1.2)
+    // LEFT COLUMN: Navigation Sidebar (weight 1.1)
     m_col_parent_card = std::make_shared<ColumnCardView>();
-    m_col_parent_card->set_card_background_color(config->colors.surface_variant);
-    m_col_parent_card->set_radius(config->metrics.corner_radius);
-    m_col_parent_card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
+    m_col_parent_card->set_card_background_color(config->colors.surface);
+    m_col_parent_card->set_radius(0);
+    m_col_parent_card->set_stroke(0, Color());
     m_col_parent_card->set_elevation(0);
-    m_col_parent_card->set_padding(10);
+    m_col_parent_card->set_padding(8, 8);
     LayoutParams col_parent_lp;
     col_parent_lp.width = 0;
     col_parent_lp.height = static_cast<int>(LayoutDimension::MatchParent);
-    col_parent_lp.weight = 1.2f;
+    col_parent_lp.weight = 1.1f;
     m_col_parent_card->set_layout_params(col_parent_lp);
 
     m_parent_list = std::make_shared<ListView>();
-    m_parent_list->set_item_height(50);
-    m_parent_list->set_spacing(6);
-    m_parent_list->set_item_corner_radius(std::max(4, config->metrics.corner_radius - 4));
+    m_parent_list->set_item_height(48);
+    m_parent_list->set_spacing(4);
+    m_parent_list->set_item_corner_radius(6);
     m_parent_list->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
@@ -165,18 +165,18 @@ void SettingsWindow::build_ui() {
     m_parent_root_hero->set_visibility(Visibility::Gone);
 
     auto app_icon = std::make_shared<ImageView>("preferences-system");
-    app_icon->set_target_size(64);
+    app_icon->set_target_size(56);
     app_icon->set_dim(0.15f);
     LayoutParams hero_icon_lp;
-    hero_icon_lp.width = 64;
-    hero_icon_lp.height = 64;
+    hero_icon_lp.width = 56;
+    hero_icon_lp.height = 56;
     hero_icon_lp.gravity = Gravity::CenterHorizontal;
     m_parent_root_hero->add_view(app_icon, hero_icon_lp);
 
     auto h1_title = TextViewBuilder::create()
         ->text("Settings")
         ->bold(true)
-        ->textSize(config->metrics.h1_size > 0 ? config->metrics.h1_size + 8 : 28)
+        ->textSize(config->metrics.h1_size > 0 ? config->metrics.h1_size + 4 : 24)
         ->center(true)
         ->textColor(config->colors.primary)
         ->build();
@@ -191,7 +191,7 @@ void SettingsWindow::build_ui() {
         ->text("System Configuration")
         ->textSize(config->metrics.caption_size)
         ->center(true)
-        ->textColor(config->colors.outline)
+        ->textColor(config->colors.on_surface_variant)
         ->build();
     LayoutParams sub_lp;
     sub_lp.width = static_cast<int>(LayoutDimension::MatchParent);
@@ -203,23 +203,29 @@ void SettingsWindow::build_ui() {
     m_col_parent_card->add_view(m_parent_root_hero);
     m_columns_container->add_view(m_col_parent_card);
 
-    // CENTER COLUMN: Active Section List (weight 1.6)
+    // Divider 1
+    m_divider_1 = std::make_shared<DividerView>(Orientation::Vertical, 1);
+    m_divider_1->set_color(config->colors.outline_variant);
+    m_divider_1->set_layout_params(LayoutParams(1, static_cast<int>(LayoutDimension::MatchParent)));
+    m_columns_container->add_view(m_divider_1);
+
+    // CENTER COLUMN: Active Section List (weight 1.5)
     m_col_current_card = std::make_shared<ColumnCardView>();
     m_col_current_card->set_card_background_color(config->colors.surface);
-    m_col_current_card->set_radius(config->metrics.corner_radius);
-    m_col_current_card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
+    m_col_current_card->set_radius(0);
+    m_col_current_card->set_stroke(0, Color());
     m_col_current_card->set_elevation(0);
-    m_col_current_card->set_padding(10);
+    m_col_current_card->set_padding(8, 8);
     LayoutParams col_current_lp;
     col_current_lp.width = 0;
     col_current_lp.height = static_cast<int>(LayoutDimension::MatchParent);
-    col_current_lp.weight = 1.6f;
+    col_current_lp.weight = 1.5f;
     m_col_current_card->set_layout_params(col_current_lp);
 
     m_current_list = std::make_shared<ListView>();
-    m_current_list->set_item_height(54);
-    m_current_list->set_spacing(6);
-    m_current_list->set_item_corner_radius(std::max(4, config->metrics.corner_radius - 4));
+    m_current_list->set_item_height(50);
+    m_current_list->set_spacing(4);
+    m_current_list->set_item_corner_radius(6);
     m_current_list->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
@@ -245,17 +251,23 @@ void SettingsWindow::build_ui() {
     m_col_current_card->add_view(m_current_list);
     m_columns_container->add_view(m_col_current_card);
 
-    // RIGHT COLUMN: Detail / Preview Card (weight 2.0)
+    // Divider 2
+    m_divider_2 = std::make_shared<DividerView>(Orientation::Vertical, 1);
+    m_divider_2->set_color(config->colors.outline_variant);
+    m_divider_2->set_layout_params(LayoutParams(1, static_cast<int>(LayoutDimension::MatchParent)));
+    m_columns_container->add_view(m_divider_2);
+
+    // RIGHT COLUMN: Detail / Action Canvas (weight 2.4)
     m_col_preview_card = std::make_shared<ColumnCardView>();
-    m_col_preview_card->set_card_background_color(config->colors.surface_variant);
-    m_col_preview_card->set_radius(config->metrics.corner_radius);
-    m_col_preview_card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
+    m_col_preview_card->set_card_background_color(config->colors.surface);
+    m_col_preview_card->set_radius(0);
+    m_col_preview_card->set_stroke(0, Color());
     m_col_preview_card->set_elevation(0);
-    m_col_preview_card->set_padding(12);
+    m_col_preview_card->set_padding(16, 14);
     LayoutParams col_preview_lp;
     col_preview_lp.width = 0;
     col_preview_lp.height = static_cast<int>(LayoutDimension::MatchParent);
-    col_preview_lp.weight = 2.0f;
+    col_preview_lp.weight = 2.4f;
     m_col_preview_card->set_layout_params(col_preview_lp);
 
     m_detail_view = std::make_shared<SettingDetailView>();
@@ -282,11 +294,20 @@ void SettingsWindow::build_ui() {
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
     ));
-    m_root_container->set_background_color(config->colors.background);
+    m_root_container->set_background_color(config->colors.surface);
 
     m_root_container->add_view(m_toolbar);
     m_root_container->add_view(m_path_strip);
     m_root_container->add_view(m_search_container);
+
+    m_header_divider = std::make_shared<DividerView>(Orientation::Horizontal, 1);
+    m_header_divider->set_color(config->colors.outline_variant);
+    m_header_divider->set_layout_params(LayoutParams(
+        static_cast<int>(LayoutDimension::MatchParent),
+        1
+    ));
+    m_root_container->add_view(m_header_divider);
+
     m_root_container->add_view(m_columns_container);
 
     // 6. Window Creation via WindowBuilder
@@ -387,26 +408,38 @@ void SettingsWindow::sync_theme() {
     auto config = Config::get();
     if (!config) return;
 
+    if (m_root_container) {
+        m_root_container->set_background_color(config->colors.surface);
+    }
+    if (m_header_divider) {
+        m_header_divider->set_color(config->colors.outline_variant);
+    }
     if (m_col_parent_card) {
-        m_col_parent_card->set_card_background_color(config->colors.surface_variant);
-        m_col_parent_card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-        m_col_parent_card->set_radius(config->metrics.corner_radius);
+        m_col_parent_card->set_card_background_color(config->colors.surface);
+        m_col_parent_card->set_stroke(0, Color());
+        m_col_parent_card->set_radius(0);
+    }
+    if (m_divider_1) {
+        m_divider_1->set_color(config->colors.outline_variant);
     }
     if (m_col_current_card) {
         m_col_current_card->set_card_background_color(config->colors.surface);
-        m_col_current_card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-        m_col_current_card->set_radius(config->metrics.corner_radius);
+        m_col_current_card->set_stroke(0, Color());
+        m_col_current_card->set_radius(0);
+    }
+    if (m_divider_2) {
+        m_divider_2->set_color(config->colors.outline_variant);
     }
     if (m_col_preview_card) {
-        m_col_preview_card->set_card_background_color(config->colors.surface_variant);
-        m_col_preview_card->set_stroke(config->metrics.border_width, config->colors.outline_variant);
-        m_col_preview_card->set_radius(config->metrics.corner_radius);
+        m_col_preview_card->set_card_background_color(config->colors.surface);
+        m_col_preview_card->set_stroke(0, Color());
+        m_col_preview_card->set_radius(0);
     }
     if (m_parent_list) {
-        m_parent_list->set_item_corner_radius(std::max(4, config->metrics.corner_radius - 4));
+        m_parent_list->set_item_corner_radius(6);
     }
     if (m_current_list) {
-        m_current_list->set_item_corner_radius(std::max(4, config->metrics.corner_radius - 4));
+        m_current_list->set_item_corner_radius(6);
     }
     if (m_path_text) {
         m_path_text->set_text_color(config->colors.on_surface_variant);
@@ -548,7 +581,9 @@ void SettingsWindow::enter_fullscreen_detail() {
 
     m_fullscreen_detail = true;
     m_col_parent_card->set_visibility(Visibility::Gone);
+    if (m_divider_1) m_divider_1->set_visibility(Visibility::Gone);
     m_col_current_card->set_visibility(Visibility::Gone);
+    if (m_divider_2) m_divider_2->set_visibility(Visibility::Gone);
 
     LayoutParams full_lp;
     full_lp.width = static_cast<int>(LayoutDimension::MatchParent);
@@ -568,12 +603,14 @@ void SettingsWindow::exit_fullscreen_detail() {
     m_fullscreen_detail = false;
 
     m_col_parent_card->set_visibility(Visibility::Visible);
+    if (m_divider_1) m_divider_1->set_visibility(Visibility::Visible);
     m_col_current_card->set_visibility(Visibility::Visible);
+    if (m_divider_2) m_divider_2->set_visibility(Visibility::Visible);
 
     LayoutParams col_preview_lp;
     col_preview_lp.width = 0;
     col_preview_lp.height = static_cast<int>(LayoutDimension::MatchParent);
-    col_preview_lp.weight = 2.0f;
+    col_preview_lp.weight = 2.4f;
     m_col_preview_card->set_layout_params(col_preview_lp);
 
     m_toolbar->set_back_visible(m_current_node != m_root_node);
