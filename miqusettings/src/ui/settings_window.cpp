@@ -439,12 +439,17 @@ void SettingsWindow::navigate_to(const std::shared_ptr<SettingItem>& node, bool 
         exit_fullscreen_detail();
     }
 
-    if (record_history && node != m_current_node) {
+    bool is_different_node = (node != m_current_node);
+
+    if (record_history && is_different_node) {
         m_history_back.push_back(m_current_node);
         m_history_forward.clear();
     }
 
     m_current_node = node;
+    if (is_different_node) {
+        m_selected_index = 0;
+    }
     m_toolbar->set_back_visible(m_current_node != m_root_node);
 
     update_breadcrumb();
