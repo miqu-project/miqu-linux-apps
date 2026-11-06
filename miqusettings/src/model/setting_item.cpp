@@ -42,7 +42,59 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
     root->icon_name = "preferences-system";
     root->type = SettingType::Category;
 
-    // 1. Wi-Fi & Network
+    // 1. Applications & Defaults
+    {
+        auto apps = std::make_shared<SettingItem>();
+        apps->id = "apps";
+        apps->title = "Applications & Defaults";
+        apps->subtitle = "Default Browser, Terminal, File Manager, Player";
+        apps->icon_name = "system-software-install";
+        apps->type = SettingType::Category;
+
+        auto browser = std::make_shared<SettingItem>();
+        browser->id = "def_browser";
+        browser->title = "Default Web Browser";
+        browser->subtitle = "Preferred application for opening web links";
+        browser->icon_name = "web-browser";
+        browser->type = SettingType::Selection;
+        browser->options = {"Firefox", "Chromium", "Brave", "Zen Browser"};
+        browser->selected_option_idx = 0;
+        apps->children.push_back(browser);
+
+        auto filem = std::make_shared<SettingItem>();
+        filem->id = "def_files";
+        filem->title = "Default File Manager";
+        filem->subtitle = "Standard directory browser";
+        filem->icon_name = "system-file-manager";
+        filem->type = SettingType::Selection;
+        filem->options = {"Miqu Files (miqufiles)", "Thunar", "Nautilus"};
+        filem->selected_option_idx = 0;
+        apps->children.push_back(filem);
+
+        auto term = std::make_shared<SettingItem>();
+        term->id = "def_term";
+        term->title = "Default Terminal Emulator";
+        term->subtitle = "Command-line terminal window";
+        term->icon_name = "utilities-terminal";
+        term->type = SettingType::Selection;
+        term->options = {"Kitty", "Foot", "Alacritty", "WezTerm"};
+        term->selected_option_idx = 0;
+        apps->children.push_back(term);
+
+        auto music = std::make_shared<SettingItem>();
+        music->id = "def_music";
+        music->title = "Default Music Player";
+        music->subtitle = "Audio playback application";
+        music->icon_name = "audio-player";
+        music->type = SettingType::Selection;
+        music->options = {"Miqu Music (miqumusic)", "MPD Client", "VLC Media Player"};
+        music->selected_option_idx = 0;
+        apps->children.push_back(music);
+
+        root->children.push_back(apps);
+    }
+
+    // 2. Wireless & Network
     {
         auto net = std::make_shared<SettingItem>();
         net->id = "network";
@@ -305,58 +357,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         pwr->children.push_back(suspend);
 
         root->children.push_back(pwr);
-    }
-
-    // 6. Applications & Defaults
-    {
-        auto apps = std::make_shared<SettingItem>();
-        apps->id = "apps";
-        apps->title = "Applications & Defaults";
-        apps->subtitle = "Default Browser, Terminal, File Manager, Player";
-        apps->icon_name = "system-software-install";
-        apps->type = SettingType::Category;
-
-        auto browser = std::make_shared<SettingItem>();
-        browser->id = "def_browser";
-        browser->title = "Default Web Browser";
-        browser->subtitle = "Preferred application for opening web links";
-        browser->icon_name = "web-browser";
-        browser->type = SettingType::Selection;
-        browser->options = {"Firefox", "Chromium", "Brave", "Zen Browser"};
-        browser->selected_option_idx = 0;
-        apps->children.push_back(browser);
-
-        auto filem = std::make_shared<SettingItem>();
-        filem->id = "def_files";
-        filem->title = "Default File Manager";
-        filem->subtitle = "Standard directory browser";
-        filem->icon_name = "system-file-manager";
-        filem->type = SettingType::Selection;
-        filem->options = {"Miqu Files (miqufiles)", "Thunar", "Nautilus"};
-        filem->selected_option_idx = 0;
-        apps->children.push_back(filem);
-
-        auto term = std::make_shared<SettingItem>();
-        term->id = "def_term";
-        term->title = "Default Terminal Emulator";
-        term->subtitle = "Command-line terminal window";
-        term->icon_name = "utilities-terminal";
-        term->type = SettingType::Selection;
-        term->options = {"Kitty", "Foot", "Alacritty", "WezTerm"};
-        term->selected_option_idx = 0;
-        apps->children.push_back(term);
-
-        auto music = std::make_shared<SettingItem>();
-        music->id = "def_music";
-        music->title = "Default Music Player";
-        music->subtitle = "Audio playback application";
-        music->icon_name = "audio-player";
-        music->type = SettingType::Selection;
-        music->options = {"Miqu Music (miqumusic)", "MPD Client", "VLC Media Player"};
-        music->selected_option_idx = 0;
-        apps->children.push_back(music);
-
-        root->children.push_back(apps);
     }
 
     // 7. Security & Privacy
