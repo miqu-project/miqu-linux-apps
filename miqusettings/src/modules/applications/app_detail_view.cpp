@@ -16,20 +16,35 @@ AppDetailView::AppDetailView() {
 
 void AppDetailView::set_app_id(const std::string& desktop_id) {
     m_desktop_id = desktop_id;
+    // Do not call load_data/setup_ui here — caller sets is_fullscreen then calls refresh()
+}
+
+void AppDetailView::set_is_fullscreen(bool fullscreen) {
+    m_is_fullscreen = fullscreen;
     load_data();
     setup_ui();
 }
 
-void AppDetailView::set_is_fullscreen(bool fullscreen) {
-    if (m_is_fullscreen != fullscreen) {
-        m_is_fullscreen = fullscreen;
-        setup_ui();
-    }
-}
-
 void AppDetailView::load_data() {
-    if (!m_desktop_id.empty()) {
-        m_app = AppsBackend::get_app_details(m_desktop_id);
+    if (m_desktop_id.empty()) return;
+
+    // Fast path: look up from the in-memory cached app list
+    auto apps = AppsBackend::get_installed_apps();
+    for (const auto& app : apps) {
+        if (app.id == m_desktop_id) {
+            m_app = app;
+            break;
+        }
+    }
+    if (m_app.id.empty()) {
+        m_app.id = m_desktop_id;
+        m_app.name = m_desktop_id;
+        m_app.desktop_path = AppsBackend::resolve_desktop_path(m_desktop_id);
+    }
+
+    // Only run expensive pacman/flatpak queries in fullscreen detail view
+    if (m_is_fullscreen) {
+        AppsBackend::populate_package_metadata(m_app);
     }
 }
 

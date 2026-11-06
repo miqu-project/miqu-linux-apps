@@ -15,19 +15,32 @@ DefaultAppDetailView::DefaultAppDetailView() {
 
 void DefaultAppDetailView::set_role_id(const std::string& role_id) {
     m_role_id = role_id;
+    // Do not call load_data/setup_ui here — caller sets is_fullscreen then calls refresh()
+}
+
+void DefaultAppDetailView::set_is_fullscreen(bool fullscreen) {
+    m_is_fullscreen = fullscreen;
     load_data();
     setup_ui();
 }
 
-void DefaultAppDetailView::set_is_fullscreen(bool fullscreen) {
-    if (m_is_fullscreen != fullscreen) {
-        m_is_fullscreen = fullscreen;
-        setup_ui();
-    }
-}
-
 void DefaultAppDetailView::load_data() {
-    if (!m_role_id.empty()) {
+    if (m_role_id.empty()) return;
+
+    if (m_is_fullscreen) {
+        // Full load: query current default + find candidates (runs xdg-mime shell commands)
+        m_role = AppsBackend::get_default_role(m_role_id);
+    } else {
+        // Preview mode: use cached roles (populated on first fullscreen load or background init).
+        // Falls back to full load only if no cache exists yet.
+        auto roles = AppsBackend::get_default_roles();
+        for (const auto& r : roles) {
+            if (r.role_id == m_role_id) {
+                m_role = r;
+                return;
+            }
+        }
+        // Cache not ready yet — do a full load so at least something shows
         m_role = AppsBackend::get_default_role(m_role_id);
     }
 }

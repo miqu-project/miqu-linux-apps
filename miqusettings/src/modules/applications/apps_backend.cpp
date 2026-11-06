@@ -195,17 +195,15 @@ void AppsBackend::populate_package_metadata(AppDetailInfo& app) {
 
 AppDetailInfo AppsBackend::get_app_details(const std::string& desktop_id) {
     auto apps = get_installed_apps();
-    for (auto& app : apps) {
+    for (const auto& app : apps) {
         if (app.id == desktop_id) {
-            populate_package_metadata(app);
-            return app;
+            return app;  // Caller must call populate_package_metadata if needed
         }
     }
     AppDetailInfo missing;
     missing.id = desktop_id;
     missing.name = desktop_id;
     missing.desktop_path = resolve_desktop_path(desktop_id);
-    populate_package_metadata(missing);
     return missing;
 }
 
@@ -293,7 +291,14 @@ std::string AppsBackend::query_xdg_default(const std::string& mime_type) {
     return run_cmd("xdg-mime query default " + mime_type);
 }
 
-std::vector<DefaultRoleSpec> AppsBackend::get_default_roles() {
+std::vector<DefaultRoleSpec> AppsBackend::get_default_roles(bool force_refresh) {
+    static std::vector<DefaultRoleSpec> s_cached_roles;
+    static bool s_has_cached_roles = false;
+
+    if (s_has_cached_roles && !force_refresh) {
+        return s_cached_roles;
+    }
+
     std::vector<DefaultRoleSpec> roles = {
         {
             "web_browser",
@@ -458,7 +463,9 @@ std::vector<DefaultRoleSpec> AppsBackend::get_default_roles() {
         }
     }
 
-    return roles;
+    s_cached_roles = roles;
+    s_has_cached_roles = true;
+    return s_cached_roles;
 }
 
 DefaultRoleSpec AppsBackend::get_default_role(const std::string& role_id) {
@@ -483,6 +490,8 @@ bool AppsBackend::set_default_for_role(const std::string& role_id, const std::st
                 }
                 run_cmd(cmd);
             }
+            // Invalidate cache so next load re-queries the updated default
+            get_default_roles(true);
             return true;
         }
     }
