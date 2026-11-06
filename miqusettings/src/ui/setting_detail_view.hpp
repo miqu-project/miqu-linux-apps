@@ -45,6 +45,7 @@ private:
     void show_leaf_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen);
     void show_bluetooth_detail(bool is_fullscreen);
     void show_ethernet_detail(bool is_fullscreen);
+    void show_wifi_detail(bool is_fullscreen);
 
     std::shared_ptr<SettingItem> m_current_item;
     std::shared_ptr<View> m_current_content;

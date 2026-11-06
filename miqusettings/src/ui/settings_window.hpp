@@ -55,6 +55,7 @@ private:
     void populate_parent_column();
     void populate_current_column();
     void update_preview_and_status();
+    void update_breadcrumb();
     void apply_filter();
 
     std::shared_ptr<AppEngine> m_engine;

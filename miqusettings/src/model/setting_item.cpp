@@ -1,5 +1,6 @@
 #include "model/setting_item.hpp"
 #include "modules/ethernet/ethernet_backend.hpp"
+#include "modules/wifi/wifi_backend.hpp"
 #include <sstream>
 #include <iomanip>
 
@@ -49,63 +50,25 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         net->icon_name = "network-wireless";
         net->type = SettingType::Category;
 
-        // Wi-Fi subcategory
+        // Wi-Fi
         auto wifi = std::make_shared<SettingItem>();
         wifi->id = "wifi";
         wifi->title = "Wi-Fi";
-        wifi->subtitle = "Connected to MiquNet_5G";
-        wifi->icon_name = "network-wireless";
-        wifi->type = SettingType::Category;
-
-        auto wifi_toggle = std::make_shared<SettingItem>();
-        wifi_toggle->id = "wifi_enable";
-        wifi_toggle->title = "Wi-Fi Switch";
-        wifi_toggle->subtitle = "Enable or disable wireless radio";
-        wifi_toggle->icon_name = "network-wireless";
-        wifi_toggle->type = SettingType::Toggle;
-        wifi_toggle->bool_val = true;
-        wifi->children.push_back(wifi_toggle);
-
-        auto wifi_current = std::make_shared<SettingItem>();
-        wifi_current->id = "wifi_current";
-        wifi_current->title = "MiquNet_5G";
-        wifi_current->subtitle = "Connected, 866 Mbps (5 GHz, WPA3-Personal)";
-        wifi_current->icon_name = "network-wireless-signal-excellent";
-        wifi_current->type = SettingType::Info;
-        wifi->children.push_back(wifi_current);
-
-        auto wifi_networks = std::make_shared<SettingItem>();
-        wifi_networks->id = "wifi_networks";
-        wifi_networks->title = "Available Networks";
-        wifi_networks->subtitle = "3 detected wireless networks";
-        wifi_networks->icon_name = "network-wireless-acquiring";
-        wifi_networks->type = SettingType::Category;
-
-        auto net1 = std::make_shared<SettingItem>();
-        net1->id = "net_office";
-        net1->title = "Office_Station";
-        net1->subtitle = "Saved, Secured (WPA2-Enterprise)";
-        net1->icon_name = "network-wireless-signal-good";
-        net1->type = SettingType::Info;
-        wifi_networks->children.push_back(net1);
-
-        auto net2 = std::make_shared<SettingItem>();
-        net2->id = "net_guest";
-        net2->title = "Guest_Lounge";
-        net2->subtitle = "Open Network (Captive Portal)";
-        net2->icon_name = "network-wireless-signal-ok";
-        net2->type = SettingType::Info;
-        wifi_networks->children.push_back(net2);
-
-        auto net3 = std::make_shared<SettingItem>();
-        net3->id = "net_iot";
-        net3->title = "Home_IoT_2.4G";
-        net3->subtitle = "Secured (WPA2)";
-        net3->icon_name = "network-wireless-signal-weak";
-        net3->type = SettingType::Info;
-        wifi_networks->children.push_back(net3);
-
-        wifi->children.push_back(wifi_networks);
+        auto wifi_info = WifiBackend::get_adapter_info();
+        if (!wifi_info.available) {
+            wifi->subtitle = "No Wi-Fi adapter detected";
+            wifi->icon_name = "network-wireless-disconnected";
+        } else if (!wifi_info.radio_enabled) {
+            wifi->subtitle = "Wi-Fi Disabled (Airplane Mode)";
+            wifi->icon_name = "network-wireless-disabled";
+        } else if (wifi_info.is_connected) {
+            wifi->subtitle = "Connected to " + wifi_info.connected_ssid;
+            wifi->icon_name = WifiBackend::resolve_signal_icon(wifi_info.signal_percent);
+        } else {
+            wifi->subtitle = "Disconnected · Networks available";
+            wifi->icon_name = "network-wireless-disconnected";
+        }
+        wifi->type = SettingType::Info;
         net->children.push_back(wifi);
 
         // Ethernet

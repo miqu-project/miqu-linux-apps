@@ -64,29 +64,7 @@ void SettingsWindow::build_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_path_strip->set_padding(16, 4, 16, 4);
-    m_path_strip->set_divider_spacing(8);
-
-    auto path_icon = std::make_shared<ImageView>("preferences-system");
-    path_icon->set_target_size(14);
-    path_icon->set_dim(0.35f);
-    LayoutParams icon_lp;
-    icon_lp.width = 14;
-    icon_lp.height = 14;
-    icon_lp.gravity = Gravity::CenterVertical;
-    m_path_strip->add_view(path_icon, icon_lp);
-
-    m_path_text = TextViewBuilder::create()
-        ->text("Settings")
-        ->textSize(11)
-        ->textColor(config->colors.on_surface_variant)
-        ->wrap(false)
-        ->build();
-    LayoutParams text_lp;
-    text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.gravity = Gravity::CenterVertical;
-    m_path_text->set_layout_params(text_lp);
-    m_path_strip->add_view(m_path_text);
+    m_path_strip->set_divider_spacing(6);
 
     // 3. Search Container (collapsible)
     m_search_container = std::make_shared<LinearLayout>(Orientation::Horizontal);
@@ -141,15 +119,8 @@ void SettingsWindow::build_ui() {
         static_cast<int>(LayoutDimension::MatchParent)
     ));
     m_parent_list->set_on_item_click_listener([this](size_t idx, std::shared_ptr<View>) {
-        auto now = std::chrono::steady_clock::now();
-        auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_parent_click_time).count();
-        if (m_last_parent_clicked_index == static_cast<int>(idx) && diff < 400) {
-            if (idx < m_parent_items.size()) {
-                navigate_to(m_parent_items[idx]);
-            }
-        } else {
-            m_last_parent_click_time = now;
-            m_last_parent_clicked_index = static_cast<int>(idx);
+        if (idx < m_parent_items.size()) {
+            navigate_to(m_parent_items[idx]);
         }
     });
     m_col_parent_card->add_view(m_parent_list);
@@ -322,6 +293,8 @@ void SettingsWindow::build_ui() {
                         m_filter_query.clear();
                         if (m_search_view) m_search_view->set_query("");
                         apply_filter();
+                    } else if (m_current_node != m_root_node) {
+                        navigate_up();
                     } else {
                         if (m_window) m_window->request_close();
                     }
@@ -408,9 +381,7 @@ void SettingsWindow::sync_theme() {
     if (m_current_list) {
         m_current_list->set_item_corner_radius(std::max(4, config->metrics.corner_radius - 4));
     }
-    if (m_path_text) {
-        m_path_text->set_text_color(config->colors.on_surface_variant);
-    }
+    update_breadcrumb();
 
     populate_parent_column();
     populate_current_column();
@@ -449,7 +420,7 @@ void SettingsWindow::navigate_to_id(const std::string& target_id) {
         navigate_to(item, false);
     }
 
-    if (target_id == "bluetooth" || target_id == "ethernet") {
+    if (target_id == "bluetooth" || target_id == "ethernet" || target_id == "wifi") {
         enter_fullscreen_detail();
     }
 }
@@ -467,20 +438,9 @@ void SettingsWindow::navigate_to(const std::shared_ptr<SettingItem>& node, bool 
     }
 
     m_current_node = node;
-
-    // Update path breadcrumb
-    std::string breadcrumb = m_current_node->title;
-    auto p = m_current_node->parent.lock();
-    while (p) {
-        breadcrumb = p->title + "  ›  " + breadcrumb;
-        p = p->parent.lock();
-    }
-    if (m_path_text) {
-        m_path_text->set_text(breadcrumb);
-    }
-
     m_toolbar->set_back_visible(m_current_node != m_root_node);
 
+    update_breadcrumb();
     populate_parent_column();
     apply_filter();
 }
@@ -492,7 +452,14 @@ void SettingsWindow::navigate_up() {
     }
     auto p = m_current_node->parent.lock();
     if (p) {
+        auto leaving_node = m_current_node;
         navigate_to(p, true);
+        for (size_t i = 0; i < m_filtered_items.size(); ++i) {
+            if (m_filtered_items[i]->id == leaving_node->id) {
+                set_selected_index(static_cast<int>(i));
+                break;
+            }
+        }
     }
 }
 
@@ -501,7 +468,14 @@ void SettingsWindow::navigate_back() {
         auto prev = m_history_back.back();
         m_history_back.pop_back();
         m_history_forward.push_back(m_current_node);
+        auto leaving_node = m_current_node;
         navigate_to(prev, false);
+        for (size_t i = 0; i < m_filtered_items.size(); ++i) {
+            if (m_filtered_items[i]->id == leaving_node->id) {
+                set_selected_index(static_cast<int>(i));
+                break;
+            }
+        }
     }
 }
 
@@ -530,7 +504,7 @@ void SettingsWindow::open_selected() {
     auto item = get_selected_item();
     if (!item) return;
 
-    if (item->id == "bluetooth" || item->id == "ethernet") {
+    if (item->id == "bluetooth" || item->id == "ethernet" || item->id == "wifi") {
         enter_fullscreen_detail();
         return;
     }
@@ -559,6 +533,8 @@ void SettingsWindow::enter_fullscreen_detail() {
     m_toolbar->set_back_visible(true);
     m_detail_view->update_item(item, true);
 
+    update_breadcrumb();
+
     if (m_window) {
         m_window->schedule_redraw();
     }
@@ -578,6 +554,8 @@ void SettingsWindow::exit_fullscreen_detail() {
 
     m_toolbar->set_back_visible(m_current_node != m_root_node);
     m_detail_view->update_item(get_selected_item(), false);
+
+    update_breadcrumb();
 
     if (m_window) {
         m_window->schedule_redraw();
@@ -724,6 +702,61 @@ std::shared_ptr<SettingItem> SettingsWindow::get_selected_item() const {
 void SettingsWindow::update_preview_and_status() {
     auto item = get_selected_item();
     m_detail_view->update_item(item, m_fullscreen_detail);
+}
+
+void SettingsWindow::update_breadcrumb() {
+    if (!m_path_strip) return;
+    m_path_strip->clear_views();
+
+    auto config = Config::get();
+    auto path_icon = std::make_shared<ImageView>("preferences-system");
+    path_icon->set_target_size(14);
+    path_icon->set_dim(0.35f);
+    LayoutParams icon_lp;
+    icon_lp.width = 14;
+    icon_lp.height = 14;
+    icon_lp.gravity = Gravity::CenterVertical;
+    m_path_strip->add_view(path_icon, icon_lp);
+
+    std::vector<std::shared_ptr<SettingItem>> chain;
+    auto curr = m_current_node;
+    while (curr) {
+        chain.push_back(curr);
+        curr = curr->parent.lock();
+    }
+    std::reverse(chain.begin(), chain.end());
+
+    std::shared_ptr<SettingItem> leaf_item = m_fullscreen_detail ? get_selected_item() : nullptr;
+
+    for (size_t i = 0; i < chain.size(); ++i) {
+        auto node = chain[i];
+        bool is_last = (i == chain.size() - 1 && !leaf_item);
+
+        if (i > 0) {
+            auto sep = TextViewBuilder::create()->text("›")->textSize(11)->textColor(config->colors.outline)->build();
+            m_path_strip->add_view(sep);
+        }
+
+        if (is_last) {
+            auto seg = TextViewBuilder::create()->text(node->title)->textSize(11)->bold(true)->textColor(config->colors.on_surface)->build();
+            m_path_strip->add_view(seg);
+        } else {
+            auto btn = ButtonBuilder::create()->text(node->title)->textSize(11)->textColor(config->colors.primary)
+                ->backgroundColor(Color(0, 0, 0, 0))->padding(2, 2)->cornerRadius(4)
+                ->onClick([this, node]() {
+                    if (m_fullscreen_detail) exit_fullscreen_detail();
+                    if (node != m_current_node) navigate_to(node, true);
+                })->build();
+            m_path_strip->add_view(btn);
+        }
+    }
+
+    if (leaf_item) {
+        auto sep = TextViewBuilder::create()->text("›")->textSize(11)->textColor(config->colors.outline)->build();
+        m_path_strip->add_view(sep);
+        auto leaf_seg = TextViewBuilder::create()->text(leaf_item->title)->textSize(11)->bold(true)->textColor(config->colors.on_surface)->build();
+        m_path_strip->add_view(leaf_seg);
+    }
 }
 
 } // namespace miqu
