@@ -530,7 +530,10 @@ void SettingsWindow::open_selected() {
 
     if (item->id == "bluetooth" || item->id == "ethernet" || item->id == "wifi" ||
         item->id == "airplane_mode" || item->id == "airplane" ||
-        item->id.rfind("app_", 0) == 0 || item->id.rfind("defrole_", 0) == 0) {
+        item->id.rfind("app_", 0) == 0 || item->id.rfind("defrole_", 0) == 0 ||
+        item->id.rfind("mon_", 0) == 0 ||
+        item->id == "disp_bright" || item->id == "disp_gamma" || item->id == "disp_night" ||
+        item->id == "disp_lock" || item->id == "disp_timeout") {
         enter_fullscreen_detail();
         return;
     }

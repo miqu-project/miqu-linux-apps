@@ -161,62 +161,77 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         root->children.push_back(net);
     }
 
-    // 2. Displays & Monitor
+    // 2. Monitors
+    {
+        auto mon = std::make_shared<SettingItem>();
+        mon->id = "monitors";
+        mon->title = "Monitors";
+        mon->subtitle = "Connected displays and arrangement";
+        mon->icon_name = "video-display";
+        mon->type = SettingType::Category;
+
+        auto mon_edp1 = std::make_shared<SettingItem>();
+        mon_edp1->id = "mon_edp1";
+        mon_edp1->title = "eDP-1";
+        mon_edp1->subtitle = "1920x1080 @ 60Hz · Built-in Display (Primary)";
+        mon_edp1->icon_name = "video-display";
+        mon_edp1->type = SettingType::Info;
+        mon->children.push_back(mon_edp1);
+
+        auto mon_hdmi = std::make_shared<SettingItem>();
+        mon_hdmi->id = "mon_hdmi";
+        mon_hdmi->title = "HDMI-A-1";
+        mon_hdmi->subtitle = "2560x1440 @ 144Hz · External Monitor";
+        mon_hdmi->icon_name = "video-display";
+        mon_hdmi->type = SettingType::Info;
+        mon->children.push_back(mon_hdmi);
+
+        root->children.push_back(mon);
+    }
+
+    // 3. Display
     {
         auto disp = std::make_shared<SettingItem>();
         disp->id = "display";
-        disp->title = "Displays & Monitor";
-        disp->subtitle = "Resolution, Refresh Rate, Scaling, Brightness";
-        disp->icon_name = "video-display";
+        disp->title = "Display";
+        disp->subtitle = "Brightness, Gamma, Screen Lock, Time Out";
+        disp->icon_name = "display-brightness";
         disp->type = SettingType::Category;
-
-        auto disp_res = std::make_shared<SettingItem>();
-        disp_res->id = "disp_res";
-        disp_res->title = "Display Resolution";
-        disp_res->subtitle = "Screen pixel dimensions";
-        disp_res->icon_name = "video-display";
-        disp_res->type = SettingType::Selection;
-        disp_res->options = {"1920x1080 (16:9)", "2560x1440 (16:9)", "3840x2160 (4K UHD)", "1680x1050 (16:10)"};
-        disp_res->selected_option_idx = 0;
-        disp->children.push_back(disp_res);
-
-        auto disp_hz = std::make_shared<SettingItem>();
-        disp_hz->id = "disp_hz";
-        disp_hz->title = "Refresh Rate";
-        disp_hz->subtitle = "Vertical refresh frequency";
-        disp_hz->icon_name = "preferences-system-windows";
-        disp_hz->type = SettingType::Selection;
-        disp_hz->options = {"60 Hz", "75 Hz", "120 Hz", "144 Hz (VRR Adaptive)", "165 Hz"};
-        disp_hz->selected_option_idx = 3;
-        disp->children.push_back(disp_hz);
-
-        auto disp_scale = std::make_shared<SettingItem>();
-        disp_scale->id = "disp_scale";
-        disp_scale->title = "Display Scaling";
-        disp_scale->subtitle = "UI element scale factor";
-        disp_scale->icon_name = "zoom-original";
-        disp_scale->type = SettingType::Selection;
-        disp_scale->options = {"100% (Native 1x)", "125% (1.25x)", "150% (1.5x)", "200% (2x HiDPI)"};
-        disp_scale->selected_option_idx = 0;
-        disp->children.push_back(disp_scale);
 
         auto disp_bright = std::make_shared<SettingItem>();
         disp_bright->id = "disp_bright";
-        disp_bright->title = "Display Brightness";
-        disp_bright->subtitle = "Backlight intensity level";
+        disp_bright->title = "Brightness";
+        disp_bright->subtitle = "Backlight level: 50% · intel_backlight";
         disp_bright->icon_name = "display-brightness";
-        disp_bright->type = SettingType::SliderControl;
-        disp_bright->float_val = 0.85f;
+        disp_bright->type = SettingType::Info;
         disp->children.push_back(disp_bright);
 
-        auto disp_night = std::make_shared<SettingItem>();
-        disp_night->id = "disp_night";
-        disp_night->title = "Night Light (Blue Filter)";
-        disp_night->subtitle = "Warm color temperature for reduced eye strain";
-        disp_night->icon_name = "weather-clear-night";
-        disp_night->type = SettingType::Toggle;
-        disp_night->bool_val = true;
-        disp->children.push_back(disp_night);
+        auto disp_gamma = std::make_shared<SettingItem>();
+        disp_gamma->id = "disp_gamma";
+        disp_gamma->title = "Gamma";
+        disp_gamma->subtitle = "Color warmth, blue light filter and sunset schedule";
+        disp_gamma->icon_name = "weather-clear-night";
+        disp_gamma->type = SettingType::Info;
+        disp->children.push_back(disp_gamma);
+
+        auto disp_lock = std::make_shared<SettingItem>();
+        disp_lock->id = "disp_lock";
+        disp_lock->title = "Screen Lock";
+        disp_lock->subtitle = "Lock session on idle and display sleep";
+        disp_lock->icon_name = "system-lock-screen";
+        disp_lock->type = SettingType::Toggle;
+        disp_lock->bool_val = true;
+        disp->children.push_back(disp_lock);
+
+        auto disp_timeout = std::make_shared<SettingItem>();
+        disp_timeout->id = "disp_timeout";
+        disp_timeout->title = "Time Out";
+        disp_timeout->subtitle = "Turn display off after idle period";
+        disp_timeout->icon_name = "preferences-desktop-screensaver";
+        disp_timeout->type = SettingType::Selection;
+        disp_timeout->options = {"5 Minutes", "10 Minutes (Recommended)", "15 Minutes", "Never"};
+        disp_timeout->selected_option_idx = 1;
+        disp->children.push_back(disp_timeout);
 
         root->children.push_back(disp);
     }

@@ -29,6 +29,12 @@ add_executable(miqusettings
     src/modules/applications/apps_backend.cpp
     src/modules/applications/app_detail_view.cpp
     src/modules/applications/default_app_detail_view.cpp
+    src/modules/monitors/monitor_detail_view.cpp
+    src/modules/display/display_backend.cpp
+    src/modules/display/brightness_detail_view.cpp
+    src/modules/display/night_light_detail_view.cpp
+    src/modules/display/screen_lock_detail_view.cpp
+    src/modules/display/timeout_detail_view.cpp
     src/ui/setting_detail_view.cpp
     src/ui/settings_window.cpp
 )

@@ -5,6 +5,11 @@
 #include "modules/airplane/airplane_detail_view.hpp"
 #include "modules/applications/app_detail_view.hpp"
 #include "modules/applications/default_app_detail_view.hpp"
+#include "modules/monitors/monitor_detail_view.hpp"
+#include "modules/display/brightness_detail_view.hpp"
+#include "modules/display/night_light_detail_view.hpp"
+#include "modules/display/screen_lock_detail_view.hpp"
+#include "modules/display/timeout_detail_view.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/linear_layout.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
@@ -64,6 +69,31 @@ void SettingDetailView::update_item(const std::shared_ptr<SettingItem>& item, bo
 
     if (item->id.rfind("defrole_", 0) == 0) {
         show_default_role_detail(item, is_fullscreen);
+        return;
+    }
+
+    if (item->id.rfind("mon_", 0) == 0) {
+        show_monitors_detail(item, is_fullscreen);
+        return;
+    }
+
+    if (item->id == "disp_bright") {
+        show_brightness_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "disp_gamma" || item->id == "disp_night") {
+        show_gamma_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "disp_lock") {
+        show_screen_lock_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "disp_timeout") {
+        show_timeout_detail(is_fullscreen);
         return;
     }
 
@@ -509,6 +539,61 @@ void SettingDetailView::show_default_role_detail(const std::shared_ptr<SettingIt
     });
     m_current_content = def_view;
     add_view(def_view);
+}
+
+void SettingDetailView::show_monitors_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen) {
+    auto mon_view = std::make_shared<MonitorDetailView>();
+    if (item && item->id.rfind("mon_", 0) == 0) {
+        mon_view->set_monitor_info(item->title, item->subtitle);
+    } else {
+        mon_view->set_monitor_info("eDP-1", "1920x1080 @ 60Hz · Built-in Display (Primary)");
+    }
+    mon_view->set_is_fullscreen(is_fullscreen);
+    mon_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    m_current_content = mon_view;
+    add_view(mon_view);
+}
+
+void SettingDetailView::show_brightness_detail(bool is_fullscreen) {
+    auto b_view = std::make_shared<BrightnessDetailView>();
+    b_view->set_is_fullscreen(is_fullscreen);
+    b_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    m_current_content = b_view;
+    add_view(b_view);
+}
+
+void SettingDetailView::show_gamma_detail(bool is_fullscreen) {
+    auto g_view = std::make_shared<NightLightDetailView>();
+    g_view->set_is_fullscreen(is_fullscreen);
+    g_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    m_current_content = g_view;
+    add_view(g_view);
+}
+
+void SettingDetailView::show_screen_lock_detail(bool is_fullscreen) {
+    auto l_view = std::make_shared<ScreenLockDetailView>();
+    l_view->set_is_fullscreen(is_fullscreen);
+    l_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    m_current_content = l_view;
+    add_view(l_view);
+}
+
+void SettingDetailView::show_timeout_detail(bool is_fullscreen) {
+    auto t_view = std::make_shared<TimeoutDetailView>();
+    t_view->set_is_fullscreen(is_fullscreen);
+    t_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    m_current_content = t_view;
+    add_view(t_view);
 }
 
 } // namespace miqu

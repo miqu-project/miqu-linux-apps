@@ -28,6 +28,9 @@ void AppDetailView::set_is_fullscreen(bool fullscreen) {
 void AppDetailView::load_data() {
     if (m_desktop_id.empty()) return;
 
+    // Reset any previously loaded app data before searching
+    m_app = AppDetailInfo{};
+
     // Fast path: look up from the in-memory cached app list
     auto apps = AppsBackend::get_installed_apps();
     for (const auto& app : apps) {
@@ -70,7 +73,7 @@ void AppDetailView::setup_ui() {
     m_content_layout->add_view(create_actions_card());
     m_content_layout->add_view(create_info_card());
 
-    m_scroll->add_view(m_content_layout);
+    m_scroll->set_content_view(m_content_layout);
     add_view(m_scroll);
 }
 

@@ -47,6 +47,11 @@ private:
     void show_ethernet_detail(bool is_fullscreen);
     void show_wifi_detail(bool is_fullscreen);
     void show_airplane_detail(bool is_fullscreen);
+    void show_monitors_detail(const std::shared_ptr<SettingItem>& item, bool is_fullscreen);
+    void show_brightness_detail(bool is_fullscreen);
+    void show_gamma_detail(bool is_fullscreen);
+    void show_screen_lock_detail(bool is_fullscreen);
+    void show_timeout_detail(bool is_fullscreen);
 
     std::shared_ptr<SettingItem> m_current_item;
     std::shared_ptr<View> m_current_content;

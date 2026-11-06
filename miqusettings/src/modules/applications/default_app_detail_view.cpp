@@ -67,7 +67,7 @@ void DefaultAppDetailView::setup_ui() {
     m_content_layout->add_view(create_current_default_card());
     m_content_layout->add_view(create_candidates_card());
 
-    m_scroll->add_view(m_content_layout);
+    m_scroll->set_content_view(m_content_layout);
     add_view(m_scroll);
 }
 
