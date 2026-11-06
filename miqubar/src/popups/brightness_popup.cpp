@@ -1,15 +1,13 @@
 #include "brightness_popup.hpp"
 #include "../config/bar_config.hpp"
+#include "../backend/backlight_backend.hpp"
 #include "miqutoolkit/core/config.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <cmath>
 #include <iostream>
-#include <fstream>
-#include <filesystem>
 
-namespace fs = std::filesystem;
 using namespace miqu;
 
 namespace miqubar {
@@ -21,52 +19,14 @@ BrightnessControlPopupView::BrightnessControlPopupView(std::function<void()> on_
 }
 
 void BrightnessControlPopupView::update_brightness_info() {
-    // 1. Try reading directly from sysfs backlight
-    const fs::path sysfs_backlight("/sys/class/backlight");
-    if (fs::exists(sysfs_backlight) && fs::is_directory(sysfs_backlight)) {
-        for (const auto& entry : fs::directory_iterator(sysfs_backlight)) {
-            if (entry.is_directory() || entry.is_symlink()) {
-                fs::path cur_p = entry.path() / "brightness";
-                fs::path max_p = entry.path() / "max_brightness";
-                if (fs::exists(cur_p) && fs::exists(max_p)) {
-                    std::ifstream cur_f(cur_p);
-                    std::ifstream max_f(max_p);
-                    long cur_val = 0, max_val = 0;
-                    if (cur_f >> cur_val && max_f >> max_val && max_val > 0) {
-                        m_backlight_path = entry.path().string();
-                        m_brightness = std::clamp(static_cast<int>(std::round((cur_val * 100.0) / max_val)), 0, 100);
-                        return;
-                    }
-                }
-            }
-        }
-    }
-
-    // 2. Fallback to brightnessctl -m
-    FILE* fp = popen("brightnessctl -m 2>/dev/null", "r");
-    if (fp) {
-        char buf[256];
-        if (fgets(buf, sizeof(buf), fp)) {
-            std::string line(buf);
-            // format: device,class,curr,pct%,max
-            size_t p = line.find('%');
-            if (p != std::string::npos) {
-                size_t start = line.rfind(',', p);
-                if (start != std::string::npos) {
-                    try {
-                        m_brightness = std::clamp(std::stoi(line.substr(start + 1, p - start - 1)), 0, 100);
-                    } catch (...) {}
-                }
-            }
-        }
-        pclose(fp);
-    }
+    auto info = BacklightBackend::get_info();
+    m_brightness = info.percent;
+    m_backlight_path = info.device_path;
 }
 
 void BrightnessControlPopupView::set_brightness(int pct) {
     m_brightness = std::clamp(pct, 5, 100);
-    std::string cmd = "brightnessctl set " + std::to_string(m_brightness) + "% -q 2>/dev/null";
-    std::system(cmd.c_str());
+    BacklightBackend::set_brightness(m_brightness);
 
     if (m_label) {
         m_label->set_text("Brightness: " + std::to_string(m_brightness) + "%");

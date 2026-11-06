@@ -28,6 +28,7 @@ add_executable(miqubar
     src/popups/calendar_popup.cpp
     src/popups/power_popup.cpp
     src/backend/audio_backend.cpp
+    src/backend/backlight_backend.cpp
 )
 
 target_include_directories(miqubar PRIVATE
