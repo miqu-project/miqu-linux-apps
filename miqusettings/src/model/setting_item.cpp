@@ -115,32 +115,7 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto eth_dev = EthernetBackend::get_device();
         eth->subtitle = eth_dev.name + " · " + eth_dev.state_str;
         eth->icon_name = eth_dev.is_connected ? "network-wired" : "network-wired-disconnected";
-        eth->type = SettingType::Category;
-
-        auto eth_ip = std::make_shared<SettingItem>();
-        eth_ip->id = "eth_ip";
-        eth_ip->title = "IPv4 Address";
-        eth_ip->subtitle = "192.168.1.108 / 24";
-        eth_ip->icon_name = "network-wired";
-        eth_ip->type = SettingType::Info;
-        eth->children.push_back(eth_ip);
-
-        auto eth_gw = std::make_shared<SettingItem>();
-        eth_gw->id = "eth_gw";
-        eth_gw->title = "Default Gateway";
-        eth_gw->subtitle = "192.168.1.1";
-        eth_gw->icon_name = "network-wired";
-        eth_gw->type = SettingType::Info;
-        eth->children.push_back(eth_gw);
-
-        auto eth_dns = std::make_shared<SettingItem>();
-        eth_dns->id = "eth_dns";
-        eth_dns->title = "DNS Servers";
-        eth_dns->subtitle = "1.1.1.1, 8.8.8.8";
-        eth_dns->icon_name = "network-wired";
-        eth_dns->type = SettingType::Info;
-        eth->children.push_back(eth_dns);
-
+        eth->type = SettingType::Info;
         net->children.push_back(eth);
 
         // Bluetooth
@@ -149,33 +124,7 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         bt->title = "Bluetooth";
         bt->subtitle = "Audio, Mouse, Keyboard, Stylus & File Transfer";
         bt->icon_name = "bluetooth";
-        bt->type = SettingType::Category;
-
-        auto bt_toggle = std::make_shared<SettingItem>();
-        bt_toggle->id = "bt_enable";
-        bt_toggle->title = "Bluetooth Switch";
-        bt_toggle->subtitle = "Discoverable as 'miqu-desktop'";
-        bt_toggle->icon_name = "bluetooth";
-        bt_toggle->type = SettingType::Toggle;
-        bt_toggle->bool_val = true;
-        bt->children.push_back(bt_toggle);
-
-        auto bt_dev1 = std::make_shared<SettingItem>();
-        bt_dev1->id = "bt_dev1";
-        bt_dev1->title = "Sony WH-1000XM4";
-        bt_dev1->subtitle = "Connected (Audio Headset, 80% Battery)";
-        bt_dev1->icon_name = "audio-headphones";
-        bt_dev1->type = SettingType::Info;
-        bt->children.push_back(bt_dev1);
-
-        auto bt_dev2 = std::make_shared<SettingItem>();
-        bt_dev2->id = "bt_dev2";
-        bt_dev2->title = "Logitech MX Master 3S";
-        bt_dev2->subtitle = "Connected (Mouse, 90% Battery)";
-        bt_dev2->icon_name = "input-mouse";
-        bt_dev2->type = SettingType::Info;
-        bt->children.push_back(bt_dev2);
-
+        bt->type = SettingType::Info;
         net->children.push_back(bt);
 
         root->children.push_back(net);

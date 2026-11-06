@@ -449,7 +449,7 @@ void SettingsWindow::navigate_to_id(const std::string& target_id) {
         navigate_to(item, false);
     }
 
-    if (target_id == "bluetooth") {
+    if (target_id == "bluetooth" || target_id == "ethernet") {
         enter_fullscreen_detail();
     }
 }
@@ -530,7 +530,7 @@ void SettingsWindow::open_selected() {
     auto item = get_selected_item();
     if (!item) return;
 
-    if (item->id == "bluetooth") {
+    if (item->id == "bluetooth" || item->id == "ethernet") {
         enter_fullscreen_detail();
         return;
     }
