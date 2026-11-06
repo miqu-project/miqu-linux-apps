@@ -1,6 +1,7 @@
 #include "model/setting_item.hpp"
 #include "modules/ethernet/ethernet_backend.hpp"
 #include "modules/wifi/wifi_backend.hpp"
+#include "modules/airplane/airplane_backend.hpp"
 #include <sstream>
 #include <iomanip>
 
@@ -46,9 +47,22 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto net = std::make_shared<SettingItem>();
         net->id = "network";
         net->title = "Wireless & Network";
-        net->subtitle = "Wi-Fi, Ethernet, Bluetooth, VPN";
+        net->subtitle = "Airplane Mode, Wi-Fi, Ethernet, Bluetooth";
         net->icon_name = "network-wireless";
         net->type = SettingType::Category;
+
+        // Airplane Mode
+        auto airplane = std::make_shared<SettingItem>();
+        airplane->id = "airplane_mode";
+        airplane->title = "Airplane Mode";
+        bool is_airplane = AirplaneBackend::is_enabled();
+        airplane->subtitle = is_airplane
+            ? "Active · All wireless radios turned off"
+            : "Turn off Wi-Fi, Bluetooth and cellular signals";
+        airplane->icon_name = "airplane-mode";
+        airplane->type = SettingType::Toggle;
+        airplane->bool_val = is_airplane;
+        net->children.push_back(airplane);
 
         // Wi-Fi
         auto wifi = std::make_shared<SettingItem>();

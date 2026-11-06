@@ -1,5 +1,6 @@
 #include "ui/settings_window.hpp"
 #include "config/settings_config.hpp"
+#include "modules/airplane/airplane_backend.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
 #include <xkbcommon/xkbcommon-keysyms.h>
@@ -240,7 +241,25 @@ void SettingsWindow::build_ui() {
     m_detail_view->set_on_request_fullscreen([this]() {
         enter_fullscreen_detail();
     });
-    m_detail_view->set_on_setting_changed([this](const std::shared_ptr<SettingItem>&) {
+    m_detail_view->set_on_setting_changed([this](const std::shared_ptr<SettingItem>& changed) {
+        if (changed && changed->id == "airplane_mode") {
+            AirplaneBackend::set_enabled(changed->bool_val);
+            changed->subtitle = changed->bool_val
+                ? "Active · All wireless radios turned off"
+                : "Turn off Wi-Fi, Bluetooth and cellular signals";
+            if (m_current_node) {
+                for (auto& item : m_current_node->children) {
+                    if (item->id == "wifi") {
+                        item->subtitle = changed->bool_val
+                            ? "Wi-Fi Disabled (Airplane Mode)"
+                            : "Disconnected · Networks available";
+                        item->icon_name = changed->bool_val
+                            ? "network-wireless-disabled"
+                            : "network-wireless-disconnected";
+                    }
+                }
+            }
+        }
         populate_current_column();
     });
 
@@ -420,7 +439,8 @@ void SettingsWindow::navigate_to_id(const std::string& target_id) {
         navigate_to(item, false);
     }
 
-    if (target_id == "bluetooth" || target_id == "ethernet" || target_id == "wifi") {
+    if (target_id == "bluetooth" || target_id == "ethernet" || target_id == "wifi" ||
+        target_id == "airplane_mode" || target_id == "airplane") {
         enter_fullscreen_detail();
     }
 }
@@ -504,7 +524,8 @@ void SettingsWindow::open_selected() {
     auto item = get_selected_item();
     if (!item) return;
 
-    if (item->id == "bluetooth" || item->id == "ethernet" || item->id == "wifi") {
+    if (item->id == "bluetooth" || item->id == "ethernet" || item->id == "wifi" ||
+        item->id == "airplane_mode" || item->id == "airplane") {
         enter_fullscreen_detail();
         return;
     }

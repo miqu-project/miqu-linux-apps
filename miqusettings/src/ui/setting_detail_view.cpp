@@ -2,6 +2,7 @@
 #include "modules/bluetooth/bluetooth_detail_view.hpp"
 #include "modules/ethernet/ethernet_detail_view.hpp"
 #include "modules/wifi/wifi_detail_view.hpp"
+#include "modules/airplane/airplane_detail_view.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/linear_layout.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
@@ -31,6 +32,11 @@ void SettingDetailView::update_item(const std::shared_ptr<SettingItem>& item, bo
 
     if (!item) {
         show_empty_state();
+        return;
+    }
+
+    if (item->id == "airplane_mode") {
+        show_airplane_detail(is_fullscreen);
         return;
     }
 
@@ -504,6 +510,16 @@ void SettingDetailView::show_wifi_detail(bool is_fullscreen) {
     });
     m_current_content = wifi_view;
     add_view(wifi_view);
+}
+
+void SettingDetailView::show_airplane_detail(bool is_fullscreen) {
+    auto airplane_view = std::make_shared<AirplaneDetailView>();
+    airplane_view->set_is_fullscreen(is_fullscreen);
+    airplane_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    m_current_content = airplane_view;
+    add_view(airplane_view);
 }
 
 } // namespace miqu
