@@ -1,4 +1,5 @@
 #include "model/setting_item.hpp"
+#include "modules/ethernet/ethernet_backend.hpp"
 #include <sstream>
 #include <iomanip>
 
@@ -111,8 +112,9 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto eth = std::make_shared<SettingItem>();
         eth->id = "ethernet";
         eth->title = "Wired (Ethernet)";
-        eth->subtitle = "Connected, 1000 Mb/s Full Duplex";
-        eth->icon_name = "network-wired";
+        auto eth_dev = EthernetBackend::get_device();
+        eth->subtitle = eth_dev.name + " · " + eth_dev.state_str;
+        eth->icon_name = eth_dev.is_connected ? "network-wired" : "network-wired-disconnected";
         eth->type = SettingType::Category;
 
         auto eth_ip = std::make_shared<SettingItem>();

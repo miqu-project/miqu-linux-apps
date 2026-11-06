@@ -20,6 +20,8 @@ add_executable(miqusettings
     src/modules/bluetooth/bluetooth_backend.cpp
     src/modules/bluetooth/bluetooth_agent.cpp
     src/modules/bluetooth/bluetooth_detail_view.cpp
+    src/modules/ethernet/ethernet_backend.cpp
+    src/modules/ethernet/ethernet_detail_view.cpp
     src/ui/setting_detail_view.cpp
     src/ui/settings_window.cpp
 )

@@ -41,12 +41,11 @@ private:
     void init_agent();
 
     std::shared_ptr<View> create_hero_card();
-    std::shared_ptr<View> create_action_row();
-    std::shared_ptr<View> create_device_section(const std::string& title, const std::vector<BluetoothDeviceItem>& devs, bool is_connected_group);
-    std::shared_ptr<View> create_device_row(const BluetoothDeviceItem& dev, bool is_connected_group);
+    std::shared_ptr<View> create_paired_section();
+    std::shared_ptr<View> create_device_row(BluetoothDeviceItem& dev);
     std::shared_ptr<View> create_available_section();
-    std::shared_ptr<View> create_available_row(const BluetoothDeviceItem& dev);
-    std::shared_ptr<View> create_file_transfer_card();
+    std::shared_ptr<View> create_available_row(BluetoothDeviceItem& dev);
+    std::shared_ptr<View> create_file_transfer_section();
     std::shared_ptr<View> create_disabled_state();
 
     void toggle_power(bool power);

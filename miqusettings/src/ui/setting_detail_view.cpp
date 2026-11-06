@@ -1,5 +1,6 @@
 #include "ui/setting_detail_view.hpp"
 #include "modules/bluetooth/bluetooth_detail_view.hpp"
+#include "modules/ethernet/ethernet_detail_view.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/linear_layout.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
@@ -34,6 +35,11 @@ void SettingDetailView::update_item(const std::shared_ptr<SettingItem>& item, bo
 
     if (item->id == "bluetooth" || item->id.rfind("bt_", 0) == 0) {
         show_bluetooth_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "ethernet" || item->id.rfind("eth_", 0) == 0) {
+        show_ethernet_detail(is_fullscreen);
         return;
     }
 
@@ -191,9 +197,8 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
 
     // 1. Header Card (Hero)
     auto hero_card = std::make_shared<CardView>();
-    hero_card->set_card_background_color(config->colors.surface_variant);
-    hero_card->set_radius(12);
-    hero_card->set_stroke(0, Color());
+    hero_card->set_card_background_color(config->colors.surface);
+    hero_card->set_radius(config->metrics.corner_radius);
     hero_card->set_padding(20);
     LayoutParams hero_lp;
     hero_lp.width = static_cast<int>(LayoutDimension::MatchParent);
@@ -245,7 +250,7 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
             ->text("⛶")
             ->textSize(14)
             ->textColor(config->colors.primary)
-            ->flat(true)
+            ->backgroundColor(config->colors.surface_variant)
             ->cornerRadius(6)
             ->onClick([this]() {
                 if (m_on_request_fullscreen) m_on_request_fullscreen();
@@ -264,9 +269,8 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
 
     // 2. Control Card based on SettingType
     auto control_card = std::make_shared<CardView>();
-    control_card->set_card_background_color(config->colors.surface_variant);
-    control_card->set_radius(12);
-    control_card->set_stroke(0, Color());
+    control_card->set_card_background_color(config->colors.surface);
+    control_card->set_radius(config->metrics.corner_radius);
     control_card->set_padding(20);
     LayoutParams ctrl_lp;
     ctrl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
@@ -309,7 +313,7 @@ void SettingDetailView::show_leaf_detail(const std::shared_ptr<SettingItem>& ite
             ->onCheckedChanged([this, item, status_lbl, config](bool checked) {
                 item->bool_val = checked;
                 status_lbl->set_text(checked ? "Status: Active" : "Status: Inactive");
-                status_lbl->set_text_color(checked ? config->colors.primary : config->colors.outline);
+                status_lbl->set_text_color(checked ? config->colors.primary : config->colors.on_surface_variant);
                 status_lbl->request_redraw();
                 if (m_on_setting_changed) {
                     m_on_setting_changed(item);
@@ -474,6 +478,16 @@ void SettingDetailView::show_bluetooth_detail(bool is_fullscreen) {
     });
     m_current_content = bt_view;
     add_view(bt_view);
+}
+
+void SettingDetailView::show_ethernet_detail(bool is_fullscreen) {
+    auto eth_view = std::make_shared<EthernetDetailView>();
+    eth_view->set_is_fullscreen(is_fullscreen);
+    eth_view->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
+    m_current_content = eth_view;
+    add_view(eth_view);
 }
 
 } // namespace miqu
