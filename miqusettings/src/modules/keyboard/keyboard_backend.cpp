@@ -2,12 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
-#include <sstream>
-#include <fstream>
-#include <filesystem>
 #include <regex>
-
-namespace fs = std::filesystem;
 
 namespace miqu {
 
@@ -106,65 +101,10 @@ InputDevicesInfo KeyboardBackend::get_devices_info() {
     return info;
 }
 
-void KeyboardBackend::update_config_file(const std::string& key, const std::string& value) {
-    const char* home = std::getenv("HOME");
-    if (!home) return;
-
-    fs::path conf_dir = fs::path(home) / ".config" / "miquland";
-    fs::path conf_file = conf_dir / "miquland.conf";
-
-    if (!fs::exists(conf_file)) {
-        fs::create_directories(conf_dir);
-        if (fs::exists("/usr/share/miquland/miquland.conf")) {
-            std::error_code ec;
-            fs::copy_file("/usr/share/miquland/miquland.conf", conf_file, ec);
-        }
-    }
-
-    if (!fs::exists(conf_file)) return;
-
-    std::ifstream in(conf_file);
-    if (!in.is_open()) return;
-
-    std::vector<std::string> lines;
-    std::string line;
-    bool replaced = false;
-
-    std::regex key_regex("^\\s*" + key + "\\s*=.*");
-
-    while (std::getline(in, line)) {
-        if (!replaced && std::regex_match(line, key_regex)) {
-            size_t first_non_space = line.find_first_not_of(" \t");
-            std::string indent = (first_non_space != std::string::npos) ? line.substr(0, first_non_space) : "";
-            lines.push_back(indent + key + " = " + value);
-            replaced = true;
-        } else {
-            lines.push_back(line);
-        }
-    }
-    in.close();
-
-    if (!replaced) {
-        lines.push_back(key + " = " + value);
-    }
-
-    std::ofstream out(conf_file, std::ios::trunc);
-    if (out.is_open()) {
-        for (const auto& l : lines) {
-            out << l << "\n";
-        }
-    }
+void KeyboardBackend::set_repeat_info([[maybe_unused]] int rate, [[maybe_unused]] int delay) {
 }
 
-void KeyboardBackend::set_repeat_info(int rate, int delay) {
-    update_config_file("repeat_rate", std::to_string(rate));
-    update_config_file("repeat_delay", std::to_string(delay));
-    run_miquctl("reload");
-}
-
-void KeyboardBackend::set_keyboard_layout(const std::string& layout) {
-    update_config_file("layout", layout);
-    run_miquctl("reload");
+void KeyboardBackend::set_keyboard_layout([[maybe_unused]] const std::string& layout) {
 }
 
 } // namespace miqu

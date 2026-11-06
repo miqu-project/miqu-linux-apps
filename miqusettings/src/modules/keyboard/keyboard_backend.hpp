@@ -35,9 +35,6 @@ public:
     static void set_repeat_info(int rate, int delay);
     static void set_keyboard_layout(const std::string& layout);
     static std::string run_miquctl(const std::string& args);
-
-private:
-    static void update_config_file(const std::string& key, const std::string& value);
 };
 
 } // namespace miqu

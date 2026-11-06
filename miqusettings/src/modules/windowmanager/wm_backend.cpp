@@ -2,13 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
-#include <sstream>
-#include <fstream>
-#include <filesystem>
 #include <algorithm>
 #include <regex>
-
-namespace fs = std::filesystem;
 
 namespace miqu {
 
@@ -86,106 +81,30 @@ WmOptions WmBackend::get_options() {
     return opts;
 }
 
-void WmBackend::update_config_file(const std::string& key, const std::string& value) {
-    const char* home = std::getenv("HOME");
-    if (!home) return;
-
-    fs::path conf_dir = fs::path(home) / ".config" / "miquland";
-    fs::path conf_file = conf_dir / "miquland.conf";
-
-    if (!fs::exists(conf_file)) {
-        fs::create_directories(conf_dir);
-        if (fs::exists("/usr/share/miquland/miquland.conf")) {
-            std::error_code ec;
-            fs::copy_file("/usr/share/miquland/miquland.conf", conf_file, ec);
-        }
-    }
-
-    if (!fs::exists(conf_file)) return;
-
-    std::ifstream in(conf_file);
-    if (!in.is_open()) return;
-
-    std::vector<std::string> lines;
-    std::string line;
-    bool replaced = false;
-
-    // Pattern: ^\s*key\s*=
-    std::regex key_regex("^\\s*" + key + "\\s*=.*");
-
-    while (std::getline(in, line)) {
-        if (!replaced && std::regex_match(line, key_regex)) {
-            // Keep leading whitespace indentation
-            size_t first_non_space = line.find_first_not_of(" \t");
-            std::string indent = (first_non_space != std::string::npos) ? line.substr(0, first_non_space) : "";
-            lines.push_back(indent + key + " = " + value);
-            replaced = true;
-        } else {
-            lines.push_back(line);
-        }
-    }
-    in.close();
-
-    if (!replaced) {
-        lines.push_back(key + " = " + value);
-    }
-
-    std::ofstream out(conf_file, std::ios::trunc);
-    if (out.is_open()) {
-        for (const auto& l : lines) {
-            out << l << "\n";
-        }
-    }
-}
-
 void WmBackend::set_layout(const std::string& layout) {
     run_miquctl("dispatch layout " + layout);
-    update_config_file("layout", layout);
 }
 
 void WmBackend::toggle_split() {
     run_miquctl("dispatch togglesplit");
 }
 
-void WmBackend::set_smart_gaps(bool enabled) {
-    std::string val = enabled ? "true" : "false";
-    update_config_file("smart_gaps", val);
-    reload_compositor();
+void WmBackend::set_smart_gaps([[maybe_unused]] bool enabled) {
 }
 
-void WmBackend::set_gaps(int inner, int outer) {
-    update_config_file("inner", std::to_string(inner));
-    update_config_file("outer", std::to_string(outer));
-    reload_compositor();
+void WmBackend::set_gaps([[maybe_unused]] int inner, [[maybe_unused]] int outer) {
 }
 
-void WmBackend::set_borders(int width, int radius) {
-    update_config_file("width", std::to_string(width));
-    update_config_file("radius", std::to_string(radius));
-    reload_compositor();
+void WmBackend::set_borders([[maybe_unused]] int width, [[maybe_unused]] int radius) {
 }
 
-void WmBackend::set_opacities(float active, float inactive) {
-    std::ostringstream ss_act, ss_inact;
-    ss_act.precision(2);
-    ss_act << std::fixed << active;
-    ss_inact.precision(2);
-    ss_inact << std::fixed << inactive;
-    update_config_file("active_opacity", ss_act.str());
-    update_config_file("inactive_opacity", ss_inact.str());
-    reload_compositor();
+void WmBackend::set_opacities([[maybe_unused]] float active, [[maybe_unused]] float inactive) {
 }
 
-void WmBackend::set_animations(bool enabled) {
-    // Under animations block: enabled = true/false
-    update_config_file("enabled", enabled ? "true" : "false");
-    reload_compositor();
+void WmBackend::set_animations([[maybe_unused]] bool enabled) {
 }
 
-void WmBackend::set_blur(bool enabled) {
-    // Under blur block: enabled = true/false
-    update_config_file("enabled", enabled ? "true" : "false");
-    reload_compositor();
+void WmBackend::set_blur([[maybe_unused]] bool enabled) {
 }
 
 void WmBackend::reload_compositor() {
