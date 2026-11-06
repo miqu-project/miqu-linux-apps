@@ -14,16 +14,28 @@ MonitorDetailView::MonitorDetailView() {
 
 void MonitorDetailView::set_monitor_info(const std::string& name, const std::string& subtitle) {
     m_selected_monitor = name;
-    m_subtitle = subtitle;
-    m_is_primary = (subtitle.find("Primary") != std::string::npos);
+    m_info = MonitorBackend::get_monitor(name);
+    m_subtitle = subtitle.empty() ? m_info.description : subtitle;
+    m_is_primary = m_info.is_primary;
 
-    if (name.find("HDMI") != std::string::npos) {
-        m_current_res = "2560x1440";
-        m_current_hz = "144 Hz";
+    if (m_info.current_width > 0 && m_info.current_height > 0) {
+        m_current_res = std::to_string(m_info.current_width) + "x" + std::to_string(m_info.current_height);
     } else {
         m_current_res = "1920x1080";
-        m_current_hz = "60 Hz";
     }
+
+    int hz_int = static_cast<int>(m_info.current_refresh + 0.5f);
+    m_current_hz = (hz_int > 0 ? std::to_string(hz_int) : "60") + " Hz";
+
+    int sc_int = static_cast<int>(m_info.scale * 100.0f + 0.5f);
+    m_current_scale = (sc_int > 0 ? std::to_string(sc_int) : "100") + "%";
+
+    if (m_info.transform == "90") m_current_orient = "Portrait (90°)";
+    else if (m_info.transform == "180") m_current_orient = "Inverted Landscape (180°)";
+    else if (m_info.transform == "270") m_current_orient = "Inverted Portrait (270°)";
+    else m_current_orient = "Landscape (Standard)";
+
+    m_applied_feedback = false;
     setup_ui();
 }
 
@@ -226,12 +238,20 @@ std::shared_ptr<View> MonitorDetailView::create_resolution_card() {
         ->build();
     col->add_view(title);
 
-    std::vector<std::string> resolutions = {
-        "1920x1080 (16:9 · Recommended)",
-        "2560x1440 (16:9 · 2K QHD)",
-        "1680x1050 (16:10)",
-        "1280x720 (16:9 · HD)"
-    };
+    std::vector<std::string> resolutions;
+    std::vector<std::string> seen_res;
+    for (const auto& mode : m_info.modes) {
+        std::string res_key = std::to_string(mode.width) + "x" + std::to_string(mode.height);
+        if (std::find(seen_res.begin(), seen_res.end(), res_key) == seen_res.end()) {
+            seen_res.push_back(res_key);
+            std::string label = res_key;
+            if (mode.is_preferred) label += " (Recommended)";
+            resolutions.push_back(label);
+        }
+    }
+    if (resolutions.empty()) {
+        resolutions = {"1920x1080 (Recommended)", "1600x900", "1280x720"};
+    }
 
     for (size_t i = 0; i < resolutions.size(); ++i) {
         std::string res_clean = resolutions[i].substr(0, resolutions[i].find(' '));
@@ -244,6 +264,7 @@ std::shared_ptr<View> MonitorDetailView::create_resolution_card() {
             ->cornerRadius(8)
             ->onClick([this, res_clean]() {
                 m_current_res = res_clean;
+                m_applied_feedback = false;
                 setup_ui();
             })
             ->build();
@@ -274,7 +295,29 @@ std::shared_ptr<View> MonitorDetailView::create_resolution_card() {
     ));
     hz_row->set_divider_spacing(8);
 
-    std::vector<std::string> rates = {"60 Hz", "75 Hz", "120 Hz", "144 Hz"};
+    std::vector<std::string> rates;
+    int sel_w = 1920, sel_h = 1080;
+    size_t x_pos = m_current_res.find('x');
+    if (x_pos != std::string::npos) {
+        try {
+            sel_w = std::stoi(m_current_res.substr(0, x_pos));
+            sel_h = std::stoi(m_current_res.substr(x_pos + 1));
+        } catch (...) {}
+    }
+
+    for (const auto& mode : m_info.modes) {
+        if (mode.width == sel_w && mode.height == sel_h) {
+            int hz_val = static_cast<int>(mode.refresh_rate + 0.5f);
+            std::string hz_str = std::to_string(hz_val) + " Hz";
+            if (std::find(rates.begin(), rates.end(), hz_str) == rates.end()) {
+                rates.push_back(hz_str);
+            }
+        }
+    }
+    if (rates.empty()) {
+        rates = {"60 Hz", "75 Hz", "120 Hz", "144 Hz"};
+    }
+
     for (const auto& hz : rates) {
         bool is_sel = (hz == m_current_hz);
         auto btn = ButtonBuilder::create()
@@ -285,6 +328,7 @@ std::shared_ptr<View> MonitorDetailView::create_resolution_card() {
             ->cornerRadius(8)
             ->onClick([this, hz]() {
                 m_current_hz = hz;
+                m_applied_feedback = false;
                 setup_ui();
             })
             ->build();
@@ -431,11 +475,41 @@ std::shared_ptr<View> MonitorDetailView::create_actions_card() {
     row->set_divider_spacing(12);
 
     auto btn_apply = ButtonBuilder::create()
-        ->text("✓  Apply Monitor Settings")
+        ->text(m_applied_feedback ? "✓  Settings Applied Successfully" : "✓  Apply Monitor Settings")
         ->textSize(13)
         ->textColor(config->colors.on_primary)
-        ->backgroundColor(config->colors.primary)
+        ->backgroundColor(m_applied_feedback ? config->colors.outline : config->colors.primary)
         ->cornerRadius(6)
+        ->onClick([this]() {
+            int w = 1920, h = 1080;
+            size_t x_pos = m_current_res.find('x');
+            if (x_pos != std::string::npos) {
+                try {
+                    w = std::stoi(m_current_res.substr(0, x_pos));
+                    h = std::stoi(m_current_res.substr(x_pos + 1));
+                } catch (...) {}
+            }
+
+            float hz = 60.0f;
+            try {
+                hz = std::stof(m_current_hz.substr(0, m_current_hz.find(' ')));
+            } catch (...) {}
+
+            float sc = 1.0f;
+            if (m_current_scale == "125%") sc = 1.25f;
+            else if (m_current_scale == "150%") sc = 1.50f;
+            else if (m_current_scale == "200%") sc = 2.00f;
+            else sc = 1.0f;
+
+            std::string tr = "normal";
+            if (m_current_orient.find("90") != std::string::npos) tr = "90";
+            else if (m_current_orient.find("180") != std::string::npos) tr = "180";
+            else if (m_current_orient.find("270") != std::string::npos) tr = "270";
+
+            MonitorBackend::apply_settings(m_selected_monitor, w, h, hz, sc, tr);
+            m_applied_feedback = true;
+            setup_ui();
+        })
         ->build();
     LayoutParams app_lp;
     app_lp.width = static_cast<int>(LayoutDimension::MatchParent);

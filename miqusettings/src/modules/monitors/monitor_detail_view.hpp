@@ -8,6 +8,7 @@
 #include <miqutoolkit/view/image_view.hpp>
 #include <miqutoolkit/view/button.hpp>
 #include <miqutoolkit/view/switch.hpp>
+#include "modules/monitors/monitor_backend.hpp"
 #include <memory>
 #include <string>
 #include <vector>
@@ -39,6 +40,8 @@ private:
 
     bool m_is_fullscreen = false;
     bool m_is_primary = true;
+    bool m_applied_feedback = false;
+    MonitorInfo m_info;
     std::string m_selected_monitor = "eDP-1";
     std::string m_subtitle = "1920x1080 @ 60Hz · Built-in Display (Primary)";
     std::string m_current_res = "1920x1080";

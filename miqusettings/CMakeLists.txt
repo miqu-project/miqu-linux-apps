@@ -29,6 +29,7 @@ add_executable(miqusettings
     src/modules/applications/apps_backend.cpp
     src/modules/applications/app_detail_view.cpp
     src/modules/applications/default_app_detail_view.cpp
+    src/modules/monitors/monitor_backend.cpp
     src/modules/monitors/monitor_detail_view.cpp
     src/modules/display/display_backend.cpp
     src/modules/display/brightness_detail_view.cpp

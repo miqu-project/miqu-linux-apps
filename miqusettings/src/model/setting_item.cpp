@@ -3,6 +3,7 @@
 #include "modules/wifi/wifi_backend.hpp"
 #include "modules/airplane/airplane_backend.hpp"
 #include "modules/applications/apps_backend.hpp"
+#include "modules/monitors/monitor_backend.hpp"
 #include <sstream>
 #include <iomanip>
 
@@ -166,25 +167,32 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto mon = std::make_shared<SettingItem>();
         mon->id = "monitors";
         mon->title = "Monitors";
-        mon->subtitle = "Connected displays and arrangement";
         mon->icon_name = "video-display";
         mon->type = SettingType::Category;
 
-        auto mon_edp1 = std::make_shared<SettingItem>();
-        mon_edp1->id = "mon_edp1";
-        mon_edp1->title = "eDP-1";
-        mon_edp1->subtitle = "1920x1080 @ 60Hz · Built-in Display (Primary)";
-        mon_edp1->icon_name = "video-display";
-        mon_edp1->type = SettingType::Info;
-        mon->children.push_back(mon_edp1);
+        auto connected = MonitorBackend::get_monitors();
+        mon->subtitle = std::to_string(connected.size()) + (connected.size() == 1 ? " display connected" : " displays connected");
 
-        auto mon_hdmi = std::make_shared<SettingItem>();
-        mon_hdmi->id = "mon_hdmi";
-        mon_hdmi->title = "HDMI-A-1";
-        mon_hdmi->subtitle = "2560x1440 @ 144Hz · External Monitor";
-        mon_hdmi->icon_name = "video-display";
-        mon_hdmi->type = SettingType::Info;
-        mon->children.push_back(mon_hdmi);
+        for (const auto& m : connected) {
+            auto mon_item = std::make_shared<SettingItem>();
+            mon_item->id = "mon_" + m.name;
+            mon_item->title = m.name;
+
+            std::string sub = std::to_string(m.current_width) + "x" + std::to_string(m.current_height);
+            int hz_int = static_cast<int>(m.current_refresh + 0.5f);
+            if (hz_int > 0) {
+                sub += " @ " + std::to_string(hz_int) + "Hz";
+            }
+            if (m.is_primary) {
+                sub += " · Primary Display";
+            } else if (!m.description.empty()) {
+                sub += " · " + m.description;
+            }
+            mon_item->subtitle = sub;
+            mon_item->icon_name = "video-display";
+            mon_item->type = SettingType::Info;
+            mon->children.push_back(mon_item);
+        }
 
         root->children.push_back(mon);
     }
