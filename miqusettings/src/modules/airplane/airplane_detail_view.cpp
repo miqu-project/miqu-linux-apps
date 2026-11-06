@@ -284,47 +284,13 @@ std::shared_ptr<View> AirplaneDetailView::create_radios_card() {
 
 std::shared_ptr<View> AirplaneDetailView::create_info_card() {
     auto config = Config::get();
-    auto card = std::make_shared<CardView>();
-    card->set_card_background_color(config->colors.surface);
-    card->set_radius(config->metrics.corner_radius);
-    card->set_padding(18);
-
-    auto layout = std::make_shared<LinearLayout>(Orientation::Vertical);
-    layout->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    layout->set_divider_spacing(14);
-
-    std::string btn_label = m_status.enabled
-        ? "Turn Off Airplane Mode (Restore All Radios)"
-        : "Turn On Airplane Mode (Disable All Radios)";
-
-    auto btn = ButtonBuilder::create()
-        ->text(btn_label)
-        ->primary(true)
-        ->cornerRadius(std::max(6, config->metrics.corner_radius - 2))
-        ->padding(16, 10)
-        ->textSize(13)
-        ->onClick([this]() {
-            on_toggle_mode(!m_status.enabled);
-        })
-        ->build();
-    LayoutParams btn_lp;
-    btn_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    btn_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    btn->set_layout_params(btn_lp);
-    layout->add_view(btn);
-
     auto info = TextViewBuilder::create()
-        ->text("Turning on Airplane Mode immediately blocks all wireless transmissions (Wi-Fi, Bluetooth, and cellular modems) via rfkill and NetworkManager to comply with aviation regulations.")
+        ->text("Airplane Mode turns off Wi-Fi, Bluetooth, and mobile cellular transmissions to comply with aviation regulations and conserve power.")
         ->textSize(config->metrics.caption_size)
-        ->textColor(config->colors.on_surface_variant)
+        ->textColor(config->colors.outline)
         ->build();
-    layout->add_view(info);
-
-    card->add_view(layout);
-    return card;
+    info->set_padding(8, 4);
+    return info;
 }
 
 } // namespace miqu
