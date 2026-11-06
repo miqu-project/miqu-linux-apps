@@ -18,8 +18,9 @@ public:
     static int get_brightness_percent();
     static void set_brightness_percent(int percent);
 
-    // Gamma / Night Light (via gammastep / wlr-gamma-control-v1)
+    // Gamma / Night Light (via native miquland / miquctl gamma)
     static bool is_night_light_active();
+    static int get_gamma_temperature();
     static void set_night_light_enabled(bool enabled, int temp_k = 4500);
     static void set_gamma_temperature(int temp_k);
 

@@ -7,6 +7,8 @@ namespace miqu {
 
 NightLightDetailView::NightLightDetailView() {
     m_enabled = DisplayBackend::is_night_light_active();
+    int temp = DisplayBackend::get_gamma_temperature();
+    m_warmth = std::clamp((static_cast<float>(temp) - 3000.0f) / 3500.0f, 0.0f, 1.0f);
     set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
@@ -441,9 +443,9 @@ std::shared_ptr<View> NightLightDetailView::create_engine_card() {
     };
 
     add_row("Wayland Protocol", "wlr-gamma-control-v1");
-    add_row("Engine Daemon", "gammastep / miqusunset");
-    add_row("Autostart In", "~/.config/miquland/miquland.conf");
-    add_row("Hardware Adjustment", "Direct DRM CRTC Gamma Ramps");
+    add_row("Engine", "miquland Native (Planckian Blackbody)");
+    add_row("Control IPC", "miquctl gamma [temp|on|off]");
+    add_row("Hardware Adjustment", "Direct DRM CRTC Gamma Ramps / Shader Fallback");
 
     card->add_view(col);
     return card;

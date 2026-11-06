@@ -76,23 +76,39 @@ void DisplayBackend::set_brightness_percent(int percent) {
 }
 
 bool DisplayBackend::is_night_light_active() {
-    std::string out = run_cmd("pgrep -x gammastep");
-    return !out.empty();
+    std::string out = run_cmd("miquctl -j gamma 2>/dev/null");
+    if (out.find("\"enabled\":true") != std::string::npos) {
+        return true;
+    }
+    // Fallback check if external gamma utility is running
+    std::string gs = run_cmd("pgrep -x gammastep");
+    return !gs.empty();
+}
+
+int DisplayBackend::get_gamma_temperature() {
+    std::string out = run_cmd("miquctl -j gamma 2>/dev/null");
+    size_t tpos = out.find("\"temperature\":");
+    if (tpos != std::string::npos) {
+        try {
+            return std::clamp(std::stoi(out.substr(tpos + 14)), 1000, 10000);
+        } catch (...) {}
+    }
+    return 4500;
 }
 
 void DisplayBackend::set_night_light_enabled(bool enabled, int temp_k) {
     if (enabled) {
-        int k = std::clamp(temp_k, 2500, 6500);
-        std::string cmd = "pkill -x gammastep >/dev/null 2>&1; gammastep -O " + std::to_string(k) + " >/dev/null 2>&1 &";
+        int k = std::clamp(temp_k, 1000, 10000);
+        std::string cmd = "miquctl gamma " + std::to_string(k) + " >/dev/null 2>&1 &";
         std::system(cmd.c_str());
     } else {
-        std::system("pkill -x gammastep >/dev/null 2>&1; gammastep -x >/dev/null 2>&1 &");
+        std::system("miquctl gamma off >/dev/null 2>&1 &");
     }
 }
 
 void DisplayBackend::set_gamma_temperature(int temp_k) {
-    int k = std::clamp(temp_k, 2500, 6500);
-    std::string cmd = "pkill -x gammastep >/dev/null 2>&1; gammastep -O " + std::to_string(k) + " >/dev/null 2>&1 &";
+    int k = std::clamp(temp_k, 1000, 10000);
+    std::string cmd = "miquctl gamma " + std::to_string(k) + " >/dev/null 2>&1 &";
     std::system(cmd.c_str());
 }
 
