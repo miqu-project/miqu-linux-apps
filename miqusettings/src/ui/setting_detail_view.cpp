@@ -103,50 +103,6 @@ void SettingDetailView::show_category_preview(const std::shared_ptr<SettingItem>
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)
     ));
-    root->set_divider_spacing(12);
-
-    // Section preview header
-    auto header = std::make_shared<LinearLayout>(Orientation::Horizontal);
-    header->set_layout_params(LayoutParams(
-        static_cast<int>(LayoutDimension::MatchParent),
-        static_cast<int>(LayoutDimension::WrapContent)
-    ));
-    header->set_padding(8, 6);
-    header->set_divider_spacing(12);
-
-    auto icon = std::make_shared<ImageView>(item->icon_name.empty() ? "preferences-system" : item->icon_name);
-    icon->set_target_size(28);
-    LayoutParams icon_lp;
-    icon_lp.width = 28;
-    icon_lp.height = 28;
-    icon_lp.gravity = Gravity::CenterVertical;
-    header->add_view(icon, icon_lp);
-
-    auto title_col = std::make_shared<LinearLayout>(Orientation::Vertical);
-    LayoutParams title_col_lp;
-    title_col_lp.width = 0;
-    title_col_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    title_col_lp.weight = 1.0f;
-    title_col->set_layout_params(title_col_lp);
-
-    auto title = TextViewBuilder::create()
-        ->text(item->title)
-        ->bold(true)
-        ->textSize(16)
-        ->textColor(config->colors.on_surface)
-        ->build();
-    title_col->add_view(title);
-
-    if (!item->subtitle.empty()) {
-        auto subtitle = TextViewBuilder::create()
-            ->text(item->subtitle)
-            ->textSize(12)
-            ->textColor(config->colors.on_surface_variant)
-            ->build();
-        title_col->add_view(subtitle);
-    }
-    header->add_view(title_col);
-    root->add_view(header);
 
     auto list = std::make_shared<ListView>();
     list->set_item_height(52);
