@@ -102,7 +102,7 @@ WifiAdapterInfo WifiBackend::get_adapter_info() {
 
     // Query active wifi link telemetry if connected
     if (info.is_connected && !info.connected_ssid.empty()) {
-        std::string w_cmd = "nmcli -t -f IN-USE,SSID,FREQ,RATE,SIGNAL,SECURITY device wifi list 2>/dev/null";
+        std::string w_cmd = "nmcli -t -f IN-USE,SSID,FREQ,RATE,SIGNAL,SECURITY device wifi list --rescan no 2>/dev/null";
         std::string w_out = run_cmd(w_cmd);
         std::stringstream wss(w_out);
         std::string wline;
@@ -165,7 +165,7 @@ std::vector<WifiNetwork> WifiBackend::scan_nearby_networks() {
     }
 
     // Format: IN-USE:SSID:BSSID:MODE:CHAN:FREQ:RATE:SIGNAL:BARS:SECURITY
-    std::string cmd = "nmcli -t -f IN-USE,SSID,BSSID,MODE,CHAN,FREQ,RATE,SIGNAL,BARS,SECURITY device wifi list 2>/dev/null";
+    std::string cmd = "nmcli -t -f IN-USE,SSID,BSSID,MODE,CHAN,FREQ,RATE,SIGNAL,BARS,SECURITY device wifi list --rescan no 2>/dev/null";
     std::string out = run_cmd(cmd);
 
     std::unordered_map<std::string, WifiNetwork> best_by_ssid;
