@@ -1,11 +1,4 @@
 #include "model/setting_item.hpp"
-#include "modules/ethernet/ethernet_backend.hpp"
-#include "modules/wifi/wifi_backend.hpp"
-#include "modules/airplane/airplane_backend.hpp"
-#include "modules/applications/apps_backend.hpp"
-#include "modules/monitors/monitor_backend.hpp"
-#include <sstream>
-#include <iomanip>
 
 namespace miqu {
 
@@ -23,7 +16,6 @@ std::string SettingItem::get_status_text() const {
             }
             return "";
         case SettingType::Category:
-            return std::to_string(children.size()) + " items";
         case SettingType::Info:
         default:
             return "";
@@ -49,49 +41,21 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto apps = std::make_shared<SettingItem>();
         apps->id = "apps";
         apps->title = "Applications & Defaults";
-        apps->subtitle = "Apps, Default Applications";
         apps->icon_name = "system-software-install";
         apps->type = SettingType::Category;
 
-        // Sub-section 1: Apps (Installed applications list)
         auto apps_list = std::make_shared<SettingItem>();
         apps_list->id = "apps_list";
         apps_list->title = "Apps";
         apps_list->icon_name = "applications-all";
         apps_list->type = SettingType::Category;
-
-        auto installed_apps = AppsBackend::get_installed_apps();
-        apps_list->subtitle = std::to_string(installed_apps.size()) + " applications installed";
-
-        for (const auto& app : installed_apps) {
-            auto app_item = std::make_shared<SettingItem>();
-            app_item->id = "app_" + app.id;
-            app_item->title = app.name;
-            app_item->subtitle = !app.generic_name.empty() ? app.generic_name : app.categories;
-            app_item->icon_name = app.icon_name;
-            app_item->type = SettingType::Info;
-            apps_list->children.push_back(app_item);
-        }
         apps->children.push_back(apps_list);
 
-        // Sub-section 2: Default Apps (Common Linux XDG defaults)
         auto def_apps = std::make_shared<SettingItem>();
         def_apps->id = "default_apps";
         def_apps->title = "Default Apps";
-        def_apps->subtitle = "Web Browser, File Manager, Terminal, Media";
         def_apps->icon_name = "preferences-desktop-default-applications";
         def_apps->type = SettingType::Category;
-
-        auto roles = AppsBackend::get_default_roles();
-        for (const auto& role : roles) {
-            auto role_item = std::make_shared<SettingItem>();
-            role_item->id = "defrole_" + role.role_id;
-            role_item->title = role.title;
-            role_item->subtitle = !role.current_default_name.empty() ? role.current_default_name : "None configured";
-            role_item->icon_name = role.icon_name;
-            role_item->type = SettingType::Info;
-            def_apps->children.push_back(role_item);
-        }
         apps->children.push_back(def_apps);
 
         root->children.push_back(apps);
@@ -102,59 +66,34 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto net = std::make_shared<SettingItem>();
         net->id = "network";
         net->title = "Wireless & Network";
-        net->subtitle = "Airplane Mode, Wi-Fi, Ethernet, Bluetooth";
         net->icon_name = "network-wireless";
         net->type = SettingType::Category;
 
-        // Airplane Mode
         auto airplane = std::make_shared<SettingItem>();
         airplane->id = "airplane_mode";
         airplane->title = "Airplane Mode";
-        bool is_airplane = AirplaneBackend::is_enabled();
-        airplane->subtitle = is_airplane
-            ? "Active · All wireless radios turned off"
-            : "Turn off Wi-Fi, Bluetooth and cellular signals";
         airplane->icon_name = "airplane-mode";
         airplane->type = SettingType::Toggle;
-        airplane->bool_val = is_airplane;
+        airplane->bool_val = false;
         net->children.push_back(airplane);
 
-        // Wi-Fi
         auto wifi = std::make_shared<SettingItem>();
         wifi->id = "wifi";
         wifi->title = "Wi-Fi";
-        auto wifi_info = WifiBackend::get_adapter_info();
-        if (!wifi_info.available) {
-            wifi->subtitle = "No Wi-Fi adapter detected";
-            wifi->icon_name = "network-wireless-disconnected";
-        } else if (!wifi_info.radio_enabled) {
-            wifi->subtitle = "Wi-Fi Disabled (Airplane Mode)";
-            wifi->icon_name = "network-wireless-disabled";
-        } else if (wifi_info.is_connected) {
-            wifi->subtitle = "Connected to " + wifi_info.connected_ssid;
-            wifi->icon_name = WifiBackend::resolve_signal_icon(wifi_info.signal_percent);
-        } else {
-            wifi->subtitle = "Disconnected · Networks available";
-            wifi->icon_name = "network-wireless-disconnected";
-        }
+        wifi->icon_name = "network-wireless";
         wifi->type = SettingType::Info;
         net->children.push_back(wifi);
 
-        // Ethernet
         auto eth = std::make_shared<SettingItem>();
         eth->id = "ethernet";
         eth->title = "Wired (Ethernet)";
-        auto eth_dev = EthernetBackend::get_device();
-        eth->subtitle = eth_dev.name + " · " + eth_dev.state_str;
-        eth->icon_name = eth_dev.is_connected ? "network-wired" : "network-wired-disconnected";
+        eth->icon_name = "network-wired";
         eth->type = SettingType::Info;
         net->children.push_back(eth);
 
-        // Bluetooth
         auto bt = std::make_shared<SettingItem>();
         bt->id = "bluetooth";
         bt->title = "Bluetooth";
-        bt->subtitle = "Audio, Mouse, Keyboard, Stylus & File Transfer";
         bt->icon_name = "bluetooth";
         bt->type = SettingType::Info;
         net->children.push_back(bt);
@@ -162,54 +101,27 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         root->children.push_back(net);
     }
 
-    // 2. Monitors
+    // 3. Monitors (Zero startup system queries; loaded on demand)
     {
         auto mon = std::make_shared<SettingItem>();
         mon->id = "monitors";
         mon->title = "Monitors";
         mon->icon_name = "video-display";
         mon->type = SettingType::Category;
-
-        auto connected = MonitorBackend::get_monitors();
-        mon->subtitle = std::to_string(connected.size()) + (connected.size() == 1 ? " display connected" : " displays connected");
-
-        for (const auto& m : connected) {
-            auto mon_item = std::make_shared<SettingItem>();
-            mon_item->id = "mon_" + m.name;
-            mon_item->title = m.name;
-
-            std::string sub = std::to_string(m.current_width) + "x" + std::to_string(m.current_height);
-            int hz_int = static_cast<int>(m.current_refresh + 0.5f);
-            if (hz_int > 0) {
-                sub += " @ " + std::to_string(hz_int) + "Hz";
-            }
-            if (m.is_primary) {
-                sub += " · Primary Display";
-            } else if (!m.description.empty()) {
-                sub += " · " + m.description;
-            }
-            mon_item->subtitle = sub;
-            mon_item->icon_name = "video-display";
-            mon_item->type = SettingType::Info;
-            mon->children.push_back(mon_item);
-        }
-
         root->children.push_back(mon);
     }
 
-    // 3. Display
+    // 4. Display
     {
         auto disp = std::make_shared<SettingItem>();
         disp->id = "display";
         disp->title = "Display";
-        disp->subtitle = "Brightness, Gamma, Screen Lock, Time Out";
         disp->icon_name = "display-brightness";
         disp->type = SettingType::Category;
 
         auto disp_bright = std::make_shared<SettingItem>();
         disp_bright->id = "disp_bright";
         disp_bright->title = "Brightness";
-        disp_bright->subtitle = "Backlight level: 50% · intel_backlight";
         disp_bright->icon_name = "display-brightness";
         disp_bright->type = SettingType::Info;
         disp->children.push_back(disp_bright);
@@ -217,7 +129,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto disp_gamma = std::make_shared<SettingItem>();
         disp_gamma->id = "disp_gamma";
         disp_gamma->title = "Gamma";
-        disp_gamma->subtitle = "Color warmth, blue light filter and sunset schedule";
         disp_gamma->icon_name = "weather-clear-night";
         disp_gamma->type = SettingType::Info;
         disp->children.push_back(disp_gamma);
@@ -225,7 +136,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto disp_lock = std::make_shared<SettingItem>();
         disp_lock->id = "disp_lock";
         disp_lock->title = "Screen Lock";
-        disp_lock->subtitle = "Lock session on idle and display sleep";
         disp_lock->icon_name = "system-lock-screen";
         disp_lock->type = SettingType::Toggle;
         disp_lock->bool_val = true;
@@ -234,7 +144,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto disp_timeout = std::make_shared<SettingItem>();
         disp_timeout->id = "disp_timeout";
         disp_timeout->title = "Time Out";
-        disp_timeout->subtitle = "Turn display off after idle period";
         disp_timeout->icon_name = "preferences-desktop-screensaver";
         disp_timeout->type = SettingType::Selection;
         disp_timeout->options = {"5 Minutes", "10 Minutes (Recommended)", "15 Minutes", "Never"};
@@ -244,19 +153,17 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         root->children.push_back(disp);
     }
 
-    // 3. Sound & Audio
+    // 5. Sound & Audio
     {
         auto sound = std::make_shared<SettingItem>();
         sound->id = "sound";
         sound->title = "Sound & Audio";
-        sound->subtitle = "Volume, Output Device, Microphone";
         sound->icon_name = "audio-speakers";
         sound->type = SettingType::Category;
 
         auto vol_out = std::make_shared<SettingItem>();
         vol_out->id = "vol_out";
         vol_out->title = "Master Output Volume";
-        vol_out->subtitle = "Speaker and headphone playback gain";
         vol_out->icon_name = "audio-volume-high";
         vol_out->type = SettingType::SliderControl;
         vol_out->float_val = 0.70f;
@@ -265,7 +172,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto dev_out = std::make_shared<SettingItem>();
         dev_out->id = "dev_out";
         dev_out->title = "Output Device";
-        dev_out->subtitle = "Active playback sink";
         dev_out->icon_name = "audio-speakers";
         dev_out->type = SettingType::Selection;
         dev_out->options = {"Realtek ALC1220 (Analog Stereo)", "HDMI / DP Digital Output", "Sony WH-1000XM4 (Bluetooth LDAC)"};
@@ -275,7 +181,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto vol_in = std::make_shared<SettingItem>();
         vol_in->id = "vol_in";
         vol_in->title = "Microphone Volume";
-        vol_in->subtitle = "Voice capture recording level";
         vol_in->icon_name = "audio-input-microphone";
         vol_in->type = SettingType::SliderControl;
         vol_in->float_val = 0.80f;
@@ -284,7 +189,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto mute_all = std::make_shared<SettingItem>();
         mute_all->id = "mute_all";
         mute_all->title = "Mute All Sounds";
-        mute_all->subtitle = "Silence audio output completely";
         mute_all->icon_name = "audio-volume-muted";
         mute_all->type = SettingType::Toggle;
         mute_all->bool_val = false;
@@ -293,19 +197,17 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         root->children.push_back(sound);
     }
 
-    // 4. Appearance & Desktop
+    // 6. Appearance & Desktop
     {
         auto app = std::make_shared<SettingItem>();
         app->id = "appearance";
         app->title = "Appearance & Theming";
-        app->subtitle = "Dark Theme, Accent Color, Corners, Blur";
         app->icon_name = "preferences-desktop-theme";
         app->type = SettingType::Category;
 
         auto dark_theme = std::make_shared<SettingItem>();
         dark_theme->id = "dark_theme";
         dark_theme->title = "Dark Theme";
-        dark_theme->subtitle = "Apply dark UI token styling across all applications";
         dark_theme->icon_name = "preferences-desktop-theme";
         dark_theme->type = SettingType::Toggle;
         dark_theme->bool_val = true;
@@ -314,7 +216,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto accent = std::make_shared<SettingItem>();
         accent->id = "accent_color";
         accent->title = "Accent Palette";
-        accent->subtitle = "Primary accent color for buttons and highlights";
         accent->icon_name = "applications-graphics";
         accent->type = SettingType::Selection;
         accent->options = {"Miqu Violet (Default)", "Ocean Blue", "Emerald Teal", "Sunset Amber", "Ruby Red"};
@@ -324,7 +225,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto radius = std::make_shared<SettingItem>();
         radius->id = "corner_radius";
         radius->title = "Window Corner Radius";
-        radius->subtitle = "Corner curvature for cards, windows, and flyouts";
         radius->icon_name = "preferences-desktop-display";
         radius->type = SettingType::Selection;
         radius->options = {"0 px (Sharp)", "8 px (Compact)", "12 px (Standard)", "16 px (Smooth)"};
@@ -334,7 +234,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto blur = std::make_shared<SettingItem>();
         blur->id = "blur_effect";
         blur->title = "Window & Flyout Blur";
-        blur->subtitle = "Compositor dual-kawase background blur";
         blur->icon_name = "color-management";
         blur->type = SettingType::Toggle;
         blur->bool_val = true;
@@ -343,19 +242,95 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         root->children.push_back(app);
     }
 
-    // 5. Power & Battery
+    // 7. Window Management & Tiling
+    {
+        auto wm = std::make_shared<SettingItem>();
+        wm->id = "wm_tiling";
+        wm->title = "Window Management";
+        wm->icon_name = "preferences-system-windows";
+        wm->type = SettingType::Category;
+
+        auto wm_layout = std::make_shared<SettingItem>();
+        wm_layout->id = "wm_layout";
+        wm_layout->title = "Tiling Layout";
+        wm_layout->icon_name = "preferences-system-windows";
+        wm_layout->type = SettingType::Info;
+        wm->children.push_back(wm_layout);
+
+        auto wm_gaps = std::make_shared<SettingItem>();
+        wm_gaps->id = "wm_gaps";
+        wm_gaps->title = "Window Gaps";
+        wm_gaps->icon_name = "preferences-desktop-display";
+        wm_gaps->type = SettingType::Info;
+        wm->children.push_back(wm_gaps);
+
+        auto wm_borders = std::make_shared<SettingItem>();
+        wm_borders->id = "wm_borders";
+        wm_borders->title = "Borders & Corners";
+        wm_borders->icon_name = "preferences-desktop-theme";
+        wm_borders->type = SettingType::Info;
+        wm->children.push_back(wm_borders);
+
+        auto wm_effects = std::make_shared<SettingItem>();
+        wm_effects->id = "wm_effects";
+        wm_effects->title = "Opacity & Effects";
+        wm_effects->icon_name = "color-management";
+        wm_effects->type = SettingType::Info;
+        wm->children.push_back(wm_effects);
+
+        auto wm_control = std::make_shared<SettingItem>();
+        wm_control->id = "wm_control";
+        wm_control->title = "Compositor Control";
+        wm_control->icon_name = "system-reboot";
+        wm_control->type = SettingType::Info;
+        wm->children.push_back(wm_control);
+
+        root->children.push_back(wm);
+    }
+
+    // 8. Keyboard & Mouse
+    {
+        auto input = std::make_shared<SettingItem>();
+        input->id = "input_devices";
+        input->title = "Keyboard & Mouse";
+        input->icon_name = "input-keyboard";
+        input->type = SettingType::Category;
+
+        auto in_kb = std::make_shared<SettingItem>();
+        in_kb->id = "input_keyboards";
+        in_kb->title = "Keyboards & Layout";
+        in_kb->icon_name = "input-keyboard";
+        in_kb->type = SettingType::Info;
+        input->children.push_back(in_kb);
+
+        auto in_rep = std::make_shared<SettingItem>();
+        in_rep->id = "input_repeat";
+        in_rep->title = "Typing & Repeat Speed";
+        in_rep->icon_name = "input-keyboard";
+        in_rep->type = SettingType::Info;
+        input->children.push_back(in_rep);
+
+        auto in_ptr = std::make_shared<SettingItem>();
+        in_ptr->id = "input_pointers";
+        in_ptr->title = "Pointers & Touch";
+        in_ptr->icon_name = "input-mouse";
+        in_ptr->type = SettingType::Info;
+        input->children.push_back(in_ptr);
+
+        root->children.push_back(input);
+    }
+
+    // 9. Power & Battery
     {
         auto pwr = std::make_shared<SettingItem>();
         pwr->id = "power";
         pwr->title = "Power & Battery";
-        pwr->subtitle = "Performance Profile, Sleep, Screen Off";
         pwr->icon_name = "battery";
         pwr->type = SettingType::Category;
 
         auto profile = std::make_shared<SettingItem>();
         profile->id = "pwr_profile";
         profile->title = "Performance Profile";
-        profile->subtitle = "CPU frequency governor and power balance";
         profile->icon_name = "power-profile-balanced";
         profile->type = SettingType::Selection;
         profile->options = {"Power Saver (Extend battery)", "Balanced (Adaptive)", "Performance (Max CPU boost)"};
@@ -365,7 +340,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto screen_off = std::make_shared<SettingItem>();
         screen_off->id = "pwr_screen_off";
         screen_off->title = "Screen Off Timeout";
-        screen_off->subtitle = "Turn display off after idle period";
         screen_off->icon_name = "preferences-system-power";
         screen_off->type = SettingType::Selection;
         screen_off->options = {"5 minutes", "10 minutes", "15 minutes", "30 minutes", "Never"};
@@ -375,7 +349,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto suspend = std::make_shared<SettingItem>();
         suspend->id = "pwr_suspend";
         suspend->title = "Automatic Suspend";
-        suspend->subtitle = "Enter low-power sleep state on extended idle";
         suspend->icon_name = "system-suspend";
         suspend->type = SettingType::Toggle;
         suspend->bool_val = true;
@@ -384,19 +357,17 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         root->children.push_back(pwr);
     }
 
-    // 7. Security & Privacy
+    // 10. Security & Privacy
     {
         auto sec = std::make_shared<SettingItem>();
         sec->id = "security";
         sec->title = "Security & Privacy";
-        sec->subtitle = "Firewall, Tor Routing, Screen Lock, Encryption";
         sec->icon_name = "security-high";
         sec->type = SettingType::Category;
 
         auto fw = std::make_shared<SettingItem>();
         fw->id = "sec_firewall";
         fw->title = "Application Firewall (OpenSnitch)";
-        fw->subtitle = "Monitor and prompt for outbound application sockets";
         fw->icon_name = "security-high";
         fw->type = SettingType::Toggle;
         fw->bool_val = true;
@@ -405,7 +376,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto tor = std::make_shared<SettingItem>();
         tor->id = "sec_tor";
         tor->title = "Tor Anonymity Routing";
-        tor->subtitle = "Route designated traffic through Tor onion network";
         tor->icon_name = "network-wired";
         tor->type = SettingType::Toggle;
         tor->bool_val = false;
@@ -414,7 +384,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto lock = std::make_shared<SettingItem>();
         lock->id = "sec_lock";
         lock->title = "Session Lock Timeout";
-        lock->subtitle = "Lock screen with miqulock after inactivity";
         lock->icon_name = "system-lock-screen";
         lock->type = SettingType::Selection;
         lock->options = {"Immediate", "5 minutes", "10 minutes", "15 minutes", "Never"};
@@ -424,7 +393,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto luks = std::make_shared<SettingItem>();
         luks->id = "sec_luks";
         luks->title = "LUKS Disk Encryption";
-        luks->subtitle = "NVMe Storage Partition AES-XTS-512 Encrypted";
         luks->icon_name = "drive-harddisk-encrypted";
         luks->type = SettingType::Info;
         sec->children.push_back(luks);
@@ -432,19 +400,17 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         root->children.push_back(sec);
     }
 
-    // 8. About System
+    // 11. System & About
     {
         auto about = std::make_shared<SettingItem>();
         about->id = "about";
         about->title = "System & About";
-        about->subtitle = "OS, Compositor, Kernel, Hardware Specifications";
         about->icon_name = "help-about";
         about->type = SettingType::Category;
 
         auto os = std::make_shared<SettingItem>();
         os->id = "about_os";
         os->title = "Operating System";
-        os->subtitle = "Arch Linux (Rolling Release, x86_64)";
         os->icon_name = "distributor-logo-archlinux";
         os->type = SettingType::Info;
         about->children.push_back(os);
@@ -452,7 +418,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto de = std::make_shared<SettingItem>();
         de->id = "about_de";
         de->title = "Desktop Environment";
-        de->subtitle = "Miqu Desktop Environment 1.0";
         de->icon_name = "preferences-system";
         de->type = SettingType::Info;
         about->children.push_back(de);
@@ -460,7 +425,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto wm = std::make_shared<SettingItem>();
         wm->id = "about_wm";
         wm->title = "Window Manager & Compositor";
-        wm->subtitle = "miquland (Wayland / wlroots 0.18 Native)";
         wm->icon_name = "preferences-system-windows";
         wm->type = SettingType::Info;
         about->children.push_back(wm);
@@ -468,7 +432,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto tk = std::make_shared<SettingItem>();
         tk->id = "about_toolkit";
         tk->title = "UI Framework";
-        tk->subtitle = "miqutoolkit 1.0 (Cairo / Pango C++20)";
         tk->icon_name = "applications-development";
         tk->type = SettingType::Info;
         about->children.push_back(tk);
@@ -476,7 +439,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto kernel = std::make_shared<SettingItem>();
         kernel->id = "about_kernel";
         kernel->title = "Linux Kernel";
-        kernel->subtitle = "Linux 6.12.1-arch1-1 (Standard SMP)";
         kernel->icon_name = "computer";
         kernel->type = SettingType::Info;
         about->children.push_back(kernel);
@@ -484,7 +446,6 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         auto cpu = std::make_shared<SettingItem>();
         cpu->id = "about_cpu";
         cpu->title = "Processor & Memory";
-        cpu->subtitle = "x86_64 Multi-Core Processor, 16 GB RAM";
         cpu->icon_name = "cpu";
         cpu->type = SettingType::Info;
         about->children.push_back(cpu);

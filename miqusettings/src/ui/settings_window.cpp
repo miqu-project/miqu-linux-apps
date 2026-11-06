@@ -1,6 +1,8 @@
 #include "ui/settings_window.hpp"
 #include "config/settings_config.hpp"
 #include "modules/airplane/airplane_backend.hpp"
+#include "modules/applications/apps_backend.hpp"
+#include "modules/monitors/monitor_backend.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
 #include <xkbcommon/xkbcommon-keysyms.h>
@@ -459,6 +461,7 @@ void SettingsWindow::navigate_to(const std::shared_ptr<SettingItem>& node, bool 
     }
 
     m_current_node = node;
+    ensure_children_loaded(m_current_node);
     if (is_different_node) {
         m_selected_index = 0;
     }
@@ -533,7 +536,10 @@ void SettingsWindow::open_selected() {
         item->id.rfind("app_", 0) == 0 || item->id.rfind("defrole_", 0) == 0 ||
         item->id.rfind("mon_", 0) == 0 ||
         item->id == "disp_bright" || item->id == "disp_gamma" || item->id == "disp_night" ||
-        item->id == "disp_lock" || item->id == "disp_timeout") {
+        item->id == "disp_lock" || item->id == "disp_timeout" ||
+        item->id == "wm_layout" || item->id == "wm_gaps" || item->id == "wm_borders" ||
+        item->id == "wm_effects" || item->id == "wm_control" ||
+        item->id == "input_keyboards" || item->id == "input_repeat" || item->id == "input_pointers") {
         enter_fullscreen_detail();
         return;
     }
@@ -676,8 +682,6 @@ void SettingsWindow::populate_current_column() {
     for (const auto& item : m_filtered_items) {
         auto view = ListItemViewBuilder::create()
             ->title(item->title)
-            ->subtitle(item->subtitle)
-            ->trailingText(item->get_status_text())
             ->iconSource(item->icon_name.empty() ? "preferences-system" : item->icon_name)
             ->iconSize(24)
             ->build();
@@ -717,7 +721,55 @@ std::shared_ptr<SettingItem> SettingsWindow::get_selected_item() const {
 
 void SettingsWindow::update_preview_and_status() {
     auto item = get_selected_item();
+    if (item && item->type == SettingType::Category) {
+        ensure_children_loaded(item);
+    }
     m_detail_view->update_item(item, m_fullscreen_detail);
+}
+
+void SettingsWindow::ensure_children_loaded(const std::shared_ptr<SettingItem>& node) {
+    if (!node) return;
+
+    if (node->id == "monitors") {
+        if (node->children.empty()) {
+            auto connected = MonitorBackend::get_monitors();
+            for (const auto& m : connected) {
+                auto mon_item = std::make_shared<SettingItem>();
+                mon_item->id = "mon_" + m.name;
+                mon_item->title = m.name;
+                mon_item->icon_name = "video-display";
+                mon_item->type = SettingType::Info;
+                mon_item->parent = node;
+                node->children.push_back(mon_item);
+            }
+        }
+    } else if (node->id == "apps_list") {
+        if (node->children.empty()) {
+            auto installed_apps = AppsBackend::get_installed_apps();
+            for (const auto& app : installed_apps) {
+                auto app_item = std::make_shared<SettingItem>();
+                app_item->id = "app_" + app.id;
+                app_item->title = app.name;
+                app_item->icon_name = app.icon_name;
+                app_item->type = SettingType::Info;
+                app_item->parent = node;
+                node->children.push_back(app_item);
+            }
+        }
+    } else if (node->id == "default_apps") {
+        if (node->children.empty()) {
+            auto roles = AppsBackend::get_default_roles();
+            for (const auto& role : roles) {
+                auto role_item = std::make_shared<SettingItem>();
+                role_item->id = "defrole_" + role.role_id;
+                role_item->title = role.title;
+                role_item->icon_name = role.icon_name;
+                role_item->type = SettingType::Info;
+                role_item->parent = node;
+                node->children.push_back(role_item);
+            }
+        }
+    }
 }
 
 void SettingsWindow::update_breadcrumb() {

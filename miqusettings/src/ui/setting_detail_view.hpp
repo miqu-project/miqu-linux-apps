@@ -52,6 +52,14 @@ private:
     void show_gamma_detail(bool is_fullscreen);
     void show_screen_lock_detail(bool is_fullscreen);
     void show_timeout_detail(bool is_fullscreen);
+    void show_wm_layout_detail(bool is_fullscreen);
+    void show_wm_gaps_detail(bool is_fullscreen);
+    void show_wm_borders_detail(bool is_fullscreen);
+    void show_wm_effects_detail(bool is_fullscreen);
+    void show_wm_control_detail(bool is_fullscreen);
+    void show_keyboard_devices_detail(bool is_fullscreen);
+    void show_keyboard_repeat_detail(bool is_fullscreen);
+    void show_pointers_detail(bool is_fullscreen);
 
     std::shared_ptr<SettingItem> m_current_item;
     std::shared_ptr<View> m_current_content;

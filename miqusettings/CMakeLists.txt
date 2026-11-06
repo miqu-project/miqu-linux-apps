@@ -36,6 +36,16 @@ add_executable(miqusettings
     src/modules/display/night_light_detail_view.cpp
     src/modules/display/screen_lock_detail_view.cpp
     src/modules/display/timeout_detail_view.cpp
+    src/modules/windowmanager/wm_backend.cpp
+    src/modules/windowmanager/wm_layout_detail_view.cpp
+    src/modules/windowmanager/wm_gaps_detail_view.cpp
+    src/modules/windowmanager/wm_borders_detail_view.cpp
+    src/modules/windowmanager/wm_effects_detail_view.cpp
+    src/modules/windowmanager/wm_control_detail_view.cpp
+    src/modules/keyboard/keyboard_backend.cpp
+    src/modules/keyboard/keyboard_devices_detail_view.cpp
+    src/modules/keyboard/keyboard_repeat_detail_view.cpp
+    src/modules/keyboard/pointers_detail_view.cpp
     src/ui/setting_detail_view.cpp
     src/ui/settings_window.cpp
 )

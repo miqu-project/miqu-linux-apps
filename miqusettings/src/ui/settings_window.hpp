@@ -55,6 +55,7 @@ private:
     void update_preview_and_status();
     void update_breadcrumb();
     void apply_filter();
+    void ensure_children_loaded(const std::shared_ptr<SettingItem>& node);
 
     std::shared_ptr<AppEngine> m_engine;
     std::shared_ptr<Window> m_window;

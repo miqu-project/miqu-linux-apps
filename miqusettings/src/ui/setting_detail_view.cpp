@@ -10,6 +10,14 @@
 #include "modules/display/night_light_detail_view.hpp"
 #include "modules/display/screen_lock_detail_view.hpp"
 #include "modules/display/timeout_detail_view.hpp"
+#include "modules/windowmanager/wm_layout_detail_view.hpp"
+#include "modules/windowmanager/wm_gaps_detail_view.hpp"
+#include "modules/windowmanager/wm_borders_detail_view.hpp"
+#include "modules/windowmanager/wm_effects_detail_view.hpp"
+#include "modules/windowmanager/wm_control_detail_view.hpp"
+#include "modules/keyboard/keyboard_devices_detail_view.hpp"
+#include "modules/keyboard/keyboard_repeat_detail_view.hpp"
+#include "modules/keyboard/pointers_detail_view.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/linear_layout.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
@@ -97,6 +105,46 @@ void SettingDetailView::update_item(const std::shared_ptr<SettingItem>& item, bo
         return;
     }
 
+    if (item->id == "wm_layout") {
+        show_wm_layout_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "wm_gaps") {
+        show_wm_gaps_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "wm_borders") {
+        show_wm_borders_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "wm_effects") {
+        show_wm_effects_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "wm_control") {
+        show_wm_control_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "input_keyboards") {
+        show_keyboard_devices_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "input_repeat") {
+        show_keyboard_repeat_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "input_pointers") {
+        show_pointers_detail(is_fullscreen);
+        return;
+    }
+
     if (item->type == SettingType::Category) {
         show_category_preview(item);
     } else {
@@ -159,8 +207,6 @@ void SettingDetailView::show_category_preview(const std::shared_ptr<SettingItem>
     for (const auto& ch : children) {
         auto item_view = ListItemViewBuilder::create()
             ->title(ch->title)
-            ->subtitle(ch->subtitle)
-            ->trailingText(ch->get_status_text())
             ->iconSource(ch->icon_name.empty() ? "preferences-system" : ch->icon_name)
             ->iconSize(24)
             ->build();
@@ -594,6 +640,62 @@ void SettingDetailView::show_timeout_detail(bool is_fullscreen) {
     });
     m_current_content = t_view;
     add_view(t_view);
+}
+
+void SettingDetailView::show_wm_layout_detail(bool is_fullscreen) {
+    auto v = std::make_shared<WmLayoutDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_wm_gaps_detail(bool is_fullscreen) {
+    auto v = std::make_shared<WmGapsDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_wm_borders_detail(bool is_fullscreen) {
+    auto v = std::make_shared<WmBordersDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_wm_effects_detail(bool is_fullscreen) {
+    auto v = std::make_shared<WmEffectsDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_wm_control_detail(bool is_fullscreen) {
+    auto v = std::make_shared<WmControlDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_keyboard_devices_detail(bool is_fullscreen) {
+    auto v = std::make_shared<KeyboardDevicesDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_keyboard_repeat_detail(bool is_fullscreen) {
+    auto v = std::make_shared<KeyboardRepeatDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_pointers_detail(bool is_fullscreen) {
+    auto v = std::make_shared<PointersDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
 }
 
 } // namespace miqu
