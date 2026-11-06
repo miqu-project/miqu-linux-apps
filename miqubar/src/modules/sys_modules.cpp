@@ -1,5 +1,6 @@
 #include "sys_modules.hpp"
 #include "../config/bar_config.hpp"
+#include "../backend/audio_backend.hpp"
 #include "miqutoolkit/core/config.hpp"
 #include "miqutoolkit/system/window_manager.hpp"
 #include "miqutoolkit/system/app_manager.hpp"
@@ -268,6 +269,41 @@ void BluetoothModuleView::update_metrics() {
     m_connected = false;
     m_connected_device.clear();
 
+    // 1. Fast sysfs rfkill check (0ms, 0 processes)
+    bool found_rfkill = false;
+    bool is_rfkill_blocked = false;
+
+    std::error_code ec;
+    if (fs::exists("/sys/class/rfkill", ec)) {
+        for (const auto& entry : fs::directory_iterator("/sys/class/rfkill", ec)) {
+            fs::path type_p = entry.path() / "type";
+            fs::path state_p = entry.path() / "state";
+            if (fs::exists(type_p, ec) && fs::exists(state_p, ec)) {
+                std::ifstream type_f(type_p);
+                std::string t_str;
+                if (type_f >> t_str && t_str == "bluetooth") {
+                    found_rfkill = true;
+                    std::ifstream state_f(state_p);
+                    int st = 1;
+                    if (state_f >> st) {
+                        if (st == 0) {
+                            is_rfkill_blocked = true;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    if (found_rfkill && is_rfkill_blocked) {
+        set_icon("bluetooth-disabled");
+        set_tooltip("Bluetooth: Off");
+        request_redraw();
+        return;
+    }
+
+    // 2. Query state via bluetoothctl show
     FILE* fp = popen("bluetoothctl show 2>/dev/null", "r");
     if (fp) {
         char buf[256];
@@ -331,25 +367,23 @@ VolumeModuleView::VolumeModuleView(std::function<void()> on_open_sound)
     set_layout_params(miqu::LayoutParams(item_h, item_h));
     set_text(""); // icon-only
     set_on_click_listener(m_on_open_sound);
+
+    // Register real-time change listener with AudioBackend
+    AudioBackend::get().add_listener(this, [this](const AudioSinkInfo& info) {
+        m_volume = info.volume;
+        m_muted = info.muted;
+        update_icon_and_tooltip();
+        request_redraw();
+    });
+
     update_metrics();
 }
 
-void VolumeModuleView::update_metrics() {
-    FILE* fp = popen("wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null", "r");
-    if (fp) {
-        char buf[64];
-        if (fgets(buf, sizeof(buf), fp)) {
-            std::string str(buf);
-            size_t pos = str.find("Volume:");
-            if (pos != std::string::npos) {
-                float v = std::stof(str.substr(pos + 7));
-                m_volume = static_cast<int>(std::round(v * 100.0f));
-            }
-            m_muted = (str.find("[MUTED]") != std::string::npos);
-        }
-        pclose(fp);
-    }
+VolumeModuleView::~VolumeModuleView() {
+    AudioBackend::get().remove_listener(this);
+}
 
+void VolumeModuleView::update_icon_and_tooltip() {
     if (m_muted || m_volume == 0) {
         set_icon("audio-volume-muted");
     } else if (m_volume < 33) {
@@ -361,13 +395,19 @@ void VolumeModuleView::update_metrics() {
     }
 
     set_tooltip(m_muted ? "Volume: Muted" : ("Volume: " + std::to_string(m_volume) + "%"));
+}
+
+void VolumeModuleView::update_metrics() {
+    auto info = AudioBackend::get().get_sink_info();
+    m_volume = info.volume;
+    m_muted = info.muted;
+    update_icon_and_tooltip();
     request_redraw();
 }
 
 bool VolumeModuleView::on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) {
     if (pressed && button == miqu::MouseButton::Middle) {
-        std::system("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null || pactl set-sink-mute @DEFAULT_SINK@ toggle 2>/dev/null");
-        update_metrics();
+        AudioBackend::get().toggle_mute();
         return true;
     }
     return miqu::Button::on_mouse_button(lx, ly, button, pressed, bounds);

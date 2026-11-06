@@ -1,4 +1,5 @@
 #include "modules/bluetooth/bluetooth_backend.hpp"
+#include <sdbus-c++/sdbus-c++.h>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -6,10 +7,45 @@
 #include <sstream>
 #include <algorithm>
 #include <unordered_set>
+#include <mutex>
+#include <iostream>
 
 namespace miqu {
 
 namespace fs = std::filesystem;
+
+static std::mutex s_dbus_mutex;
+static std::unique_ptr<sdbus::IConnection> s_dbus_conn;
+static std::unique_ptr<sdbus::IProxy> s_adapter_proxy;
+static std::string s_adapter_path = "/org/bluez/hci0";
+
+static void ensure_adapter_proxy() {
+    std::lock_guard<std::mutex> lock(s_dbus_mutex);
+    if (s_adapter_proxy) return;
+    try {
+        if (!s_dbus_conn) {
+            s_dbus_conn = sdbus::createSystemBusConnection();
+            s_dbus_conn->enterEventLoopAsync();
+        }
+        try {
+            auto mgr = sdbus::createProxy(*s_dbus_conn, sdbus::ServiceName{"org.bluez"}, sdbus::ObjectPath{"/"});
+            std::map<sdbus::ObjectPath, std::map<std::string, std::map<std::string, sdbus::Variant>>> objects;
+            mgr->callMethod("GetManagedObjects")
+               .onInterface("org.freedesktop.DBus.ObjectManager")
+               .storeResultsTo(objects);
+            for (const auto& [path, ifaces] : objects) {
+                if (ifaces.find("org.bluez.Adapter1") != ifaces.end()) {
+                    s_adapter_path = path;
+                    break;
+                }
+            }
+        } catch (...) {}
+
+        s_adapter_proxy = sdbus::createProxy(*s_dbus_conn, sdbus::ServiceName{"org.bluez"}, sdbus::ObjectPath{s_adapter_path});
+    } catch (const std::exception& e) {
+        std::cerr << "[BluetoothBackend] DBus connection failed: " << e.what() << "\n";
+    }
+}
 
 struct PipeCloser {
     void operator()(FILE* fp) const {
@@ -55,6 +91,27 @@ BluetoothAdapterInfo BluetoothBackend::get_adapter_info() {
         info.soft_blocked = true;
     }
 
+    ensure_adapter_proxy();
+    if (s_adapter_proxy) {
+        try {
+            info.available = true;
+            info.powered = s_adapter_proxy->getProperty("Powered").onInterface("org.bluez.Adapter1").get<bool>();
+            info.discoverable = s_adapter_proxy->getProperty("Discoverable").onInterface("org.bluez.Adapter1").get<bool>();
+            info.discovering = s_adapter_proxy->getProperty("Discovering").onInterface("org.bluez.Adapter1").get<bool>();
+            info.mac = s_adapter_proxy->getProperty("Address").onInterface("org.bluez.Adapter1").get<std::string>();
+            try {
+                info.name = s_adapter_proxy->getProperty("Alias").onInterface("org.bluez.Adapter1").get<std::string>();
+            } catch (...) {
+                try {
+                    info.name = s_adapter_proxy->getProperty("Name").onInterface("org.bluez.Adapter1").get<std::string>();
+                } catch (...) {
+                    info.name = "Bluetooth Adapter";
+                }
+            }
+            return info;
+        } catch (...) {}
+    }
+
     std::string out = run_cmd("bluetoothctl show 2>/dev/null");
     if (out.empty() || out.find("No default controller") != std::string::npos) {
         // If rfkill exists, controller hardware exists but might be uninitialized
@@ -87,6 +144,19 @@ BluetoothAdapterInfo BluetoothBackend::get_adapter_info() {
 
 bool BluetoothBackend::set_powered(bool enabled) {
     if (enabled) {
+        run_cmd("rfkill unblock bluetooth 2>/dev/null");
+    }
+    ensure_adapter_proxy();
+    if (s_adapter_proxy) {
+        try {
+            s_adapter_proxy->setProperty("Powered").onInterface("org.bluez.Adapter1").toValue(enabled);
+            return true;
+        } catch (const sdbus::Error& e) {
+            std::cerr << "[BluetoothBackend] set_powered via DBus failed: " << e.getMessage() << "\n";
+        }
+    }
+
+    if (enabled) {
         run_cmd_async("rfkill unblock bluetooth && bluetoothctl power on");
     } else {
         run_cmd_async("bluetoothctl power off");
@@ -95,25 +165,62 @@ bool BluetoothBackend::set_powered(bool enabled) {
 }
 
 bool BluetoothBackend::set_discoverable(bool enabled) {
+    ensure_adapter_proxy();
+    if (s_adapter_proxy) {
+        try {
+            s_adapter_proxy->setProperty("Discoverable").onInterface("org.bluez.Adapter1").toValue(enabled);
+            return true;
+        } catch (const sdbus::Error& e) {
+            std::cerr << "[BluetoothBackend] set_discoverable via DBus failed: " << e.getMessage() << "\n";
+        }
+    }
+
     std::string cmd = enabled ? "bluetoothctl discoverable on" : "bluetoothctl discoverable off";
     run_cmd_async(cmd);
     return true;
 }
 
 bool BluetoothBackend::start_scan() {
-    // Terminate any previous scanning process if tracked
-    run_cmd("if [ -f /tmp/miqusettings_bt_scan.pid ]; then kill -15 $(cat /tmp/miqusettings_bt_scan.pid) 2>/dev/null; rm -f /tmp/miqusettings_bt_scan.pid; fi");
-    // BlueZ cancels discovery if the client drops EOF or exits. We run with a 60s timeout in background and track its PID.
-    run_cmd_async("bluetoothctl --timeout 60 scan on >/dev/null 2>&1 & echo $! > /tmp/miqusettings_bt_scan.pid");
+    ensure_adapter_proxy();
+    if (s_adapter_proxy) {
+        try {
+            s_adapter_proxy->callMethod("StartDiscovery").onInterface("org.bluez.Adapter1");
+            return true;
+        } catch (const sdbus::Error& e) {
+            if (std::string(e.getName()).find("InProgress") != std::string::npos) {
+                return true; // Already discovering
+            }
+            std::cerr << "[BluetoothBackend] StartDiscovery via DBus failed: " << e.getMessage() << "\n";
+        }
+    }
+
+    run_cmd_async("bluetoothctl scan on");
     return true;
 }
 
 bool BluetoothBackend::stop_scan() {
-    run_cmd("if [ -f /tmp/miqusettings_bt_scan.pid ]; then kill -15 $(cat /tmp/miqusettings_bt_scan.pid) 2>/dev/null; rm -f /tmp/miqusettings_bt_scan.pid; fi; bluetoothctl scan off 2>/dev/null");
+    ensure_adapter_proxy();
+    if (s_adapter_proxy) {
+        try {
+            s_adapter_proxy->callMethod("StopDiscovery").onInterface("org.bluez.Adapter1");
+            return true;
+        } catch (const sdbus::Error& e) {
+            // Harmless if not scanning or already stopped
+        }
+    }
+
+    run_cmd_async("bluetoothctl scan off");
     return true;
 }
 
 bool BluetoothBackend::is_scanning() {
+    ensure_adapter_proxy();
+    if (s_adapter_proxy) {
+        try {
+            return s_adapter_proxy->getProperty("Discovering").onInterface("org.bluez.Adapter1").get<bool>();
+        } catch (...) {}
+    }
+
     std::string out = run_cmd("bluetoothctl show 2>/dev/null");
     return (out.find("Discovering: yes") != std::string::npos);
 }

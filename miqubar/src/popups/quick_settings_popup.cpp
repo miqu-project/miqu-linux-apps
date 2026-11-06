@@ -1,5 +1,6 @@
 #include "quick_settings_popup.hpp"
 #include "../config/bar_config.hpp"
+#include "../backend/audio_backend.hpp"
 #include "miqutoolkit/core/config.hpp"
 #include <algorithm>
 #include <cstdlib>
@@ -13,8 +14,33 @@ namespace miqubar {
 
 SoundControlPopupView::SoundControlPopupView(std::function<void()> on_close)
     : m_on_close(std::move(on_close)) {
-    update_audio_info();
+    auto info = AudioBackend::get().get_sink_info();
+    m_volume = info.volume;
+    m_muted = info.muted;
     setup_ui();
+
+    AudioBackend::get().add_listener(this, [this](const AudioSinkInfo& info) {
+        m_volume = info.volume;
+        m_muted = info.muted;
+        if (m_vol_label) {
+            std::string text = "Volume: " + std::to_string(m_volume) + "%";
+            if (m_muted) text += " [MUTED]";
+            m_vol_label->set_text(text);
+        }
+        if (m_vol_slider) {
+            m_vol_slider->set_progress(std::clamp(m_volume / 100.0f, 0.0f, 1.0f));
+        }
+        if (m_mute_btn) {
+            m_mute_btn->set_icon(m_muted ? "audio-volume-muted" : "audio-volume-high");
+            m_mute_btn->set_flat(!m_muted);
+            m_mute_btn->set_selected(m_muted);
+        }
+        request_redraw();
+    });
+}
+
+SoundControlPopupView::~SoundControlPopupView() {
+    AudioBackend::get().remove_listener(this);
 }
 
 void SoundControlPopupView::setup_ui() {
@@ -116,43 +142,19 @@ void SoundControlPopupView::setup_ui() {
 }
 
 void SoundControlPopupView::update_audio_info() {
-    FILE* fp = popen("wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null", "r");
-    if (fp) {
-        char buf[64];
-        if (fgets(buf, sizeof(buf), fp)) {
-            std::string str(buf);
-            size_t pos = str.find("Volume:");
-            if (pos != std::string::npos) {
-                float v = std::stof(str.substr(pos + 7));
-                m_volume = static_cast<int>(std::round(v * 100.0f));
-            }
-            m_muted = (str.find("[MUTED]") != std::string::npos);
-        }
-        pclose(fp);
-    }
+    auto info = AudioBackend::get().get_sink_info();
+    m_volume = info.volume;
+    m_muted = info.muted;
 }
 
 void SoundControlPopupView::set_volume(int pct) {
     m_volume = std::clamp(pct, 0, 100);
-    std::string cmd = "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ " + std::to_string(m_volume / 100.0f) + " 2>/dev/null";
-    std::system(cmd.c_str());
+    AudioBackend::get().set_volume(m_volume);
     request_redraw();
 }
 
 void SoundControlPopupView::toggle_mute() {
-    std::system("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null || pactl set-sink-mute @DEFAULT_SINK@ toggle 2>/dev/null");
-    update_audio_info();
-    if (m_vol_label) {
-        std::string text = "Volume: " + std::to_string(m_volume) + "%";
-        if (m_muted) text += " [MUTED]";
-        m_vol_label->set_text(text);
-    }
-    if (m_mute_btn) {
-        m_mute_btn->set_text("");
-        m_mute_btn->set_icon(m_muted ? "audio-volume-muted" : "audio-volume-high");
-        m_mute_btn->set_flat(!m_muted);
-        m_mute_btn->set_selected(m_muted);
-    }
+    AudioBackend::get().toggle_mute();
     request_redraw();
 }
 

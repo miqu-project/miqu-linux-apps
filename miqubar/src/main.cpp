@@ -1,5 +1,6 @@
 #include "core/bar_window.hpp"
 #include "config/bar_config.hpp"
+#include "backend/audio_backend.hpp"
 #include "miqutoolkit/core/app_engine.hpp"
 #include "miqutoolkit/core/config.hpp"
 #include <iostream>
@@ -62,6 +63,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Initialize AudioBackend for event-driven audio telemetry
+    miqubar::AudioBackend::get().init(s_engine.get());
+
     // 2. Load configuration (syncs from toolkit, optionally overlays user config)
     miqubar::BarConfig::get().load(config_path);
 
@@ -79,9 +83,12 @@ int main(int argc, char* argv[]) {
 
     if (!bar->init()) {
         std::cerr << "[miqubar] Failed to initialize BarWindow." << std::endl;
+        miqubar::AudioBackend::get().shutdown();
         return 1;
     }
 
     std::cout << "[miqubar] Bar active. Running event loop." << std::endl;
-    return s_engine->enter_loop();
+    int ret = s_engine->enter_loop();
+    miqubar::AudioBackend::get().shutdown();
+    return ret;
 }

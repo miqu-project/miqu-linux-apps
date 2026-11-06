@@ -13,7 +13,7 @@ namespace miqubar {
 class SoundControlPopupView : public miqu::CardView {
 public:
     explicit SoundControlPopupView(std::function<void()> on_close);
-    ~SoundControlPopupView() override = default;
+    ~SoundControlPopupView() override;
 
     miqu::Size measure_size() const override;
 

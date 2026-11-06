@@ -78,6 +78,7 @@ private:
 class VolumeModuleView : public miqu::Button {
 public:
     explicit VolumeModuleView(std::function<void()> on_open_sound);
+    ~VolumeModuleView() override;
     void update_metrics();
 
     bool on_mouse_button(int lx, int ly, miqu::MouseButton button, bool pressed, const miqu::Rect& bounds) override;
@@ -86,6 +87,8 @@ public:
     bool is_muted() const { return m_muted; }
 
 private:
+    void update_icon_and_tooltip();
+
     int m_volume = 70;
     bool m_muted = false;
     std::function<void()> m_on_open_sound;

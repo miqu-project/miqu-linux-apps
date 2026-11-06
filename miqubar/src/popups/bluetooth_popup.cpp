@@ -207,7 +207,7 @@ void BluetoothPopupView::setup_ui() {
     btn_settings->set_content_gravity(Gravity::Center);
     btn_settings->set_flat(true);
     btn_settings->set_on_click_listener([this]() {
-        std::system("miqusettings bluetooth 2>/dev/null || miqusettings 2>/dev/null &");
+        std::system("miqusettings -p bluetooth 2>/dev/null || miqusettings 2>/dev/null &");
         if (m_on_close) m_on_close();
     });
     root->add_view(btn_settings);
@@ -217,7 +217,7 @@ void BluetoothPopupView::setup_ui() {
 
 void BluetoothPopupView::set_bluetooth_powered(bool powered) {
     m_powered = powered;
-    std::string cmd = m_powered ? "bluetoothctl power on 2>/dev/null" : "bluetoothctl power off 2>/dev/null";
+    std::string cmd = m_powered ? "bluetoothctl power on >/dev/null 2>&1 &" : "bluetoothctl power off >/dev/null 2>&1 &";
     std::system(cmd.c_str());
 
     scan_devices();
