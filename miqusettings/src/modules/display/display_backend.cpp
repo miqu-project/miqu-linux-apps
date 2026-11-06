@@ -5,8 +5,13 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <cmath>
 
 namespace miqu {
+
+namespace fs = std::filesystem;
 
 struct PipeCloser {
     void operator()(FILE* fp) const {
@@ -28,6 +33,30 @@ static std::string run_cmd(const std::string& cmd) {
 
 DisplayBrightnessInfo DisplayBackend::get_brightness_info() {
     DisplayBrightnessInfo info;
+
+    // 1. Zero-fork fast path: read directly from sysfs backlight (<0.01ms)
+    std::error_code ec;
+    const fs::path sysfs_backlight("/sys/class/backlight");
+    if (fs::exists(sysfs_backlight, ec) && fs::is_directory(sysfs_backlight, ec)) {
+        for (const auto& entry : fs::directory_iterator(sysfs_backlight, ec)) {
+            fs::path cur_p = entry.path() / "brightness";
+            fs::path max_p = entry.path() / "max_brightness";
+            if (fs::exists(cur_p, ec) && fs::exists(max_p, ec)) {
+                std::ifstream cur_f(cur_p);
+                std::ifstream max_f(max_p);
+                long cur_val = 0, max_val = 0;
+                if (cur_f >> cur_val && max_f >> max_val && max_val > 0) {
+                    info.device_name = entry.path().filename().string();
+                    info.current_brightness = static_cast<int>(cur_val);
+                    info.max_brightness = static_cast<int>(max_val);
+                    info.percent = std::clamp(static_cast<int>(std::round((cur_val * 100.0) / max_val)), 1, 100);
+                    return info;
+                }
+            }
+        }
+    }
+
+    // 2. Fallback to brightnessctl -m
     std::string out = run_cmd("brightnessctl -m");
     if (out.empty()) {
         return info;
