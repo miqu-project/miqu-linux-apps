@@ -61,6 +61,7 @@ private:
     void show_keyboard_repeat_detail(bool is_fullscreen);
     void show_pointers_detail(bool is_fullscreen);
     void show_sound_detail(bool is_fullscreen);
+    void show_firewall_detail(bool is_fullscreen);
 
     std::shared_ptr<SettingItem> m_current_item;
     std::shared_ptr<View> m_current_content;

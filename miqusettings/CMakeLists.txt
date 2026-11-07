@@ -48,6 +48,8 @@ add_executable(miqusettings
     src/modules/keyboard/pointers_detail_view.cpp
     src/modules/sound/sound_backend.cpp
     src/modules/sound/sound_detail_view.cpp
+    src/modules/firewall/firewall_backend.cpp
+    src/modules/firewall/firewall_detail_view.cpp
     src/ui/setting_detail_view.cpp
     src/ui/settings_window.cpp
 )

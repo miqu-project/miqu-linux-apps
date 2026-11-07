@@ -366,12 +366,20 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         sec->type = SettingType::Category;
 
         auto fw = std::make_shared<SettingItem>();
-        fw->id = "sec_firewall";
-        fw->title = "Application Firewall (OpenSnitch)";
+        fw->id = "firewall";
+        fw->title = "Firewall";
+        fw->subtitle = "UFW status, policies, profiles and rules";
         fw->icon_name = "security-high";
-        fw->type = SettingType::Toggle;
-        fw->bool_val = true;
+        fw->type = SettingType::Info;
         sec->children.push_back(fw);
+
+        auto app_fw = std::make_shared<SettingItem>();
+        app_fw->id = "sec_firewall";
+        app_fw->title = "Application Firewall (OpenSnitch)";
+        app_fw->icon_name = "security-high";
+        app_fw->type = SettingType::Toggle;
+        app_fw->bool_val = true;
+        sec->children.push_back(app_fw);
 
         auto tor = std::make_shared<SettingItem>();
         tor->id = "sec_tor";

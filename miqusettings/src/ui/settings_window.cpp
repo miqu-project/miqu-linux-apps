@@ -441,7 +441,7 @@ void SettingsWindow::navigate_to_id(const std::string& target_id) {
     }
 
     if (target_id == "bluetooth" || target_id == "ethernet" || target_id == "wifi" ||
-        target_id == "airplane_mode" || target_id == "airplane") {
+        target_id == "airplane_mode" || target_id == "airplane" || target_id == "firewall") {
         enter_fullscreen_detail();
     }
 }
@@ -539,7 +539,8 @@ void SettingsWindow::open_selected() {
         item->id == "disp_lock" || item->id == "disp_timeout" ||
         item->id == "wm_layout" || item->id == "wm_gaps" || item->id == "wm_borders" ||
         item->id == "wm_effects" || item->id == "wm_control" ||
-        item->id == "input_keyboards" || item->id == "input_repeat" || item->id == "input_pointers") {
+        item->id == "input_keyboards" || item->id == "input_repeat" || item->id == "input_pointers" ||
+        item->id == "firewall") {
         enter_fullscreen_detail();
         return;
     }

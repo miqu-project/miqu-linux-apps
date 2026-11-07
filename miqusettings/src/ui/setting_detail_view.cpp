@@ -19,6 +19,7 @@
 #include "modules/keyboard/keyboard_repeat_detail_view.hpp"
 #include "modules/keyboard/pointers_detail_view.hpp"
 #include "modules/sound/sound_detail_view.hpp"
+#include "modules/firewall/firewall_detail_view.hpp"
 #include <miqutoolkit/core/config.hpp>
 #include <miqutoolkit/view/linear_layout.hpp>
 #include <miqutoolkit/view/list_item_view.hpp>
@@ -148,6 +149,11 @@ void SettingDetailView::update_item(const std::shared_ptr<SettingItem>& item, bo
 
     if (item->id == "sound" || item->id.rfind("sound_", 0) == 0) {
         show_sound_detail(is_fullscreen);
+        return;
+    }
+
+    if (item->id == "firewall") {
+        show_firewall_detail(is_fullscreen);
         return;
     }
 
@@ -707,6 +713,16 @@ void SettingDetailView::show_pointers_detail(bool is_fullscreen) {
 void SettingDetailView::show_sound_detail(bool is_fullscreen) {
     auto v = std::make_shared<SoundDetailView>();
     v->set_is_fullscreen(is_fullscreen);
+    m_current_content = v;
+    add_view(v);
+}
+
+void SettingDetailView::show_firewall_detail(bool is_fullscreen) {
+    auto v = std::make_shared<FirewallDetailView>();
+    v->set_is_fullscreen(is_fullscreen);
+    v->set_on_request_fullscreen([this]() {
+        if (m_on_request_fullscreen) m_on_request_fullscreen();
+    });
     m_current_content = v;
     add_view(v);
 }
