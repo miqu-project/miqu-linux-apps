@@ -235,6 +235,15 @@ int main(int argc, char* argv[]) {
                 manager.sync_outputs();
             });
             return "OK";
+        } else if (cmd.rfind("GET", 0) == 0) {
+            std::string output_name = "*";
+            if (cmd.length() > 3) {
+                std::istringstream iss(cmd.substr(3));
+                iss >> output_name;
+                if (output_name.empty()) output_name = "*";
+            }
+            OutputConfig cfg = manager.get_current_config(output_name);
+            return "OK " + mode_to_string(cfg.mode) + " " + color_to_hex(cfg.bg_color) + " " + cfg.image_path;
         }
         return "ERR Unknown command";
     });

@@ -27,6 +27,7 @@ public:
     void init(miqu::AppEngine* engine);
     void sync_outputs();
     void update_wallpaper(const std::string& output_name, OutputConfig config);
+    OutputConfig get_current_config(const std::string& output_name = "*") const;
 
     static miqu::FitMode parse_mode(const std::string& mode_str);
 

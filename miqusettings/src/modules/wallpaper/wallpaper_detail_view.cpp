@@ -191,7 +191,6 @@ private:
 // WallpaperDetailView Implementation
 // =============================================================================
 WallpaperDetailView::WallpaperDetailView() {
-    init_from_current_system();
     m_pending_wallpaper_path = s_cached_wallpaper_path;
     m_pending_fit_mode = s_cached_fit_mode;
     set_layout_params(LayoutParams(
@@ -200,6 +199,7 @@ WallpaperDetailView::WallpaperDetailView() {
     ));
     query_display_aspect();
     setup_ui();
+    init_from_miqubg();
 }
 
 WallpaperDetailView::~WallpaperDetailView() {
@@ -214,34 +214,98 @@ FitMode WallpaperDetailView::get_cached_fit_mode() {
     return s_cached_fit_mode;
 }
 
-void WallpaperDetailView::init_from_current_system() {
-    static bool initialized = false;
-    if (initialized) return;
-    initialized = true;
+void WallpaperDetailView::init_from_miqubg() {
+    auto alive = m_alive;
+    std::thread([this, alive]() {
+        const char* xdg_runtime = getenv("XDG_RUNTIME_DIR");
+        std::string runtime_dir = xdg_runtime ? xdg_runtime : ("/run/user/" + std::to_string(getuid()));
+        const char* wayland_display = getenv("WAYLAND_DISPLAY");
+        std::string display_name = wayland_display ? wayland_display : "wayland-0";
+        std::string sock_path = runtime_dir + "/miqubg-" + display_name + ".sock";
 
-    std::string wp_file = FsUtils::expand_user_path("~/.config/miqutheme/current/wallpaper");
-    if (fs::exists(wp_file)) {
-        std::ifstream f(wp_file);
-        std::string line;
-        if (std::getline(f, line)) {
-            line = StringUtils::trim(line, " \t\r\n");
-            if (!line.empty() && fs::exists(line)) {
-                s_cached_wallpaper_path = line;
+        int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd < 0) return;
+
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 200000;
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+        struct sockaddr_un addr;
+        std::memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        std::strncpy(addr.sun_path, sock_path.c_str(), sizeof(addr.sun_path) - 1);
+
+        if (connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) != 0) {
+            close(fd);
+            return;
+        }
+
+        std::string req = "GET\n";
+        write(fd, req.c_str(), req.length());
+
+        char buf[1024];
+        std::memset(buf, 0, sizeof(buf));
+        ssize_t n = read(fd, buf, sizeof(buf) - 1);
+        close(fd);
+
+        if (n <= 0) return;
+        std::string resp(buf, n);
+        while (!resp.empty() && (resp.back() == '\n' || resp.back() == '\r')) {
+            resp.pop_back();
+        }
+
+        if (resp.rfind("OK ", 0) != 0) return;
+
+        std::istringstream iss(resp.substr(3));
+        std::string mode_str, color_hex, image_path;
+        if (iss >> mode_str >> color_hex) {
+            std::getline(iss, image_path);
+            size_t first = image_path.find_first_not_of(" \t");
+            if (first != std::string::npos) {
+                image_path = image_path.substr(first);
+            } else {
+                image_path = "";
+            }
+
+            FitMode fit = miqubg_string_to_fit_mode(mode_str);
+
+            if (AppEngine::instance()) {
+                AppEngine::instance()->post([this, alive, image_path, fit]() {
+                    if (!*alive) return;
+                    s_cached_wallpaper_path = image_path;
+                    s_cached_fit_mode = fit;
+                    m_pending_wallpaper_path = image_path;
+                    m_pending_fit_mode = fit;
+
+                    if (m_canvas) {
+                        m_canvas->get_image_view()->set_fit_mode(fit);
+                        if (!image_path.empty()) {
+                            m_canvas->get_image_view()->set_image_resource(image_path);
+                        }
+                        m_canvas->request_redraw();
+                    }
+                    if (m_fit_spinner) {
+                        int idx = 0;
+                        switch (fit) {
+                            case FitMode::Cover:   idx = 0; break;
+                            case FitMode::Contain: idx = 1; break;
+                            case FitMode::Fill:    idx = 2; break;
+                            case FitMode::Center:  idx = 3; break;
+                            case FitMode::Tile:    idx = 4; break;
+                        }
+                        m_fit_spinner->set_selected_index(idx);
+                    }
+                    update_status_text();
+                    update_apply_button_state();
+                    if (get_window()) {
+                        get_window()->schedule_redraw();
+                    }
+                });
             }
         }
-    }
-
-    std::string fit_file = FsUtils::expand_user_path("~/.config/miqutheme/current/wallpaper_fit");
-    if (fs::exists(fit_file)) {
-        std::ifstream f(fit_file);
-        std::string line;
-        if (std::getline(f, line)) {
-            line = StringUtils::trim(line, " \t\r\n");
-            if (!line.empty()) {
-                s_cached_fit_mode = miqubg_string_to_fit_mode(line);
-            }
-        }
-    }
+    }).detach();
 }
 
 std::string WallpaperDetailView::fit_mode_to_miqubg_string(FitMode mode) {

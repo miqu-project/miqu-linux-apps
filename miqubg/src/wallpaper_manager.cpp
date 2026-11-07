@@ -37,6 +37,13 @@ OutputConfig WallpaperManager::get_config_for_output(const std::string& name) co
     return cfg;
 }
 
+OutputConfig WallpaperManager::get_current_config(const std::string& output_name) const {
+    if (output_name.empty() || output_name == "*") {
+        return m_default_config;
+    }
+    return get_config_for_output(output_name);
+}
+
 static std::shared_ptr<miqu::Window> create_wallpaper_window(const miqu::OutputInfo& out, const OutputConfig& cfg) {
     auto imageView = miqu::ImageViewBuilder::create()
         ->source(cfg.image_path)

@@ -30,7 +30,7 @@ public:
     static std::string get_cached_wallpaper_path();
     static FitMode get_cached_fit_mode();
     static void apply_to_miqubg(const std::string& path, FitMode mode);
-    static void init_from_current_system();
+    void init_from_miqubg();
     static std::string fit_mode_to_miqubg_string(FitMode mode);
     static FitMode miqubg_string_to_fit_mode(const std::string& str);
 
