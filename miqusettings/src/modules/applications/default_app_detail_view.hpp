@@ -19,12 +19,6 @@ public:
     ~DefaultAppDetailView() override = default;
 
     void set_role_id(const std::string& role_id);
-    void set_is_fullscreen(bool fullscreen);
-    bool is_fullscreen() const { return m_is_fullscreen; }
-
-    void set_on_request_fullscreen(std::function<void()> cb) {
-        m_on_request_fullscreen = std::move(cb);
-    }
 
     void set_on_default_changed(std::function<void(const std::string&, const std::string&)> cb) {
         m_on_default_changed = std::move(cb);
@@ -43,13 +37,10 @@ private:
 
     std::string m_role_id;
     DefaultRoleSpec m_role;
-    bool m_is_fullscreen = false;
-
-    std::shared_ptr<ScrollView> m_scroll;
+std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
 
-    std::function<void()> m_on_request_fullscreen;
-    std::function<void(const std::string&, const std::string&)> m_on_default_changed;
+std::function<void(const std::string&, const std::string&)> m_on_default_changed;
 };
 
 } // namespace miqu

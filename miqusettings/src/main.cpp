@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
             std::cout << "Usage: miqusettings [OPTIONS] [PAGE_ID]\n\n"
-                      << "Settings - Modern Miller-columns centralized system settings built with miqutoolkit.\n\n"
+                      << "Settings - Modern centralized system settings built with miqutoolkit.\n\n"
                       << "Options:\n"
                       << "  -h, --help       Show this help message and exit\n"
                       << "  -p, --page ID    Open directly to specified page (e.g. bluetooth, wifi, sound)\n"

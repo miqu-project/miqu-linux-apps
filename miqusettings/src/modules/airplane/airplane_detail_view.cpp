@@ -14,11 +14,10 @@ AirplaneDetailView::AirplaneDetailView() {
     setup_ui();
 }
 
-AirplaneDetailView::~AirplaneDetailView() = default;
-
-void AirplaneDetailView::set_is_fullscreen(bool fullscreen) {
-    m_is_fullscreen = fullscreen;
-    setup_ui();
+AirplaneDetailView::~AirplaneDetailView() {
+    if (m_alive) {
+        *m_alive = false;
+    }
 }
 
 void AirplaneDetailView::refresh_state() {
@@ -33,7 +32,8 @@ void AirplaneDetailView::load_data() {
 void AirplaneDetailView::on_toggle_mode(bool enabled) {
     AirplaneBackend::set_enabled(enabled);
     if (auto engine = AppEngine::instance()) {
-        engine->post_delayed(600, [this]() {
+        engine->post_delayed(600, [this, alive = m_alive]() {
+            if (!*alive) return;
             load_data();
             setup_ui();
         });
@@ -55,7 +55,7 @@ void AirplaneDetailView::setup_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_content_layout->set_divider_spacing(16);
-    m_content_layout->set_padding(m_is_fullscreen ? 28 : 14);
+    m_content_layout->set_padding(28);
 
     m_content_layout->add_view(create_hero_card());
     m_content_layout->add_view(create_radios_card());
@@ -80,7 +80,7 @@ std::shared_ptr<View> AirplaneDetailView::create_hero_card() {
     row->set_divider_spacing(16);
 
     auto icon = std::make_shared<ImageView>("airplane-mode");
-    int icon_size = m_is_fullscreen ? 54 : 44;
+    int icon_size = 54;
     icon->set_target_size(icon_size);
     LayoutParams icon_lp;
     icon_lp.width = icon_size;
@@ -98,7 +98,7 @@ std::shared_ptr<View> AirplaneDetailView::create_hero_card() {
     auto title = TextViewBuilder::create()
         ->text("Airplane Mode")
         ->bold(true)
-        ->textSize(m_is_fullscreen ? 20 : 17)
+        ->textSize(20)
         ->textColor(config->colors.on_surface)
         ->build();
     col->add_view(title);
@@ -127,23 +127,7 @@ std::shared_ptr<View> AirplaneDetailView::create_hero_card() {
     sw->set_layout_params(sw_lp);
     row->add_view(sw);
 
-    if (!m_is_fullscreen && m_on_request_fullscreen) {
-        auto btn_expand = ButtonBuilder::create()
-            ->text("⛶")
-            ->textSize(13)
-            ->textColor(config->colors.primary)
-            ->backgroundColor(config->colors.surface_variant)
-            ->cornerRadius(6)
-            ->onClick([this]() { if (m_on_request_fullscreen) m_on_request_fullscreen(); })
-            ->build();
-        LayoutParams exp_lp;
-        exp_lp.width = 34;
-        exp_lp.height = 34;
-        exp_lp.gravity = Gravity::CenterVertical;
-        btn_expand->set_layout_params(exp_lp);
-        row->add_view(btn_expand);
-    }
-
+    
     card->add_view(row);
     return card;
 }

@@ -11,8 +11,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <functional>
-
 namespace miqu {
 
 class ScreenLockDetailView : public FrameLayout {
@@ -20,12 +18,6 @@ public:
     ScreenLockDetailView();
     ~ScreenLockDetailView() override = default;
 
-    void set_is_fullscreen(bool fullscreen);
-    bool is_fullscreen() const { return m_is_fullscreen; }
-
-    void set_on_request_fullscreen(std::function<void()> cb) {
-        m_on_request_fullscreen = std::move(cb);
-    }
 
 private:
     void setup_ui();
@@ -35,15 +27,13 @@ private:
     std::shared_ptr<View> create_appearance_card();
     std::shared_ptr<View> create_actions_card();
 
-    bool m_is_fullscreen = false;
-    bool m_lock_on_sleep = true;
+bool m_lock_on_sleep = true;
     bool m_lock_on_display_off = true;
     bool m_show_power_buttons = true;
     int m_grace_period_idx = 0; // 0 = Immediately
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
-    std::function<void()> m_on_request_fullscreen;
 };
 
 } // namespace miqu

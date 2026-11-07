@@ -11,8 +11,6 @@
 #include <miqutoolkit/view/slider.hpp>
 #include <memory>
 #include <string>
-#include <functional>
-
 namespace miqu {
 
 class NightLightDetailView : public FrameLayout {
@@ -20,12 +18,6 @@ public:
     NightLightDetailView();
     ~NightLightDetailView() override = default;
 
-    void set_is_fullscreen(bool fullscreen);
-    bool is_fullscreen() const { return m_is_fullscreen; }
-
-    void set_on_request_fullscreen(std::function<void()> cb) {
-        m_on_request_fullscreen = std::move(cb);
-    }
 
 private:
     void setup_ui();
@@ -35,14 +27,12 @@ private:
     std::shared_ptr<View> create_schedule_card();
     std::shared_ptr<View> create_engine_card();
 
-    bool m_is_fullscreen = false;
-    bool m_enabled = true;
+bool m_enabled = true;
     float m_warmth = 0.60f; // corresponds to ~4500K
     int m_schedule_mode = 0; // 0 = Sunset to Sunrise, 1 = Always On
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
-    std::function<void()> m_on_request_fullscreen;
 };
 
 } // namespace miqu

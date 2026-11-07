@@ -10,8 +10,6 @@
 #include <miqutoolkit/view/button.hpp>
 #include <miqutoolkit/view/switch.hpp>
 #include <memory>
-#include <functional>
-
 namespace miqu {
 
 class AirplaneDetailView : public FrameLayout {
@@ -19,12 +17,6 @@ public:
     AirplaneDetailView();
     ~AirplaneDetailView() override;
 
-    void set_is_fullscreen(bool fullscreen);
-    bool is_fullscreen() const { return m_is_fullscreen; }
-
-    void set_on_request_fullscreen(std::function<void()> cb) {
-        m_on_request_fullscreen = std::move(cb);
-    }
 
     void refresh_state();
 
@@ -40,12 +32,11 @@ private:
 
     void on_toggle_mode(bool enabled);
 
-    bool m_is_fullscreen = false;
     AirplaneStatus m_status;
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
-    std::function<void()> m_on_request_fullscreen;
 };
 
 } // namespace miqu

@@ -12,8 +12,6 @@
 #include <memory>
 #include <vector>
 #include <string>
-#include <functional>
-
 namespace miqu {
 
 class BluetoothAgent;
@@ -24,12 +22,6 @@ public:
     BluetoothDetailView();
     ~BluetoothDetailView() override;
 
-    void set_is_fullscreen(bool fullscreen);
-    bool is_fullscreen() const { return m_is_fullscreen; }
-
-    void set_on_request_fullscreen(std::function<void()> cb) {
-        m_on_request_fullscreen = std::move(cb);
-    }
 
     void refresh_state();
 
@@ -58,10 +50,10 @@ private:
 
     bool m_powered = true;
     bool m_scanning = false;
-    bool m_is_fullscreen = false;
-    int m_scan_ticks = 0;
+int m_scan_ticks = 0;
     uint64_t m_poll_timer_id = 0;
 
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
     std::unique_ptr<BluetoothAgent> m_agent;
     std::shared_ptr<ModalOverlay> m_active_pairing_modal;
 
@@ -71,7 +63,6 @@ private:
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
-    std::function<void()> m_on_request_fullscreen;
 };
 
 } // namespace miqu
