@@ -57,6 +57,7 @@ void SettingsWindow::build_ui() {
     m_sidebar_list->set_item_height(50);
     m_sidebar_list->set_spacing(3);
     m_sidebar_list->set_item_corner_radius(std::max(4, config->metrics.corner_radius - 2));
+    m_sidebar_list->set_keyboard_navigation_enabled(false);
     m_sidebar_list->set_layout_params(LayoutParams(
         static_cast<int>(LayoutDimension::MatchParent),
         static_cast<int>(LayoutDimension::MatchParent)

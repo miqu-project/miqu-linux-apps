@@ -51,37 +51,39 @@ std::shared_ptr<SettingItem> SettingItem::create_default_tree() {
         return item;
     };
 
-    // 1. Personalization & Appearance
+    // 1. System Overview
+    add_page("about", "About System", "OS, desktop environment & system telemetry", "help-about");
+
+    // 2. Personalization & Appearance
     add_page("wallpaper", "Wallpaper", "Desktop background & display fit", "preferences-desktop-wallpaper");
     add_page("wm_borders", "Borders & Corners", "Window border width & corner radius", "preferences-desktop-theme");
     add_page("wm_effects", "Opacity & Effects", "Window transparency, blur & animations", "color-management");
 
-    // 2. Hardware & Displays
+    // 3. Hardware & Displays
     add_page("monitors", "Display & Monitors", "Resolution, refresh rate & layout", "video-display");
     add_page("disp_bright", "Brightness", "Screen backlight & night light temperature", "display-brightness");
     add_page("sound", "Sound & Audio", "Volume, outputs & PipeWire devices", "audio-volume-high");
     add_page("power", "Power & Battery", "Performance profiles & screen timeout", "battery");
 
-    // 3. Connectivity & Networks
+    // 4. Connectivity & Networks
     add_page("wifi", "Wi-Fi", "Wireless networks & connection", "network-wireless");
     add_page("bluetooth", "Bluetooth", "Device pairing & adapter status", "bluetooth");
     add_page("ethernet", "Wired (Ethernet)", "Wired network adapter & IP status", "network-wired");
 
-    // 4. Window Manager
+    // 5. Window Manager
     add_page("wm_layout", "Tiling Layout", "Window manager tiling algorithms", "preferences-system-windows");
     add_page("wm_gaps", "Window Gaps", "Inner and outer window spacing", "preferences-desktop-display");
     add_page("wm_control", "Compositor Control", "Reload or exit miquland window manager", "system-reboot");
 
-    // 5. Input Devices
+    // 6. Input Devices
     add_page("input_keyboards", "Keyboards & Layout", "Keyboard devices & active layout", "input-keyboard");
     add_page("input_repeat", "Typing & Repeat Speed", "Key repeat delay & repetition speed", "input-keyboard");
     add_page("input_pointers", "Mouse & Touchpad", "Pointer speed & natural scrolling", "input-mouse");
 
-    // 6. Applications & Security
+    // 7. Applications & Security
     add_page("apps_list", "Installed Applications", "Manage desktop applications", "system-software-install");
     add_page("default_apps", "Default Applications", "Default web browser, editor & mail client", "preferences-desktop-default-applications");
     add_page("firewall", "Security & Firewall", "UFW firewall rules, policies & status", "security-high");
-    add_page("about", "About System", "OS, desktop environment & system telemetry", "help-about");
 
     link_parent_tree(root);
     return root;
