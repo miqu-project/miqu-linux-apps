@@ -36,7 +36,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // ==============================================================================
     {
         // 1.1 Wi-Fi (Direct Leaf node with interactive UI)
-        auto wifi = SettingItem::create_leaf("net_wifi", "Wi-Fi", "Wireless networks & interfaces", "󰖩");
+        auto wifi = SettingItem::create_leaf("net_wifi", "Wi-Fi", "", "󰖩");
         wifi->has_switch = true;
         wifi->switch_val = true;
         wifi->switch_label = "Wi-Fi";
@@ -56,7 +56,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         };
 
         // 1.2 Bluetooth (Leaf)
-        auto bt = SettingItem::create_leaf("net_bluetooth", "Bluetooth", "Wireless accessories & audio", "󰂯");
+        auto bt = SettingItem::create_leaf("net_bluetooth", "Bluetooth", "", "󰂯");
         bt->has_switch = true;
         bt->switch_val = true;
         bt->switch_label = "Bluetooth";
@@ -64,7 +64,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Sony WH-1000XM4", "Connected", "󰋋", "80%"},
             {"Logitech MX Master 3S", "Paired", "󰍽", ""},
             {"Keychron K2 Pro", "Paired", "󰌌", ""},
-            {"DualSense Wireless Controller", "Pair", "󰊴", ""}
+            {"DualSense Wireless Controller", "Tap to pair", "󰊴", ""}
         };
         bt->telemetry = {
             {"Controller", "hci0 (Intel AX200 Bluetooth 5.2)"},
@@ -74,7 +74,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         };
 
         // 1.3 Ethernet (Leaf)
-        auto eth = SettingItem::create_leaf("net_ethernet", "Ethernet", "Gigabit wired network & IP configuration", "󰈀");
+        auto eth = SettingItem::create_leaf("net_ethernet", "Ethernet", "", "󰈀");
         eth->eth_profile = {
             "Wired Connection 1",
             "Connected",
@@ -93,7 +93,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         };
 
         // 1.4 Airplane Mode (Leaf)
-        auto airplane = SettingItem::create_leaf("net_airplane", "Airplane Mode", "Disable all wireless communications", "󰀝");
+        auto airplane = SettingItem::create_leaf("net_airplane", "Airplane Mode", "", "󰀝");
         airplane->has_switch = true;
         airplane->switch_val = false;
         airplane->switch_label = "Airplane Mode";
@@ -114,7 +114,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // ==============================================================================
     {
         // 2.1 Monitor 1 (Primary 4K 144Hz)
-        auto mon1 = SettingItem::create_leaf("mon_dp1", "Dell U2723QE", "DP-1 • 4K UHD • Primary", "󰍹");
+        auto mon1 = SettingItem::create_leaf("mon_dp1", "Dell U2723QE", "", "󰍹");
         mon1->is_monitor = true;
         mon1->monitor_cfg.connector = "DP-1";
         mon1->monitor_cfg.model_name = "Dell UltraSharp U2723QE";
@@ -136,7 +136,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         };
 
         // 2.2 Monitor 2 (Secondary 4K 60Hz)
-        auto mon2 = SettingItem::create_leaf("mon_hdmi1", "LG UltraFine 27", "HDMI-A-1 • 4K UHD", "󰍹");
+        auto mon2 = SettingItem::create_leaf("mon_hdmi1", "LG UltraFine 27", "", "󰍹");
         mon2->is_monitor = true;
         mon2->monitor_cfg.connector = "HDMI-A-1";
         mon2->monitor_cfg.model_name = "LG UltraFine 27UP850";
@@ -168,7 +168,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // ==============================================================================
     {
         // 3.1 Installed Apps (Category)
-        auto app_firefox = SettingItem::create_leaf("app_firefox", "Firefox Web Browser", "v132.0.2 • 248.5 MB", "󰈹");
+        auto app_firefox = SettingItem::create_leaf("app_firefox", "Firefox Web Browser", "", "󰈹");
         app_firefox->is_installed_app = true;
         app_firefox->app_info = {
             "Firefox Web Browser", "132.0.2", "Mozilla Foundation",
@@ -186,7 +186,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Core Dependencies", "gtk4, nss, libpulse, ffmpeg"}
         };
 
-        auto app_vscode = SettingItem::create_leaf("app_vscode", "Visual Studio Code", "v1.95.3 • 312.0 MB", "󰨞");
+        auto app_vscode = SettingItem::create_leaf("app_vscode", "Visual Studio Code", "", "󰨞");
         app_vscode->is_installed_app = true;
         app_vscode->app_info = {
             "Visual Studio Code", "1.95.3", "Microsoft Corporation",
@@ -204,7 +204,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Core Dependencies", "glibc, libsecret, libxkbfile"}
         };
 
-        auto app_kitty = SettingItem::create_leaf("app_kitty", "Kitty Terminal", "v0.37.0 • 45.2 MB", "󰄛");
+        auto app_kitty = SettingItem::create_leaf("app_kitty", "Kitty Terminal", "", "󰄛");
         app_kitty->is_installed_app = true;
         app_kitty->app_info = {
             "Kitty Terminal", "0.37.0", "Kovid Goyal",
@@ -222,7 +222,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Core Dependencies", "fontconfig, freetype2, harfbuzz"}
         };
 
-        auto app_gimp = SettingItem::create_leaf("app_gimp", "GIMP Image Editor", "v2.10.38 • 185.0 MB", "󰽉");
+        auto app_gimp = SettingItem::create_leaf("app_gimp", "GIMP Image Editor", "", "󰽉");
         app_gimp->is_installed_app = true;
         app_gimp->app_info = {
             "GIMP Image Editor", "2.10.38", "The GIMP Development Team",
@@ -240,7 +240,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Core Dependencies", "babl, gegl, libmypaint, poppler"}
         };
 
-        auto app_vlc = SettingItem::create_leaf("app_vlc", "VLC Media Player", "v3.0.21 • 142.8 MB", "󰕼");
+        auto app_vlc = SettingItem::create_leaf("app_vlc", "VLC Media Player", "", "󰕼");
         app_vlc->is_installed_app = true;
         app_vlc->app_info = {
             "VLC Media Player", "3.0.21", "VideoLAN Project",
@@ -258,7 +258,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Core Dependencies", "ffmpeg, live-media, lua, taglib"}
         };
 
-        auto app_miqumusic = SettingItem::create_leaf("app_miqumusic", "Miqu Music", "v1.2.0 • 18.4 MB", "󰝚");
+        auto app_miqumusic = SettingItem::create_leaf("app_miqumusic", "Miqu Music", "", "󰝚");
         app_miqumusic->is_installed_app = true;
         app_miqumusic->app_info = {
             "Miqu Music", "1.2.0", "Miqu Desktop Ecosystem",

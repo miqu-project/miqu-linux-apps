@@ -994,7 +994,35 @@ void MillerView::rebuild_preview_column() {
                 ->padding(10, 4)
                 ->cornerRadius(6)
                 ->onClick([this, item]() {
-                    item->last_action_message = "Scan completed • 4 devices nearby";
+                    bool found_new = false;
+                    bool already_has_bose = false;
+                    for (const auto& d : item->bt_devices) {
+                        if (d.name == "Bose QuietComfort 45") {
+                            already_has_bose = true;
+                            break;
+                        }
+                    }
+                    if (!already_has_bose) {
+                        item->bt_devices.push_back({"Bose QuietComfort 45", "Tap to pair", "󰋋", ""});
+                        item->last_action_message = "Scan completed • Found Bose QuietComfort 45";
+                        found_new = true;
+                    } else {
+                        bool already_has_mx = false;
+                        for (const auto& d : item->bt_devices) {
+                            if (d.name == "MX Anywhere 3S") {
+                                already_has_mx = true;
+                                break;
+                            }
+                        }
+                        if (!already_has_mx) {
+                            item->bt_devices.push_back({"MX Anywhere 3S", "Tap to pair", "󰍽", ""});
+                            item->last_action_message = "Scan completed • Found MX Anywhere 3S";
+                            found_new = true;
+                        }
+                    }
+                    if (!found_new) {
+                        item->last_action_message = "Scan completed • All nearby devices discovered";
+                    }
                     rebuild_preview_column();
                     notify_state_changed();
                 })
@@ -1057,7 +1085,8 @@ void MillerView::rebuild_preview_column() {
                 }
 
                 Color sub_color = is_conn ? config->colors.primary :
-                                  (dev.status == "Paired" ? config->colors.on_surface_variant : config->colors.on_surface_variant.with_alpha(0.7f));
+                                  (dev.status == "Tap to pair" ? config->colors.primary :
+                                  (dev.status == "Paired" ? config->colors.on_surface_variant : config->colors.on_surface_variant.with_alpha(0.7f)));
                 auto status_text = TextViewBuilder::create()
                     ->text(status_sub)
                     ->caption(true)
@@ -1093,11 +1122,14 @@ void MillerView::rebuild_preview_column() {
                     ->addView(row_content)
                     ->build();
 
-                // Clicking device: connects it (or switches connection to it)
+                // Clicking device: connects it (or pairs & connects if Tap to pair)
                 dev_row_card->set_on_click_listener([this, item, di]() {
                     for (size_t k = 0; k < item->bt_devices.size(); ++k) {
                         if (k == di) {
                             item->bt_devices[k].status = "Connected";
+                            if (item->bt_devices[k].battery.empty()) {
+                                item->bt_devices[k].battery = "85%";
+                            }
                         } else if (item->bt_devices[k].status == "Connected") {
                             item->bt_devices[k].status = "Paired";
                         }
@@ -1419,7 +1451,6 @@ void MillerView::rebuild_preview_column() {
             ->checked(item->switch_val)
             ->onCheckedChanged([this, item](bool checked) {
                 item->switch_val = checked;
-                item->subtitle = checked ? "All wireless communications disabled" : "Disable all wireless communications";
                 rebuild_current_column();
                 rebuild_preview_column();
                 notify_state_changed();
@@ -1629,9 +1660,6 @@ void MillerView::rebuild_preview_column() {
                     for (auto& m : list) {
                         if (m->is_monitor) {
                             m->monitor_cfg.is_primary = (m == item);
-                            std::string sub = m->monitor_cfg.connector + " • 4K UHD";
-                            if (m->monitor_cfg.is_primary) sub += " • Primary";
-                            m->subtitle = sub;
                         }
                     }
                     rebuild_current_column();
@@ -1669,7 +1697,6 @@ void MillerView::rebuild_preview_column() {
         auto update_mon_sub = [this, item, mon_hint]() {
             std::string sub = item->monitor_cfg.connector + " • " + item->monitor_cfg.current_resolution + " @ " + item->monitor_cfg.current_refresh_rate;
             if (item->monitor_cfg.is_primary) sub += " • Primary";
-            item->subtitle = sub;
             if (mon_hint) {
                 mon_hint->set_text(sub);
                 mon_hint->request_redraw();
@@ -2094,7 +2121,6 @@ void MillerView::rebuild_preview_column() {
             ->onClick([this, item]() {
                 item->app_info.size_data = "0 KB";
                 item->app_info.size_total = item->app_info.size_binary;
-                item->subtitle = "v" + item->app_info.version + " • " + item->app_info.size_total;
                 item->last_action_message = "Cache cleared (storage freed)";
                 rebuild_current_column();
                 rebuild_preview_column();
