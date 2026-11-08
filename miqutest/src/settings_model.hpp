@@ -191,6 +191,69 @@ struct NightLightConfig {
     float warmth = 0.65f;
 };
 
+struct TilingConfig {
+    // 1. Layout Mode
+    std::string layout_mode = "Dwindle (Dynamic BSP)";
+    std::vector<std::string> available_layout_modes = {
+        "Dwindle (Dynamic BSP)",
+        "Master / Stack (Right Stack)",
+        "Bottom Stack (bstack)",
+        "Centered Master (Flanked Stacks)",
+        "Fibonacci Spiral",
+        "Equal Columns",
+        "Grid Matrix (N × M)",
+        "Monocle (Single Focus)"
+    };
+
+    // 2. Windows Geometry & Borders
+    int inner_gap = 8;        // 0 to 32 px
+    int outer_gap = 12;       // 0 to 48 px
+    bool smart_gaps = false;  // collapse gaps when single window
+    int border_width = 1;     // 0 to 8 px
+    int corner_radius = 18;   // 0 to 32 px
+
+    // Border colors
+    std::string active_border_preset = "Yellow-Red Gradient (45°)";
+    std::vector<std::string> active_border_presets = {
+        "Yellow-Red Gradient (45°)",
+        "Cyan-Blue Gradient (45°)",
+        "Purple-Blue Gradient (135°)",
+        "Neon Emerald-Cyan (90°)",
+        "Monochrome Bright (#FFFFFF)",
+        "Primary Accent"
+    };
+    std::string active_border_value = "#ffff00 #ff0000 45deg";
+
+    std::string inactive_border_preset = "Dark Slate Gradient (45°)";
+    std::vector<std::string> inactive_border_presets = {
+        "Dark Slate Gradient (45°)",
+        "Graphite Charcoal (#2D3748)",
+        "Muted Amber-Red (45°)",
+        "Subtle Outline (20% Opacity)",
+        "Transparent (Zero Border)"
+    };
+    std::string inactive_border_value = "#334455 #222d38 45deg";
+
+    bool border_shading = false;
+    float border_shading_strength = 0.35f; // 0.0 to 1.0
+    bool resize_on_border = true;
+    int border_grab_area = 8; // px
+
+    // 3. Split Behaviour
+    float default_split_ratio = 0.50f; // 0.1 to 0.9
+    bool split_focus = true;           // Hyprland style: split focused window
+    bool smart_split = true;           // Cursor-aware split orientation
+    bool preserve_split = true;        // Preserve split ratio/orientation
+    float split_width_multiplier = 1.2f; // Aspect ratio multiplier (0.8 to 2.5)
+
+    // 4. Focus Behaviour
+    bool focus_follows_mouse = true;   // Hover to focus (sloppy focus)
+    bool click_to_focus = true;        // Window raise and focus on mouse click
+    bool warp_cursor_on_focus = true;  // Warp cursor to focused window center
+    bool focus_on_workspace_switch = true;
+    bool auto_float_fixed_size = true; // Auto-float non-resizable dialogs/popups
+};
+
 class SettingItem {
 public:
     std::string id;
@@ -252,6 +315,9 @@ public:
 
     bool is_display_nightlight = false;
     NightLightConfig nightlight_cfg;
+
+    bool is_tiling_config = false;
+    std::shared_ptr<TilingConfig> tiling_cfg = std::make_shared<TilingConfig>();
 
     static std::shared_ptr<SettingItem> create_category(
         std::string id, std::string title, std::string icon,

@@ -2448,6 +2448,639 @@ void MillerView::rebuild_preview_column() {
         return;
     }
 
+    // Dedicated Interactive UI for Tiling Layout & Window Management
+    if (item->is_tiling_config) {
+        bool is_overview = (item->id == "tile_overview");
+        bool is_mode = (item->id == "tile_mode");
+        bool is_windows = (item->id == "tile_windows");
+        bool is_split = (item->id == "tile_split");
+        bool is_focus = (item->id == "tile_focus");
+
+        bool show_layout = is_overview || is_mode;
+        bool show_windows = is_overview || is_windows;
+        bool show_split = is_overview || is_split;
+        bool show_focus = is_overview || is_focus;
+
+        auto main_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->padding(16, 16)
+            ->spacing(12)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto add_divider = [&main_card, config]() {
+            auto divider = LinearLayoutBuilder::create()
+                ->backgroundColor(config->colors.outline.with_alpha(0.12f))
+                ->build();
+            LayoutParams dlp;
+            dlp.width = static_cast<int>(LayoutDimension::MatchParent);
+            dlp.height = 1;
+            main_card->add_view(divider, dlp);
+        };
+
+        auto add_toggle_row = [&](const std::string& title, const std::string& hint, bool checked, std::function<void(bool)> on_toggle) {
+            auto row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->gravity(Gravity::CenterVertical)
+                ->spacing(12)
+                ->build();
+
+            auto box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto title_view = TextViewBuilder::create()
+                ->text(title)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            box->add_view(title_view);
+
+            if (!hint.empty()) {
+                auto hint_view = TextViewBuilder::create()
+                    ->text(hint)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                    ->build();
+                box->add_view(hint_view);
+            }
+
+            LayoutParams box_lp;
+            box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            box_lp.weight = 1.0f;
+            box_lp.gravity = Gravity::CenterVertical;
+            row->add_view(box, box_lp);
+
+            auto sw = SwitchBuilder::create()
+                ->checked(checked)
+                ->onCheckedChanged([this, on_toggle](bool val) {
+                    if (on_toggle) on_toggle(val);
+                    notify_state_changed();
+                })
+                ->build();
+            row->add_view(sw);
+            main_card->add_view(row);
+        };
+
+        auto add_slider_row = [&](const std::string& title, const std::string& hint, float initial_val, const std::string& initial_label, std::function<std::string(float)> on_change) {
+            auto header = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->gravity(Gravity::CenterVertical)
+                ->build();
+
+            auto box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto title_view = TextViewBuilder::create()
+                ->text(title)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            box->add_view(title_view);
+
+            if (!hint.empty()) {
+                auto hint_view = TextViewBuilder::create()
+                    ->text(hint)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                    ->build();
+                box->add_view(hint_view);
+            }
+
+            LayoutParams box_lp;
+            box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            box_lp.weight = 1.0f;
+            box_lp.gravity = Gravity::CenterVertical;
+            header->add_view(box, box_lp);
+
+            auto val_label = TextViewBuilder::create()
+                ->text(initial_label)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.primary)
+                ->build();
+            LayoutParams val_lp;
+            val_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            val_lp.gravity = Gravity::CenterVertical;
+            header->add_view(val_label, val_lp);
+            main_card->add_view(header);
+
+            auto slider = SliderBuilder::create()
+                ->value(initial_val)
+                ->onValueChanged([this, val_label, on_change](float val, bool user) {
+                    (void)user;
+                    if (on_change) {
+                        std::string text = on_change(val);
+                        val_label->set_text(text);
+                        val_label->request_redraw();
+                    }
+                    notify_state_changed();
+                })
+                ->build();
+            LayoutParams sl_lp;
+            sl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            sl_lp.height = 24;
+            main_card->add_view(slider, sl_lp);
+        };
+
+        auto add_spinner_block = [&](const std::string& title, const std::string& hint, const std::vector<std::string>& items, int cur_idx, std::function<void(int, const std::string&)> on_select) {
+            auto block = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(6)
+                ->build();
+
+            auto box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto title_view = TextViewBuilder::create()
+                ->text(title)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            box->add_view(title_view);
+
+            if (!hint.empty()) {
+                auto hint_view = TextViewBuilder::create()
+                    ->text(hint)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                    ->build();
+                box->add_view(hint_view);
+            }
+            block->add_view(box);
+
+            auto spinner = SpinnerBuilder::create()
+                ->items(items)
+                ->selectedIndex(cur_idx)
+                ->fontSize(config->metrics.font_size)
+                ->padding(12, 6)
+                ->cornerRadius(8)
+                ->onItemSelected([this, on_select](int idx, const std::string& val) {
+                    if (on_select) on_select(idx, val);
+                    notify_state_changed();
+                })
+                ->build();
+            LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+            block->add_view(spinner, sp_lp);
+            main_card->add_view(block);
+        };
+
+        bool needs_divider = false;
+
+        // -------------------------------------------------------------
+        // Section 1: Layout Mode
+        // -------------------------------------------------------------
+        if (show_layout) {
+            auto s1_title = TextViewBuilder::create()
+                ->text("Layout Mode")
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            main_card->add_view(s1_title);
+
+            int cur_mode_idx = 0;
+            for (size_t i = 0; i < item->tiling_cfg->available_layout_modes.size(); ++i) {
+                if (item->tiling_cfg->available_layout_modes[i] == item->tiling_cfg->layout_mode) {
+                    cur_mode_idx = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            add_spinner_block(
+                "Tiling algorithm",
+                "Dynamic BSP, Master-Stack columns, Fibonacci spiral, or Matrix grid",
+                item->tiling_cfg->available_layout_modes,
+                cur_mode_idx,
+                [item](int idx, const std::string& val) {
+                    (void)idx;
+                    item->tiling_cfg->layout_mode = val;
+                }
+            );
+
+            needs_divider = true;
+        }
+
+        // -------------------------------------------------------------
+        // Section 2: Windows Geometry & Borders
+        // -------------------------------------------------------------
+        if (show_windows) {
+            if (needs_divider) add_divider();
+
+            auto s2_title = TextViewBuilder::create()
+                ->text("Windows & Geometry")
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            main_card->add_view(s2_title);
+
+            // Inner Window Gap (0 to 32 px)
+            add_slider_row(
+                "Inner window gap",
+                "Spacing between adjacent tiled windows (in pixels)",
+                static_cast<float>(item->tiling_cfg->inner_gap) / 32.0f,
+                std::to_string(item->tiling_cfg->inner_gap) + " px",
+                [item](float val) -> std::string {
+                    int px = static_cast<int>(std::round(val * 32.0f));
+                    item->tiling_cfg->inner_gap = px;
+                    return std::to_string(px) + " px";
+                }
+            );
+
+            // Outer Screen Edge Gap (0 to 48 px)
+            add_slider_row(
+                "Outer screen edge gap",
+                "Margin between window borders and monitor screen edges",
+                static_cast<float>(item->tiling_cfg->outer_gap) / 48.0f,
+                std::to_string(item->tiling_cfg->outer_gap) + " px",
+                [item](float val) -> std::string {
+                    int px = static_cast<int>(std::round(val * 48.0f));
+                    item->tiling_cfg->outer_gap = px;
+                    return std::to_string(px) + " px";
+                }
+            );
+
+            // Smart Gaps
+            add_toggle_row(
+                "Smart gaps",
+                "Automatically collapse gaps and borders when only one window is open",
+                item->tiling_cfg->smart_gaps,
+                [item](bool val) {
+                    item->tiling_cfg->smart_gaps = val;
+                }
+            );
+
+            // Window Border Width (0 to 8 px)
+            add_slider_row(
+                "Window border width",
+                "Border stroke thickness in pixels (0 disables window borders)",
+                static_cast<float>(item->tiling_cfg->border_width) / 8.0f,
+                item->tiling_cfg->border_width == 0 ? "Disabled (0 px)" : (std::to_string(item->tiling_cfg->border_width) + " px"),
+                [item](float val) -> std::string {
+                    int px = static_cast<int>(std::round(val * 8.0f));
+                    item->tiling_cfg->border_width = px;
+                    return px == 0 ? "Disabled (0 px)" : (std::to_string(px) + " px");
+                }
+            );
+
+            // Window Corner Radius (0 to 32 px)
+            add_slider_row(
+                "Window corner radius",
+                "Rounding curvature applied to window frames and drop shadows",
+                static_cast<float>(item->tiling_cfg->corner_radius) / 32.0f,
+                std::to_string(item->tiling_cfg->corner_radius) + " px",
+                [item](float val) -> std::string {
+                    int px = static_cast<int>(std::round(val * 32.0f));
+                    item->tiling_cfg->corner_radius = px;
+                    return std::to_string(px) + " px";
+                }
+            );
+
+            // Active Border Color Preset
+            int cur_act_idx = 0;
+            for (size_t i = 0; i < item->tiling_cfg->active_border_presets.size(); ++i) {
+                if (item->tiling_cfg->active_border_presets[i] == item->tiling_cfg->active_border_preset) {
+                    cur_act_idx = static_cast<int>(i);
+                    break;
+                }
+            }
+            add_spinner_block(
+                "Active window border color",
+                "Border color or multi-stop linear gradient for focused window",
+                item->tiling_cfg->active_border_presets,
+                cur_act_idx,
+                [item](int idx, const std::string& val) {
+                    (void)idx;
+                    item->tiling_cfg->active_border_preset = val;
+                    if (val.find("Yellow-Red") != std::string::npos) item->tiling_cfg->active_border_value = "#ffff00 #ff0000 45deg";
+                    else if (val.find("Cyan-Blue") != std::string::npos) item->tiling_cfg->active_border_value = "#00ffcc #0066ff 45deg";
+                    else if (val.find("Purple-Blue") != std::string::npos) item->tiling_cfg->active_border_value = "#ff007f #7928ca #0066ff 135deg";
+                    else if (val.find("Neon") != std::string::npos) item->tiling_cfg->active_border_value = "#00ff88 #00ccff 90deg";
+                    else if (val.find("Monochrome") != std::string::npos) item->tiling_cfg->active_border_value = "#ffffff";
+                    else item->tiling_cfg->active_border_value = "#0066ff";
+                }
+            );
+
+            // Inactive Border Color Preset
+            int cur_inact_idx = 0;
+            for (size_t i = 0; i < item->tiling_cfg->inactive_border_presets.size(); ++i) {
+                if (item->tiling_cfg->inactive_border_presets[i] == item->tiling_cfg->inactive_border_preset) {
+                    cur_inact_idx = static_cast<int>(i);
+                    break;
+                }
+            }
+            add_spinner_block(
+                "Inactive window border color",
+                "Border styling for unfocused background windows",
+                item->tiling_cfg->inactive_border_presets,
+                cur_inact_idx,
+                [item](int idx, const std::string& val) {
+                    (void)idx;
+                    item->tiling_cfg->inactive_border_preset = val;
+                    if (val.find("Dark Slate") != std::string::npos) item->tiling_cfg->inactive_border_value = "#334455 #222d38 45deg";
+                    else if (val.find("Graphite") != std::string::npos) item->tiling_cfg->inactive_border_value = "#2d3748";
+                    else if (val.find("Muted Amber") != std::string::npos) item->tiling_cfg->inactive_border_value = "#aa9900 #aa3333 45deg";
+                    else if (val.find("Subtle") != std::string::npos) item->tiling_cfg->inactive_border_value = "#ffffff33";
+                    else item->tiling_cfg->inactive_border_value = "#00000000";
+                }
+            );
+
+            // Border Specular Shading
+            add_toggle_row(
+                "Border specular shading",
+                "Subtle 3D lighting and specular bevel depth across the border stroke",
+                item->tiling_cfg->border_shading,
+                [item](bool val) {
+                    item->tiling_cfg->border_shading = val;
+                }
+            );
+
+            if (item->tiling_cfg->border_shading) {
+                add_slider_row(
+                    "Shading intensity",
+                    "Specular bevel strength across the window frame",
+                    item->tiling_cfg->border_shading_strength,
+                    std::to_string(static_cast<int>(item->tiling_cfg->border_shading_strength * 100)) + "%",
+                    [item](float val) -> std::string {
+                        item->tiling_cfg->border_shading_strength = val;
+                        return std::to_string(static_cast<int>(val * 100)) + "%";
+                    }
+                );
+            }
+
+            // Direct Border Drag Resizing
+            add_toggle_row(
+                "Direct border drag resizing",
+                "Resize windows by dragging directly on window borders without modifier key",
+                item->tiling_cfg->resize_on_border,
+                [item](bool val) {
+                    item->tiling_cfg->resize_on_border = val;
+                }
+            );
+
+            // Live Interactive Mini Window Geometry Preview
+            int p_outer = std::max(4, item->tiling_cfg->outer_gap / 2);
+            int p_inner = std::max(4, item->tiling_cfg->inner_gap / 2);
+            int p_radius = std::clamp(item->tiling_cfg->corner_radius / 2, 0, 16);
+            int p_border = std::max(1, item->tiling_cfg->border_width);
+
+            auto monitor_canvas = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->padding(p_outer, p_outer)
+                ->spacing(p_inner)
+                ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
+                ->stroke(1, config->colors.outline.with_alpha(0.4f))
+                ->cornerRadius(10)
+                ->build();
+
+            auto win1 = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->padding(8, 8)
+                ->gravity(Gravity::Center)
+                ->backgroundColor(config->colors.surface)
+                ->stroke(p_border, config->colors.primary)
+                ->cornerRadius(p_radius)
+                ->build();
+            auto win1_title = TextViewBuilder::create()
+                ->text("Active Window (Super+1)")
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            win1->add_view(win1_title);
+            LayoutParams w1_lp;
+            w1_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            w1_lp.height = 64;
+            w1_lp.weight = 1.0f;
+            monitor_canvas->add_view(win1, w1_lp);
+
+            auto win2 = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->padding(8, 8)
+                ->gravity(Gravity::Center)
+                ->backgroundColor(config->colors.surface)
+                ->stroke(std::max(1, p_border), config->colors.outline.with_alpha(0.5f))
+                ->cornerRadius(p_radius)
+                ->build();
+            auto win2_title = TextViewBuilder::create()
+                ->text("Inactive Window (Super+2)")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            win2->add_view(win2_title);
+            LayoutParams w2_lp;
+            w2_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            w2_lp.height = 64;
+            w2_lp.weight = 1.0f;
+            monitor_canvas->add_view(win2, w2_lp);
+
+            auto preview_label = TextViewBuilder::create()
+                ->text("󰍹  Live Workspace Layout Preview (Gaps & Borders)")
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            main_card->add_view(preview_label);
+
+            LayoutParams mc_lp;
+            mc_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            mc_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            main_card->add_view(monitor_canvas, mc_lp);
+
+            needs_divider = true;
+        }
+
+        // -------------------------------------------------------------
+        // Section 3: Split Behaviour
+        // -------------------------------------------------------------
+        if (show_split) {
+            if (needs_divider) add_divider();
+
+            auto s3_title = TextViewBuilder::create()
+                ->text("Split Behaviour")
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            main_card->add_view(s3_title);
+
+            // Default Split Ratio (20% to 80%)
+            float initial_ratio_norm = (item->tiling_cfg->default_split_ratio - 0.20f) / 0.60f;
+            int r_pct = static_cast<int>(std::round(item->tiling_cfg->default_split_ratio * 100.0f));
+            add_slider_row(
+                "Default split ratio",
+                "Initial screen division ratio when a new window partitions a workspace",
+                initial_ratio_norm,
+                std::to_string(r_pct) + "% / " + std::to_string(100 - r_pct) + "%",
+                [item](float val) -> std::string {
+                    float ratio = 0.20f + val * 0.60f;
+                    item->tiling_cfg->default_split_ratio = ratio;
+                    int pct = static_cast<int>(std::round(ratio * 100.0f));
+                    return std::to_string(pct) + "% / " + std::to_string(100 - pct) + "%";
+                }
+            );
+
+            // Smart Cursor-Aware Splitting
+            add_toggle_row(
+                "Smart cursor-aware splitting",
+                "Cursor position inside target window dictates horizontal or vertical split side",
+                item->tiling_cfg->smart_split,
+                [item](bool val) {
+                    item->tiling_cfg->smart_split = val;
+                }
+            );
+
+            // Split Focused Window
+            add_toggle_row(
+                "Split focused window",
+                "New windows partition the currently active window instead of spawning at the spiral tail",
+                item->tiling_cfg->split_focus,
+                [item](bool val) {
+                    item->tiling_cfg->split_focus = val;
+                }
+            );
+
+            // Preserve Split Orientation
+            add_toggle_row(
+                "Preserve split orientation",
+                "Retains horizontal or vertical split axes when windows are moved or closed",
+                item->tiling_cfg->preserve_split,
+                [item](bool val) {
+                    item->tiling_cfg->preserve_split = val;
+                }
+            );
+
+            // Widescreen Split Threshold Multiplier (0.8x to 2.5x)
+            float initial_mult_norm = (item->tiling_cfg->split_width_multiplier - 0.8f) / 1.7f;
+            auto format_mult = [](float m) -> std::string {
+                char buf[16];
+                std::snprintf(buf, sizeof(buf), "%.1f×", m);
+                return std::string(buf);
+            };
+            add_slider_row(
+                "Widescreen split width multiplier",
+                "Aspect ratio threshold to favor side-by-side columns (width >= height × mult)",
+                initial_mult_norm,
+                format_mult(item->tiling_cfg->split_width_multiplier),
+                [item, format_mult](float val) -> std::string {
+                    float mult = 0.8f + val * 1.7f;
+                    item->tiling_cfg->split_width_multiplier = mult;
+                    return format_mult(mult);
+                }
+            );
+
+            needs_divider = true;
+        }
+
+        // -------------------------------------------------------------
+        // Section 4: Focus Behaviour
+        // -------------------------------------------------------------
+        if (show_focus) {
+            if (needs_divider) add_divider();
+
+            auto s4_title = TextViewBuilder::create()
+                ->text("Focus Behaviour")
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            main_card->add_view(s4_title);
+
+            // Focus Follows Mouse
+            add_toggle_row(
+                "Focus follows mouse (Sloppy focus)",
+                "Moving mouse cursor over a window automatically shifts keyboard focus to it",
+                item->tiling_cfg->focus_follows_mouse,
+                [item](bool val) {
+                    item->tiling_cfg->focus_follows_mouse = val;
+                }
+            );
+
+            // Click to Focus & Raise
+            add_toggle_row(
+                "Click to focus and raise",
+                "Clicking anywhere on an unfocused window brings it to the top of its layer and activates it",
+                item->tiling_cfg->click_to_focus,
+                [item](bool val) {
+                    item->tiling_cfg->click_to_focus = val;
+                }
+            );
+
+            // Warp Cursor to Focused Window
+            add_toggle_row(
+                "Warp cursor on focus change",
+                "Automatically moves mouse pointer to the center of the focused window on keyboard navigation",
+                item->tiling_cfg->warp_cursor_on_focus,
+                [item](bool val) {
+                    item->tiling_cfg->warp_cursor_on_focus = val;
+                }
+            );
+
+            // Focus on Workspace Switch
+            add_toggle_row(
+                "Focus on workspace switch",
+                "Automatically restores focus to the last active window when switching workspaces",
+                item->tiling_cfg->focus_on_workspace_switch,
+                [item](bool val) {
+                    item->tiling_cfg->focus_on_workspace_switch = val;
+                }
+            );
+
+            // Auto-Float Fixed-Size Windows
+            add_toggle_row(
+                "Auto-float fixed-size dialogs",
+                "Automatically floats splash screens and dialogs declaring fixed min/max size constraints",
+                item->tiling_cfg->auto_float_fixed_size,
+                [item](bool val) {
+                    item->tiling_cfg->auto_float_fixed_size = val;
+                }
+            );
+        }
+
+        add_preview_card(main_card);
+
+        // Section 5: Authoritative miquland.conf Directives Telemetry Card
+        std::string mode_token = "dwindle";
+        if (item->tiling_cfg->layout_mode.find("Master") != std::string::npos) mode_token = "stack";
+        else if (item->tiling_cfg->layout_mode.find("Bottom") != std::string::npos) mode_token = "bstack";
+        else if (item->tiling_cfg->layout_mode.find("Centered") != std::string::npos) mode_token = "centeredmaster";
+        else if (item->tiling_cfg->layout_mode.find("Spiral") != std::string::npos) mode_token = "spiral";
+        else if (item->tiling_cfg->layout_mode.find("Columns") != std::string::npos) mode_token = "columns";
+        else if (item->tiling_cfg->layout_mode.find("Grid") != std::string::npos) mode_token = "grid";
+        else if (item->tiling_cfg->layout_mode.find("Monocle") != std::string::npos) mode_token = "monocle";
+
+        char ratio_buf[16];
+        std::snprintf(ratio_buf, sizeof(ratio_buf), "%.2f", item->tiling_cfg->default_split_ratio);
+        char mult_buf[16];
+        std::snprintf(mult_buf, sizeof(mult_buf), "%.1f", item->tiling_cfg->split_width_multiplier);
+
+        std::vector<TelemetryEntry> tiling_telemetry = {
+            {"general.layout", mode_token},
+            {"general.default_split_ratio", ratio_buf},
+            {"general.smart_gaps", item->tiling_cfg->smart_gaps ? "true" : "false"},
+            {"general.gaps.inner", std::to_string(item->tiling_cfg->inner_gap) + " px"},
+            {"general.gaps.outer", std::to_string(item->tiling_cfg->outer_gap) + " px"},
+            {"general.border.width", std::to_string(item->tiling_cfg->border_width) + " px"},
+            {"general.border.radius", std::to_string(item->tiling_cfg->corner_radius) + " px"},
+            {"general.border.active", item->tiling_cfg->active_border_value},
+            {"general.border.inactive", item->tiling_cfg->inactive_border_value},
+            {"general.border.shading", item->tiling_cfg->border_shading ? "true" : "false"},
+            {"general.dwindle.split_focus", item->tiling_cfg->split_focus ? "true" : "false"},
+            {"general.dwindle.smart_split", item->tiling_cfg->smart_split ? "true" : "false"},
+            {"general.dwindle.preserve_split", item->tiling_cfg->preserve_split ? "true" : "false"},
+            {"general.dwindle.split_width_mult", mult_buf},
+            {"input.follow_mouse", item->tiling_cfg->focus_follows_mouse ? "true (hover focus)" : "false (click focus)"},
+            {"input.warp_cursor", item->tiling_cfg->warp_cursor_on_focus ? "true" : "false"},
+            {"general.auto_float_fixed_size", item->tiling_cfg->auto_float_fixed_size ? "true" : "false"}
+        };
+
+        add_preview_card(create_telemetry_card(tiling_telemetry, config, "Authoritative miquland.conf directives"));
+        return;
+    }
+
     // Dedicated Single-Card Interactive UI for Screen Timeout & Lock
     if (item->is_timeout_and_lock) {
         auto main_card = LinearLayoutBuilder::create()

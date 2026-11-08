@@ -145,67 +145,36 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // 2. Tiling Layout (Depth 1)
     // ==============================================================================
     {
-        auto tile_mode = SettingItem::create_leaf("tile_mode", "Layout Mode", "", "󰕰");
-        tile_mode->has_switch = true;
-        tile_mode->switch_val = true;
-        tile_mode->switch_label = "Auto-Split Windows (Dwindle)";
-        tile_mode->has_secondary_switch = true;
-        tile_mode->secondary_switch_val = false;
-        tile_mode->secondary_switch_label = "Preserve Split Aspect Ratio (Fibonacci)";
-        tile_mode->has_slider = true;
-        tile_mode->slider_val = 0.50f;
-        tile_mode->slider_label = "Master Split Ratio (50 / 50)";
-        tile_mode->slider_unit = "%";
-        tile_mode->has_action = true;
-        tile_mode->action_label = "Cycle Active Layout Mode";
-        tile_mode->telemetry_title = "Layout engine specifications";
-        tile_mode->telemetry = {
-            {"Active Layout Engine", "Dwindle (Binary Space Partition)"},
-            {"Secondary Layout", "Master-Stack (Tall column)"},
-            {"Floating Rules", "Dialogs, Popups, Modals auto-float"},
-            {"Special Workspaces", "1 Scratchpad overlay available"}
-        };
+        auto shared_tiling = std::make_shared<TilingConfig>();
 
-        auto tile_gaps = SettingItem::create_leaf("tile_gaps", "Window Gaps", "", "󰃟");
-        tile_gaps->has_switch = true;
-        tile_gaps->switch_val = true;
-        tile_gaps->switch_label = "Smart Gaps (Disable when single window)";
-        tile_gaps->has_secondary_switch = true;
-        tile_gaps->secondary_switch_val = true;
-        tile_gaps->secondary_switch_label = "Outer Screen Edge Gaps";
-        tile_gaps->has_slider = true;
-        tile_gaps->slider_val = 0.40f;
-        tile_gaps->slider_label = "Inner Window Gaps (8 px)";
-        tile_gaps->slider_unit = "%";
-        tile_gaps->has_action = true;
-        tile_gaps->action_label = "Reset Default Gaps";
-        tile_gaps->telemetry_title = "Geometry specifications";
-        tile_gaps->telemetry = {
-            {"Inner Window Gaps", "8 px"},
-            {"Outer Screen Gaps", "14 px"},
-            {"Reserved Struts", "miqubar (top: 36px)"},
-            {"Layout Boundary", "Clamped to output usable area"}
-        };
+        // 2.1 Complete Unified Tiling & Window Management Overview
+        auto tile_overview = SettingItem::create_leaf("tile_overview", "Tiling & Window Management", "Layout engines, window geometry, split rules & focus dynamics", "󰕰");
+        tile_overview->is_tiling_config = true;
+        tile_overview->tiling_cfg = shared_tiling;
 
-        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus & Mouse Behavior", "", "󰍽");
-        tile_focus->has_switch = true;
-        tile_focus->switch_val = true;
-        tile_focus->switch_label = "Focus Follows Mouse";
-        tile_focus->has_secondary_switch = true;
-        tile_focus->secondary_switch_val = true;
-        tile_focus->secondary_switch_label = "Warp Cursor to Focused Window";
-        tile_focus->has_slider = false;
-        tile_focus->has_action = false;
-        tile_focus->telemetry_title = "Focus management specifications";
-        tile_focus->telemetry = {
-            {"Focus Mode", "Sloppy (Follows cursor motion)"},
-            {"Window Raise on Click", "Enabled"},
-            {"Multi-Monitor Focus", "Active monitor follows mouse"}
-        };
+        // 2.2 Layout Mode
+        auto tile_mode = SettingItem::create_leaf("tile_mode", "Layout Mode", "Active tiling algorithm, binary space partition & columns", "󰕰");
+        tile_mode->is_tiling_config = true;
+        tile_mode->tiling_cfg = shared_tiling;
+
+        // 2.3 Window Geometry & Borders
+        auto tile_windows = SettingItem::create_leaf("tile_windows", "Window Geometry & Borders", "Gaps, border stroke, corner radius & gradient styling", "󰃟");
+        tile_windows->is_tiling_config = true;
+        tile_windows->tiling_cfg = shared_tiling;
+
+        // 2.4 Split Behaviour
+        auto tile_split = SettingItem::create_leaf("tile_split", "Split Behaviour", "Smart cursor split, focus window division & aspect multipliers", "󰤻");
+        tile_split->is_tiling_config = true;
+        tile_split->tiling_cfg = shared_tiling;
+
+        // 2.5 Focus & Mouse Behaviour
+        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus & Mouse Behaviour", "Cursor hover focus, window raise, warp & dialog rules", "󰍽");
+        tile_focus->is_tiling_config = true;
+        tile_focus->tiling_cfg = shared_tiling;
 
         root.push_back(SettingItem::create_category(
             "cat_tiling", "Tiling Layout", "󰕰",
-            {tile_mode, tile_gaps, tile_focus}
+            {tile_overview, tile_mode, tile_windows, tile_split, tile_focus}
         ));
     }
 
