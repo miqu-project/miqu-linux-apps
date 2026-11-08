@@ -12,6 +12,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <functional>
+
 namespace miqu {
 
 class WifiDetailView : public FrameLayout {
@@ -19,6 +21,12 @@ public:
     WifiDetailView();
     ~WifiDetailView() override;
 
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
+    void set_on_request_fullscreen(std::function<void()> cb) {
+        m_on_request_fullscreen = std::move(cb);
+    }
 
     void refresh_state();
 
@@ -39,7 +47,7 @@ private:
     void on_forget_clicked(const std::string& ssid);
     void trigger_scan();
 
-    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
+    bool m_is_fullscreen = false;
     bool m_scanning = false;
 
     WifiAdapterInfo m_adapter;
@@ -48,6 +56,7 @@ private:
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
     std::shared_ptr<View> m_active_modal;
+    std::function<void()> m_on_request_fullscreen;
 };
 
 } // namespace miqu

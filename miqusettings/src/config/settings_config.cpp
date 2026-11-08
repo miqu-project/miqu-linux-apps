@@ -76,6 +76,8 @@ void SettingsConfig::load(const std::string& custom_path) {
                 try { window_width = std::stoi(val); } catch (...) {}
             } else if (key == "window_height") {
                 try { window_height = std::stoi(val); } catch (...) {}
+            } else if (key == "vim_keys") {
+                vim_keys = parse_bool(val);
             }
         }
     }

@@ -9,12 +9,17 @@
 #include <miqutoolkit/view/button.hpp>
 #include <memory>
 #include <string>
+#include <functional>
+
 namespace miqu {
 
 class WmLayoutDetailView : public FrameLayout {
 public:
     WmLayoutDetailView();
     ~WmLayoutDetailView() override = default;
+
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
 
 private:
     void setup_ui();
@@ -23,7 +28,8 @@ private:
     std::shared_ptr<View> create_smart_gaps_card();
     std::shared_ptr<View> create_actions_card();
 
-std::string m_current_layout = "dwindle";
+    bool m_is_fullscreen = false;
+    std::string m_current_layout = "dwindle";
     bool m_smart_gaps = false;
 
     std::shared_ptr<ScrollView> m_scroll;

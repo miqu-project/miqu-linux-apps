@@ -17,13 +17,17 @@ public:
     WmControlDetailView();
     ~WmControlDetailView() override = default;
 
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
 private:
     void setup_ui();
     std::shared_ptr<View> create_hero_card();
     std::shared_ptr<View> create_reload_card();
     std::shared_ptr<View> create_shutdown_card();
 
-std::string m_last_status = "Ready";
+    bool m_is_fullscreen = false;
+    std::string m_last_status = "Ready";
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;

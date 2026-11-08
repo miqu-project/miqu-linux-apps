@@ -16,10 +16,12 @@ WifiDetailView::WifiDetailView() {
     setup_ui();
 }
 
-WifiDetailView::~WifiDetailView() {
-    *m_alive = false;
-}
+WifiDetailView::~WifiDetailView() = default;
 
+void WifiDetailView::set_is_fullscreen(bool fullscreen) {
+    m_is_fullscreen = fullscreen;
+    setup_ui();
+}
 
 void WifiDetailView::refresh_state() {
     load_data();
@@ -51,7 +53,7 @@ void WifiDetailView::setup_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_content_layout->set_divider_spacing(16);
-    m_content_layout->set_padding(28);
+    m_content_layout->set_padding(m_is_fullscreen ? 28 : 14);
 
     // 1. Hero Card
     m_content_layout->add_view(create_hero_card());
@@ -106,8 +108,8 @@ std::shared_ptr<View> WifiDetailView::create_hero_card() {
         ? WifiBackend::resolve_signal_icon(m_adapter.signal_percent)
         : "network-wireless-offline";
     auto icon = std::make_shared<ImageView>(icon_name);
-    icon->set_target_size(38);
-    LayoutParams icon_lp(38, 38);
+    icon->set_target_size(m_is_fullscreen ? 38 : 32);
+    LayoutParams icon_lp(m_is_fullscreen ? 38 : 32, m_is_fullscreen ? 38 : 32);
     icon_lp.gravity = Gravity::CenterVertical;
     row->add_view(icon, icon_lp);
 
@@ -122,7 +124,7 @@ std::shared_ptr<View> WifiDetailView::create_hero_card() {
     auto title = TextViewBuilder::create()
         ->text("Wi-Fi")
         ->bold(true)
-        ->textSize(config->metrics.h1_size)
+        ->textSize(m_is_fullscreen ? config->metrics.h1_size : config->metrics.h2_size)
         ->textColor(config->colors.on_surface)
         ->build();
     text_col->add_view(title);
@@ -155,7 +157,23 @@ std::shared_ptr<View> WifiDetailView::create_hero_card() {
         ->build();
     row->add_view(sw);
 
-        
+    // Fullscreen toggle button if in 3-pillar mode
+    if (!m_is_fullscreen) {
+        auto btn_expand = ButtonBuilder::create()
+            ->text("⛶")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->backgroundColor(config->colors.surface_variant)
+            ->cornerRadius(btn_radius)
+            ->onClick([this]() {
+                if (m_on_request_fullscreen) m_on_request_fullscreen();
+            })
+            ->build();
+        LayoutParams btn_lp(32, 32);
+        btn_expand->set_layout_params(btn_lp);
+        row->add_view(btn_expand);
+    }
+
     hero_layout->add_view(row);
 
     // Android-style prominent 'Scan for Networks' action pill
@@ -600,9 +618,7 @@ void WifiDetailView::show_password_modal(const WifiNetwork& net) {
             m_active_modal.reset();
             WifiBackend::connect_network(net.ssid, pwd);
             if (auto engine = AppEngine::instance()) {
-                auto alive = m_alive;
-                engine->post_delayed(2500, [this, alive]() {
-                    if (!*alive) return;
+                engine->post_delayed(2500, [this]() {
                     load_data();
                     setup_ui();
                 });
@@ -629,9 +645,7 @@ void WifiDetailView::on_connect_clicked(const WifiNetwork& net) {
     if (!net.is_secured || net.is_saved) {
         WifiBackend::connect_network(net.ssid);
         if (auto engine = AppEngine::instance()) {
-            auto alive = m_alive;
-            engine->post_delayed(2500, [this, alive]() {
-                if (!*alive) return;
+            engine->post_delayed(2500, [this]() {
                 load_data();
                 setup_ui();
             });
@@ -658,9 +672,7 @@ void WifiDetailView::trigger_scan() {
     WifiBackend::rescan_async();
     setup_ui();
     if (auto engine = AppEngine::instance()) {
-        auto alive = m_alive;
-        engine->post_delayed(2000, [this, alive]() {
-            if (!*alive) return;
+        engine->post_delayed(2000, [this]() {
             m_scanning = false;
             load_data();
             setup_ui();

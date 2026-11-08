@@ -18,13 +18,17 @@ public:
     WmEffectsDetailView();
     ~WmEffectsDetailView() override = default;
 
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
 private:
     void setup_ui();
     std::shared_ptr<View> create_hero_card();
     std::shared_ptr<View> create_opacity_card();
     std::shared_ptr<View> create_toggles_card();
 
-float m_opacity_active = 1.0f;
+    bool m_is_fullscreen = false;
+    float m_opacity_active = 1.0f;
     float m_opacity_inactive = 1.0f;
     bool m_animations = true;
     bool m_blur = true;

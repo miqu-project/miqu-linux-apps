@@ -15,6 +15,9 @@ pkg_check_modules(MIQUTOOLKIT REQUIRED IMPORTED_TARGET miqutoolkit)
 
 add_executable(miqutest
     src/main.cpp
+    src/settings_model.cpp
+    src/miller_view.cpp
+    src/test_app.cpp
 )
 
 target_include_directories(miqutest PRIVATE
@@ -46,6 +49,7 @@ target_compile_options(miqutest PRIVATE
 
 include(GNUInstallDirs)
 install(TARGETS miqutest RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES assets/miqutest.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/miqutest)
 install(FILES assets/miqutest.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES assets/miquland.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps)
 install(FILES assets/miquland-128.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/128x128/apps RENAME miquland.png)

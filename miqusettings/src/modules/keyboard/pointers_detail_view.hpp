@@ -16,13 +16,17 @@ public:
     PointersDetailView();
     ~PointersDetailView() override = default;
 
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
 private:
     void setup_ui();
     std::shared_ptr<View> create_hero_card();
     std::shared_ptr<View> create_pointers_card();
     std::shared_ptr<View> create_touch_card();
 
-std::shared_ptr<ScrollView> m_scroll;
+    bool m_is_fullscreen = false;
+    std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
 };
 

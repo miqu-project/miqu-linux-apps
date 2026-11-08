@@ -17,16 +17,18 @@ public:
     SoundDetailView();
     ~SoundDetailView() override = default;
 
+    void set_is_fullscreen(bool fullscreen);
 
 private:
-void setup_ui();
+    void setup_ui();
     std::shared_ptr<View> create_hero_card();
     std::shared_ptr<View> create_output_volume_card();
     std::shared_ptr<View> create_output_devices_card();
     std::shared_ptr<View> create_input_volume_card();
     std::shared_ptr<View> create_input_devices_card();
 
-SoundState m_state;
+    bool m_is_fullscreen = false;
+    SoundState m_state;
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;

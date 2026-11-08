@@ -18,7 +18,7 @@ public:
     virtual std::string get_title() const = 0;
     virtual std::string get_icon() const = 0;
 
-    virtual std::shared_ptr<View> create_detail_view() = 0;
+    virtual std::shared_ptr<View> create_detail_view(bool is_fullscreen) = 0;
     virtual void refresh() = 0;
 };
 

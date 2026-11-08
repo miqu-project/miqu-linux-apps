@@ -11,6 +11,8 @@
 #include <miqutoolkit/view/switch.hpp>
 #include <memory>
 #include <string>
+#include <functional>
+
 namespace miqu {
 
 class EthernetDetailView : public FrameLayout {
@@ -18,6 +20,12 @@ public:
     EthernetDetailView();
     ~EthernetDetailView() override;
 
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
+    void set_on_request_fullscreen(std::function<void()> cb) {
+        m_on_request_fullscreen = std::move(cb);
+    }
 
     void refresh_state();
 
@@ -39,11 +47,13 @@ private:
     void show_ip_config_modal();
     void toggle_power(bool power);
 
-EthernetDevice m_device;
+    bool m_is_fullscreen = false;
+    EthernetDevice m_device;
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
     std::shared_ptr<View> m_active_modal;
+    std::function<void()> m_on_request_fullscreen;
 };
 
 } // namespace miqu

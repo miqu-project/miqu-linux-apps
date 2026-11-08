@@ -12,6 +12,12 @@ WmControlDetailView::WmControlDetailView() {
     setup_ui();
 }
 
+void WmControlDetailView::set_is_fullscreen(bool fullscreen) {
+    if (m_is_fullscreen != fullscreen) {
+        m_is_fullscreen = fullscreen;
+        setup_ui();
+    }
+}
 
 void WmControlDetailView::setup_ui() {
     clear_views();
@@ -28,7 +34,7 @@ void WmControlDetailView::setup_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_content_layout->set_divider_spacing(16);
-    m_content_layout->set_padding(32);
+    m_content_layout->set_padding(m_is_fullscreen ? 32 : 16);
 
     m_content_layout->add_view(create_hero_card());
     m_content_layout->add_view(create_reload_card());
@@ -57,10 +63,10 @@ std::shared_ptr<View> WmControlDetailView::create_hero_card() {
     row->set_divider_spacing(16);
 
     auto icon = std::make_shared<ImageView>("system-reboot");
-    icon->set_target_size(64);
+    icon->set_target_size(m_is_fullscreen ? 64 : 48);
     LayoutParams icon_lp;
-    icon_lp.width = 64;
-    icon_lp.height = 64;
+    icon_lp.width = m_is_fullscreen ? 64 : 48;
+    icon_lp.height = m_is_fullscreen ? 64 : 48;
     icon_lp.gravity = Gravity::CenterVertical;
     row->add_view(icon, icon_lp);
 
@@ -75,7 +81,7 @@ std::shared_ptr<View> WmControlDetailView::create_hero_card() {
     auto title = TextViewBuilder::create()
         ->text("Compositor & Session Control")
         ->bold(true)
-        ->textSize(20)
+        ->textSize(m_is_fullscreen ? 20 : 17)
         ->textColor(config->colors.on_surface)
         ->build();
     text_col->add_view(title);

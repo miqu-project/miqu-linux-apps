@@ -1,92 +1,70 @@
+#include "test_app.hpp"
 #include <miqutoolkit/miqutoolkit.hpp>
 #include <iostream>
-#include <chrono>
+#include <filesystem>
 
+namespace fs = std::filesystem;
 using namespace miqu;
 
 int main(int argc, char* argv[]) {
-    auto t_start = std::chrono::steady_clock::now();
+    bool auto_exit = false;
 
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            std::cout << "miqutest — UI Concept Testing Sandbox (Yazi-style Settings Explorer)\n\n"
+                      << "Usage: miqutest [OPTIONS]\n\n"
+                      << "Options:\n"
+                      << "  --init-config    Safely generate user configuration file (~/.config/miqutest/miqutest.conf)\n"
+                      << "  --auto-exit      Initialize UI components and exit immediately without entering event loop\n"
+                      << "  -h, --help       Display this help message and exit\n\n"
+                      << "Keybindings:\n"
+                      << "  [h / Left / Backspace]  Go back to parent directory or leave preview\n"
+                      << "  [l / Right / Enter]     Enter folder / category or focus preview controls\n"
+                      << "  [j / Down]              Navigate down in list or controls\n"
+                      << "  [k / Up]                Navigate up in list or controls\n"
+                      << "  [Space]                 Toggle switch for active setting\n"
+                      << "  [- / + or [ / ]]        Adjust slider value for active setting\n"
+                      << "  [Tab / Shift+Tab]       Cycle preview controls\n"
+                      << "  [q / Escape]            Quit or step back\n";
+            return 0;
+        } else if (arg == "--init-config") {
+            std::string path = FsUtils::init_user_config("miqutest");
+            std::cout << "[miqutest] Configuration initialized at: " << path << "\n";
+            return 0;
+        } else if (arg == "--auto-exit") {
+            auto_exit = true;
+        }
+    }
+
+    // 1. Resolve canonical configuration path
+    std::string user_conf = FsUtils::get_user_config_file("miqutest");
+    std::string target_conf = fs::exists(user_conf) ? user_conf : FsUtils::get_system_config_file("miqutest");
+
+    // 2. Load exclusive configuration file
+    Config::get()->load_from_file(target_conf);
+
+    // 3. Initialize AppEngine
     auto engine = AppEngine::create();
     if (!engine) {
         std::cerr << "[miqutest] Failed to initialize AppEngine.\n";
         return 1;
     }
-    auto t_engine = std::chrono::steady_clock::now();
 
+    // 4. Setup inotify config watcher for live reload
     engine->setup_config_watcher();
 
-    std::string layer_ns = "miqutest";
-    bool auto_exit = false;
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        if (arg == "--auto-exit") {
-            auto_exit = true;
-        } else if (arg.rfind("-", 0) != 0) {
-            layer_ns = arg;
-        }
-    }
-
-    auto config = Config::get();
-
-    // Centered Hello World text view
-    auto label = TextViewBuilder::create()
-        ->text("Hello, World!")
-        ->h1()
-        ->center(true)
-        ->build();
-
-    LayoutParams text_lp;
-    text_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    text_lp.gravity = Gravity::Center;
-
-    // Background card matching miqulauncher layout & styling
-    auto root_card = CardViewBuilder::create()
-        ->backgroundColor(config->colors.background)
-        ->stroke(config->metrics.border_width, config->colors.outline)
-        ->cornerRadius(config->metrics.corner_radius)
-        ->elevation(0)
-        ->padding(40)
-        ->addView(label, text_lp)
-        ->build();
-
-    auto t_views = std::chrono::steady_clock::now();
-
-    // LayerOverlay window matching miqulauncher geometry & properties (800x460)
-    auto window = WindowBuilder::create()
-        ->role(WindowRole::LayerOverlay)
-        ->appId(layer_ns)
-        ->layerNamespace(layer_ns)
-        ->keyboardInteractive(true)
-        ->preferredSize(800, 460)
-        ->contentSize(800, 460)
-        ->anchors(0)
-        ->transparent(true)
-        ->closeOnClickOutside(true)
-        ->closeOnEscape(true)
-        ->contentView(root_card)
-        ->onClose([engine]() {
-            engine->quit();
-        })
-        ->build();
-
-    auto t_window = std::chrono::steady_clock::now();
-
-    if (!window) {
-        std::cerr << "[miqutest] Failed to create layer window.\n";
+    // 5. Initialize application
+    TestApp app(engine);
+    if (!app.init()) {
+        std::cerr << "[miqutest] Failed to initialize TestApp.\n";
         return 1;
     }
 
-    auto d_engine = std::chrono::duration_cast<std::chrono::microseconds>(t_engine - t_start).count();
-    auto d_views = std::chrono::duration_cast<std::chrono::microseconds>(t_views - t_engine).count();
-    auto d_window = std::chrono::duration_cast<std::chrono::microseconds>(t_window - t_views).count();
-    auto d_total = std::chrono::duration_cast<std::chrono::microseconds>(t_window - t_start).count();
-
-    std::cout << "[miqutest profiler] AppEngine::create: " << d_engine / 1000.0 << " ms\n";
-    std::cout << "[miqutest profiler] Views build:       " << d_views / 1000.0 << " ms\n";
-    std::cout << "[miqutest profiler] Window build:      " << d_window / 1000.0 << " ms (includes Wayland roundtrip & 1st frame render)\n";
-    std::cout << "[miqutest profiler] Total to 1st frame:" << d_total / 1000.0 << " ms\n";
+    // 6. Connect dynamic live theme updates
+    engine->add_theme_change_listener([&app]() {
+        app.sync_theme();
+    });
 
     if (auto_exit) {
         return 0;

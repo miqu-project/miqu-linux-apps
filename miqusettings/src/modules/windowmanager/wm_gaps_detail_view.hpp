@@ -18,6 +18,9 @@ public:
     WmGapsDetailView();
     ~WmGapsDetailView() override = default;
 
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
 private:
     void setup_ui();
     std::shared_ptr<View> create_hero_card();
@@ -25,7 +28,8 @@ private:
     std::shared_ptr<View> create_outer_gaps_card();
     std::shared_ptr<View> create_presets_card();
 
-int m_gaps_in = 8;
+    bool m_is_fullscreen = false;
+    int m_gaps_in = 8;
     int m_gaps_out = 12;
 
     std::shared_ptr<ScrollView> m_scroll;

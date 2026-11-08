@@ -15,6 +15,12 @@ BrightnessDetailView::BrightnessDetailView() {
     setup_ui();
 }
 
+void BrightnessDetailView::set_is_fullscreen(bool fullscreen) {
+    if (m_is_fullscreen != fullscreen) {
+        m_is_fullscreen = fullscreen;
+        setup_ui();
+    }
+}
 
 void BrightnessDetailView::setup_ui() {
     clear_views();
@@ -31,7 +37,7 @@ void BrightnessDetailView::setup_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_content_layout->set_divider_spacing(16);
-    m_content_layout->set_padding(32);
+    m_content_layout->set_padding(m_is_fullscreen ? 32 : 16);
 
     m_content_layout->add_view(create_hero_card());
     m_content_layout->add_view(create_slider_card());
@@ -61,10 +67,10 @@ std::shared_ptr<View> BrightnessDetailView::create_hero_card() {
     row->set_divider_spacing(16);
 
     auto icon = std::make_shared<ImageView>("display-brightness");
-    icon->set_target_size(64);
+    icon->set_target_size(m_is_fullscreen ? 64 : 48);
     LayoutParams icon_lp;
-    icon_lp.width = 64;
-    icon_lp.height = 64;
+    icon_lp.width = m_is_fullscreen ? 64 : 48;
+    icon_lp.height = m_is_fullscreen ? 64 : 48;
     icon_lp.gravity = Gravity::CenterVertical;
     row->add_view(icon, icon_lp);
 
@@ -79,7 +85,7 @@ std::shared_ptr<View> BrightnessDetailView::create_hero_card() {
     auto title = TextViewBuilder::create()
         ->text("Screen Brightness")
         ->bold(true)
-        ->textSize(20)
+        ->textSize(m_is_fullscreen ? 20 : 17)
         ->textColor(config->colors.on_surface)
         ->build();
     text_col->add_view(title);
@@ -102,7 +108,25 @@ std::shared_ptr<View> BrightnessDetailView::create_hero_card() {
 
     row->add_view(text_col);
 
-    
+    if (!m_is_fullscreen) {
+        auto btn_expand = ButtonBuilder::create()
+            ->text("⛶")
+            ->textSize(14)
+            ->textColor(config->colors.primary)
+            ->backgroundColor(config->colors.surface_variant)
+            ->cornerRadius(6)
+            ->onClick([this]() {
+                if (m_on_request_fullscreen) m_on_request_fullscreen();
+            })
+            ->build();
+        LayoutParams btn_lp;
+        btn_lp.width = 34;
+        btn_lp.height = 34;
+        btn_lp.gravity = Gravity::CenterVertical;
+        btn_expand->set_layout_params(btn_lp);
+        row->add_view(btn_expand);
+    }
+
     card->add_view(row);
     return card;
 }

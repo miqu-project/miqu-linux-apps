@@ -19,6 +19,12 @@ public:
     ~AppDetailView() override = default;
 
     void set_app_id(const std::string& desktop_id);
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
+    void set_on_request_fullscreen(std::function<void()> cb) {
+        m_on_request_fullscreen = std::move(cb);
+    }
 
     void set_on_app_uninstalled(std::function<void(const std::string&)> cb) {
         m_on_app_uninstalled = std::move(cb);
@@ -39,10 +45,13 @@ private:
 
     std::string m_desktop_id;
     AppDetailInfo m_app;
-std::shared_ptr<ScrollView> m_scroll;
+    bool m_is_fullscreen = false;
+
+    std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
 
-std::function<void(const std::string&)> m_on_app_uninstalled;
+    std::function<void()> m_on_request_fullscreen;
+    std::function<void(const std::string&)> m_on_app_uninstalled;
 };
 
 } // namespace miqu

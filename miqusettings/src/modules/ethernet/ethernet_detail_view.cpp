@@ -18,6 +18,10 @@ EthernetDetailView::EthernetDetailView() {
 
 EthernetDetailView::~EthernetDetailView() = default;
 
+void EthernetDetailView::set_is_fullscreen(bool fullscreen) {
+    m_is_fullscreen = fullscreen;
+    setup_ui();
+}
 
 void EthernetDetailView::refresh_state() {
     load_data();
@@ -44,7 +48,7 @@ void EthernetDetailView::setup_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_content_layout->set_divider_spacing(16);
-    m_content_layout->set_padding(28);
+    m_content_layout->set_padding(m_is_fullscreen ? 28 : 14);
 
     // 1. Hero Card
     m_content_layout->add_view(create_hero_card());
@@ -65,6 +69,7 @@ void EthernetDetailView::setup_ui() {
 
 std::shared_ptr<View> EthernetDetailView::create_hero_card() {
     auto config = Config::get();
+    int btn_radius = config->metrics.corner_radius > 0 ? std::max(4, config->metrics.corner_radius - 4) : 8;
 
     auto hero = std::make_shared<CardView>();
     hero->set_card_background_color(config->colors.surface);
@@ -82,8 +87,8 @@ std::shared_ptr<View> EthernetDetailView::create_hero_card() {
     // Status Icon
     std::string icon_name = m_device.is_connected ? "network-wired" : "network-wired-disconnected";
     auto icon = std::make_shared<ImageView>(icon_name);
-    icon->set_target_size(38);
-    LayoutParams icon_lp(38, 38);
+    icon->set_target_size(m_is_fullscreen ? 38 : 32);
+    LayoutParams icon_lp(m_is_fullscreen ? 38 : 32, m_is_fullscreen ? 38 : 32);
     icon_lp.gravity = Gravity::CenterVertical;
     row->add_view(icon, icon_lp);
 
@@ -98,7 +103,7 @@ std::shared_ptr<View> EthernetDetailView::create_hero_card() {
     auto title = TextViewBuilder::create()
         ->text("Wired (Ethernet)")
         ->bold(true)
-        ->textSize(config->metrics.h1_size)
+        ->textSize(m_is_fullscreen ? config->metrics.h1_size : config->metrics.h2_size)
         ->textColor(config->colors.on_surface)
         ->build();
     text_col->add_view(title);
@@ -124,7 +129,23 @@ std::shared_ptr<View> EthernetDetailView::create_hero_card() {
         ->build();
     row->add_view(sw);
 
-        
+    // Fullscreen toggle button if in 3-pillar mode
+    if (!m_is_fullscreen) {
+        auto btn_expand = ButtonBuilder::create()
+            ->text("⛶")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->backgroundColor(config->colors.surface_variant)
+            ->cornerRadius(btn_radius)
+            ->onClick([this]() {
+                if (m_on_request_fullscreen) m_on_request_fullscreen();
+            })
+            ->build();
+        LayoutParams btn_lp(32, 32);
+        btn_expand->set_layout_params(btn_lp);
+        row->add_view(btn_expand);
+    }
+
     hero->add_view(row);
     return hero;
 }

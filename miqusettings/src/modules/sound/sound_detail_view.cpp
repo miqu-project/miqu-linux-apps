@@ -15,6 +15,12 @@ SoundDetailView::SoundDetailView() {
     setup_ui();
 }
 
+void SoundDetailView::set_is_fullscreen(bool fullscreen) {
+    if (m_is_fullscreen != fullscreen) {
+        m_is_fullscreen = fullscreen;
+        setup_ui();
+    }
+}
 
 void SoundDetailView::setup_ui() {
     clear_views();
@@ -31,7 +37,7 @@ void SoundDetailView::setup_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_content_layout->set_divider_spacing(16);
-    m_content_layout->set_padding(32);
+    m_content_layout->set_padding(m_is_fullscreen ? 32 : 16);
 
     m_content_layout->add_view(create_hero_card());
     m_content_layout->add_view(create_output_volume_card());
@@ -64,7 +70,7 @@ std::shared_ptr<View> SoundDetailView::create_hero_card() {
     row->set_divider_spacing(16);
 
     auto icon = std::make_shared<ImageView>("audio-speakers");
-    icon->set_target_size(64);
+    icon->set_target_size(m_is_fullscreen ? 64 : 48);
     row->add_view(icon);
 
     auto col = std::make_shared<LinearLayout>(Orientation::Vertical);
@@ -74,7 +80,7 @@ std::shared_ptr<View> SoundDetailView::create_hero_card() {
     auto title = TextViewBuilder::create()
         ->text("Sound & Audio")
         ->bold(true)
-        ->textSize(20)
+        ->textSize(m_is_fullscreen ? 20 : 16)
         ->textColor(config->colors.on_surface)
         ->build();
     col->add_view(title);
@@ -95,9 +101,9 @@ std::shared_ptr<View> SoundDetailView::create_hero_card() {
         ->textSize(12)
         ->textColor(m_state.output_muted ? config->colors.on_surface_variant : config->colors.primary)
         ->build();
-    row->add_view(col);
+    col->add_view(badge);
 
-        
+    row->add_view(col);
     card->add_view(row);
     return card;
 }

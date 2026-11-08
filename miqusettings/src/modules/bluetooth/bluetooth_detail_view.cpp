@@ -19,9 +19,6 @@ BluetoothDetailView::BluetoothDetailView() {
 }
 
 BluetoothDetailView::~BluetoothDetailView() {
-    if (m_alive) {
-        *m_alive = false;
-    }
     stop_polling();
     if (m_scanning) {
         BluetoothBackend::stop_scan();
@@ -32,6 +29,10 @@ BluetoothDetailView::~BluetoothDetailView() {
     }
 }
 
+void BluetoothDetailView::set_is_fullscreen(bool fullscreen) {
+    m_is_fullscreen = fullscreen;
+    setup_ui();
+}
 
 void BluetoothDetailView::refresh_state() {
     load_devices();
@@ -60,8 +61,7 @@ void BluetoothDetailView::start_polling() {
     auto engine = AppEngine::instance();
     if (!engine) return;
 
-    m_poll_timer_id = engine->post_delayed(2000, [this, alive = m_alive]() {
-        if (!*alive) return;
+    m_poll_timer_id = engine->post_delayed(2000, [this]() {
         m_poll_timer_id = 0;
         if (m_scanning && m_powered) {
             m_scan_ticks++;
@@ -97,8 +97,7 @@ void BluetoothDetailView::stop_polling() {
 void BluetoothDetailView::init_agent() {
     m_agent = std::make_unique<BluetoothAgent>();
 
-    m_agent->set_on_request_confirmation([this, alive = m_alive](const std::string& dev_name, const std::string& mac, uint32_t passkey, BluetoothAgent::ConfirmCallback cb) {
-        if (!*alive) return;
+    m_agent->set_on_request_confirmation([this](const std::string& dev_name, const std::string& mac, uint32_t passkey, BluetoothAgent::ConfirmCallback cb) {
         if (m_active_pairing_modal) {
             m_active_pairing_modal->dismiss();
             m_active_pairing_modal.reset();
@@ -107,15 +106,13 @@ void BluetoothDetailView::init_agent() {
             dev_name,
             mac,
             passkey,
-            [this, alive, cb]() {
-                if (!*alive) return;
+            [this, cb]() {
                 cb(true);
                 m_active_pairing_modal.reset();
                 load_devices();
                 setup_ui();
             },
-            [this, alive, cb]() {
-                if (!*alive) return;
+            [this, cb]() {
                 cb(false);
                 m_active_pairing_modal.reset();
             }
@@ -124,8 +121,7 @@ void BluetoothDetailView::init_agent() {
         modal->show_in(std::dynamic_pointer_cast<FrameLayout>(shared_from_this()));
     });
 
-    m_agent->set_on_display_passkey([this, alive = m_alive](const std::string& dev_name, const std::string& mac, uint32_t passkey) {
-        if (!*alive) return;
+    m_agent->set_on_display_passkey([this](const std::string& dev_name, const std::string& mac, uint32_t passkey) {
         if (m_active_pairing_modal) {
             m_active_pairing_modal->dismiss();
             m_active_pairing_modal.reset();
@@ -134,8 +130,7 @@ void BluetoothDetailView::init_agent() {
             dev_name,
             mac,
             passkey,
-            [this, alive]() {
-                if (!*alive) return;
+            [this]() {
                 m_active_pairing_modal.reset();
             }
         );
@@ -143,8 +138,7 @@ void BluetoothDetailView::init_agent() {
         modal->show_in(std::dynamic_pointer_cast<FrameLayout>(shared_from_this()));
     });
 
-    m_agent->set_on_request_authorization([this, alive = m_alive](const std::string& dev_name, const std::string& mac, BluetoothAgent::AuthorizationCallback cb) {
-        if (!*alive) return;
+    m_agent->set_on_request_authorization([this](const std::string& dev_name, const std::string& mac, BluetoothAgent::AuthorizationCallback cb) {
         if (m_active_pairing_modal) {
             m_active_pairing_modal->dismiss();
             m_active_pairing_modal.reset();
@@ -152,15 +146,13 @@ void BluetoothDetailView::init_agent() {
         auto modal = ModalOverlay::create_authorization_dialog(
             dev_name,
             mac,
-            [this, alive, cb]() {
-                if (!*alive) return;
+            [this, cb]() {
                 cb(true);
                 m_active_pairing_modal.reset();
                 load_devices();
                 setup_ui();
             },
-            [this, alive, cb]() {
-                if (!*alive) return;
+            [this, cb]() {
                 cb(false);
                 m_active_pairing_modal.reset();
             }
@@ -169,8 +161,7 @@ void BluetoothDetailView::init_agent() {
         modal->show_in(std::dynamic_pointer_cast<FrameLayout>(shared_from_this()));
     });
 
-    m_agent->set_on_cancel([this, alive = m_alive]() {
-        if (!*alive) return;
+    m_agent->set_on_cancel([this]() {
         if (m_active_pairing_modal) {
             m_active_pairing_modal->dismiss();
             m_active_pairing_modal.reset();
@@ -196,7 +187,7 @@ void BluetoothDetailView::setup_ui() {
         static_cast<int>(LayoutDimension::WrapContent)
     ));
     m_content_layout->set_divider_spacing(16);
-    m_content_layout->set_padding(28);
+    m_content_layout->set_padding(m_is_fullscreen ? 28 : 14);
 
     // Dependency check: BlueZ suite
     if (!BluetoothBackend::is_bluetooth_installed()) {
@@ -307,8 +298,8 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
 
     // Bluetooth Icon
     auto icon = std::make_shared<ImageView>(m_powered ? "bluetooth-active" : "bluetooth");
-    icon->set_target_size(38);
-    LayoutParams icon_lp(38, 38);
+    icon->set_target_size(m_is_fullscreen ? 38 : 32);
+    LayoutParams icon_lp(m_is_fullscreen ? 38 : 32, m_is_fullscreen ? 38 : 32);
     icon_lp.gravity = Gravity::CenterVertical;
     row->add_view(icon, icon_lp);
 
@@ -323,7 +314,7 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
     auto title = TextViewBuilder::create()
         ->text("Bluetooth")
         ->bold(true)
-        ->textSize(config->metrics.h1_size)
+        ->textSize(m_is_fullscreen ? config->metrics.h1_size : config->metrics.h2_size)
         ->textColor(config->colors.on_surface)
         ->build();
     text_col->add_view(title);
@@ -354,7 +345,23 @@ std::shared_ptr<View> BluetoothDetailView::create_hero_card() {
         ->build();
     row->add_view(sw);
 
-        
+    // Fullscreen toggle button if in 3-pillar mode
+    if (!m_is_fullscreen) {
+        auto btn_expand = ButtonBuilder::create()
+            ->text("⛶")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->backgroundColor(config->colors.surface_variant)
+            ->cornerRadius(btn_radius)
+            ->onClick([this]() {
+                if (m_on_request_fullscreen) m_on_request_fullscreen();
+            })
+            ->build();
+        LayoutParams btn_lp(32, 32);
+        btn_expand->set_layout_params(btn_lp);
+        row->add_view(btn_expand);
+    }
+
     hero_layout->add_view(row);
 
     // Android-style prominent 'Pair new device' action pill inside hero card
@@ -885,8 +892,7 @@ void BluetoothDetailView::on_pair_device(const std::string& mac) {
     BluetoothBackend::pair_and_connect(mac);
     // Refresh after delay if no modal is active
     if (auto engine = AppEngine::instance()) {
-        engine->post_delayed(3500, [this, alive = m_alive]() {
-            if (!*alive) return;
+        engine->post_delayed(3500, [this]() {
             if (!m_active_pairing_modal) {
                 load_devices();
                 setup_ui();

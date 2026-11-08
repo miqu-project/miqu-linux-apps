@@ -12,30 +12,43 @@
 #include <miqutoolkit/view/spinner.hpp>
 #include <memory>
 #include <string>
+#include <functional>
+
 namespace miqu {
 
 class FirewallDetailView : public FrameLayout {
 public:
     FirewallDetailView();
-    ~FirewallDetailView() override;
+    ~FirewallDetailView() override = default;
+
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
+    void set_on_request_fullscreen(std::function<void()> cb) {
+        m_on_request_fullscreen = std::move(cb);
+    }
 
 private:
     void setup_ui();
 
-    // Streamlined UI builder helpers
+    // UI builder helpers
     std::shared_ptr<View> create_status_banner();
-    std::shared_ptr<View> create_core_settings_card();
-    std::shared_ptr<View> create_quick_allow_card();
-    std::shared_ptr<View> create_custom_rules_card();
-    std::shared_ptr<View> create_logging_card();
-    void show_add_rule_modal();
+    std::shared_ptr<View> create_hero_preview_card();
+    std::shared_ptr<View> create_master_switch_card();
+    std::shared_ptr<View> create_traffic_policy_card();
+    std::shared_ptr<View> create_profile_presets_section();
+    std::shared_ptr<View> create_advanced_rules_card();
+    std::shared_ptr<View> create_logs_monitor_card();
+    std::shared_ptr<View> create_add_rule_inline_card();
 
+    bool m_is_fullscreen = false;
+    bool m_show_add_rule = false;
     bool m_is_busy = false;
     std::string m_status_message;
-    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 
     std::shared_ptr<ScrollView> m_scroll;
     std::shared_ptr<LinearLayout> m_content_layout;
+    std::function<void()> m_on_request_fullscreen;
 };
 
 } // namespace miqu

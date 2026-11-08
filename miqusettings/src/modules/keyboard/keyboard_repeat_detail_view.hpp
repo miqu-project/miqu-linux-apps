@@ -18,13 +18,17 @@ public:
     KeyboardRepeatDetailView();
     ~KeyboardRepeatDetailView() override = default;
 
+    void set_is_fullscreen(bool fullscreen);
+    bool is_fullscreen() const { return m_is_fullscreen; }
+
 private:
     void setup_ui();
     std::shared_ptr<View> create_hero_card();
     std::shared_ptr<View> create_repeat_delay_card();
     std::shared_ptr<View> create_repeat_rate_card();
 
-int m_repeat_delay = 600;
+    bool m_is_fullscreen = false;
+    int m_repeat_delay = 600;
     int m_repeat_rate = 25;
 
     std::shared_ptr<ScrollView> m_scroll;
