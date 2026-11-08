@@ -511,16 +511,8 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     {
         // 5.1 Brightness
         auto disp_bright = SettingItem::create_leaf("disp_bright", "Brightness", "", "󰃠");
-        disp_bright->has_slider = true;
-        disp_bright->slider_val = 0.85f;
-        disp_bright->slider_label = "Display Brightness";
-        disp_bright->slider_unit = "%";
-        disp_bright->has_switch = true;
-        disp_bright->switch_val = false;
-        disp_bright->switch_label = "Automatic Brightness Adjustment";
-        disp_bright->has_secondary_switch = false;
-        disp_bright->has_action = true;
-        disp_bright->action_label = "Calibrate Ambient Sensor";
+        disp_bright->is_display_brightness = true;
+        disp_bright->brightness_val = 0.85f;
         disp_bright->telemetry_title = "Backlight & panel specifications";
         disp_bright->telemetry = {
             {"Backlight Interface", "intel_backlight (/sys/class/backlight)"},
@@ -531,18 +523,10 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
 
         // 5.2 Screen Timeout
         auto disp_timeout = SettingItem::create_leaf("disp_timeout", "Screen Timeout", "", "󰒲");
-        disp_timeout->has_switch = true;
-        disp_timeout->switch_val = true;
-        disp_timeout->switch_label = "Idle Screen Dimming";
-        disp_timeout->has_secondary_switch = true;
-        disp_timeout->secondary_switch_val = true;
-        disp_timeout->secondary_switch_label = "Prevent Sleep While Audio/Video is Playing";
-        disp_timeout->has_slider = true;
-        disp_timeout->slider_val = 0.50f;
-        disp_timeout->slider_label = "Turn Off Screen After (10 min)";
-        disp_timeout->slider_unit = "%";
-        disp_timeout->has_action = true;
-        disp_timeout->action_label = "Test Screen Blanking Now";
+        disp_timeout->is_display_timeout = true;
+        disp_timeout->screen_timeout_cfg.dim_screen = true;
+        disp_timeout->screen_timeout_cfg.prevent_sleep = true;
+        disp_timeout->screen_timeout_cfg.timeout_minutes = 10;
         disp_timeout->telemetry_title = "Idle management specifications";
         disp_timeout->telemetry = {
             {"Idle Daemon", "miquidle (ext-idle-notify-v1)"},
@@ -554,18 +538,9 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
 
         // 5.3 Night Light
         auto disp_nightlight = SettingItem::create_leaf("disp_nightlight", "Night Light", "", "󰃟");
-        disp_nightlight->has_switch = true;
-        disp_nightlight->switch_val = true;
-        disp_nightlight->switch_label = "Night Light Filter";
-        disp_nightlight->has_secondary_switch = true;
-        disp_nightlight->secondary_switch_val = true;
-        disp_nightlight->secondary_switch_label = "Automatic Sunset to Sunrise Schedule";
-        disp_nightlight->has_slider = true;
-        disp_nightlight->slider_val = 0.65f;
-        disp_nightlight->slider_label = "Color Warmth (3400 K)";
-        disp_nightlight->slider_unit = "%";
-        disp_nightlight->has_action = true;
-        disp_nightlight->action_label = "Preview Warmth Calibration";
+        disp_nightlight->is_display_nightlight = true;
+        disp_nightlight->nightlight_cfg.enabled = true;
+        disp_nightlight->nightlight_cfg.warmth = 0.65f;
         disp_nightlight->telemetry_title = "Gamma & color specifications";
         disp_nightlight->telemetry = {
             {"Gamma Protocol", "wlr-gamma-control-v1"},
@@ -576,18 +551,10 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
 
         // 5.4 Lockscreen
         auto disp_lockscreen = SettingItem::create_leaf("disp_lockscreen", "Lockscreen", "", "󰌾");
-        disp_lockscreen->has_switch = true;
-        disp_lockscreen->switch_val = true;
-        disp_lockscreen->switch_label = "Lock Screen When Display Turns Off";
-        disp_lockscreen->has_secondary_switch = true;
-        disp_lockscreen->secondary_switch_val = true;
-        disp_lockscreen->secondary_switch_label = "Require Password Immediately After Sleep";
-        disp_lockscreen->has_slider = true;
-        disp_lockscreen->slider_val = 0.0f;
-        disp_lockscreen->slider_label = "Lock Grace Period (0 s)";
-        disp_lockscreen->slider_unit = "%";
-        disp_lockscreen->has_action = true;
-        disp_lockscreen->action_label = "Lock Session Now (Super+L)";
+        disp_lockscreen->is_display_lockscreen = true;
+        disp_lockscreen->lockscreen_cfg.lock_on_lid_close = true;
+        disp_lockscreen->lockscreen_cfg.require_password_immediately = true;
+        disp_lockscreen->lockscreen_cfg.grace_period_seconds = 0;
         disp_lockscreen->telemetry_title = "Session security specifications";
         disp_lockscreen->telemetry = {
             {"Locker Daemon", "miqulock (ext-session-lock-v1)"},

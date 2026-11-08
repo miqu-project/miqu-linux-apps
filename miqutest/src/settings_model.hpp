@@ -158,6 +158,23 @@ struct FirewallConfig {
     std::string last_blocked_probe = "203.0.113.45:445 (SMB Probe) -> DROP";
 };
 
+struct ScreenTimeoutConfig {
+    bool dim_screen = true;
+    bool prevent_sleep = true;
+    int timeout_minutes = 10;
+};
+
+struct NightLightConfig {
+    bool enabled = true;
+    float warmth = 0.65f;
+};
+
+struct LockscreenConfig {
+    bool lock_on_lid_close = true;
+    bool require_password_immediately = true;
+    int grace_period_seconds = 0;
+};
+
 class SettingItem {
 public:
     std::string id;
@@ -210,6 +227,18 @@ public:
     FirewallConfig firewall_cfg;
 
     bool is_per_app_network = false;
+
+    bool is_display_brightness = false;
+    float brightness_val = 0.85f;
+
+    bool is_display_timeout = false;
+    ScreenTimeoutConfig screen_timeout_cfg;
+
+    bool is_display_nightlight = false;
+    NightLightConfig nightlight_cfg;
+
+    bool is_display_lockscreen = false;
+    LockscreenConfig lockscreen_cfg;
 
     static std::shared_ptr<SettingItem> create_category(
         std::string id, std::string title, std::string icon,
