@@ -84,6 +84,7 @@ void MillerView::execute_sibling_swap(const std::shared_ptr<SettingItem>& item, 
     cancel_pending_sibling_click();
     m_last_sibling_clicked_index = -1;
     m_last_sibling_click_time_ms = 0;
+    if (!item) return;
 
     if (item->is_category) {
         if (!m_path.empty()) {
@@ -191,6 +192,9 @@ bool MillerView::on_key(const KeyPressEvent& event) {
 }
 
 const std::vector<std::shared_ptr<SettingItem>>& MillerView::get_current_list() const {
+    if (!m_search_query.empty()) {
+        return m_search_results;
+    }
     if (m_path.empty()) {
         return m_root_tree;
     }
@@ -222,21 +226,21 @@ void MillerView::rebuild_parent_column() {
     m_parent_layout->clear_views();
     auto config = Config::get();
 
-    if (m_path.empty()) {
+    if (m_path.empty() && m_search_query.empty()) {
         return;
     }
 
     m_parent_layout->set_gravity(Gravity::None);
 
-    // Depth > 0: Show parent's siblings directly without top navigation header
+    // Depth > 0 or Search Mode: Show categories for spatial context
     const std::vector<std::shared_ptr<SettingItem>>* parent_siblings = nullptr;
-    if (m_path.size() == 1) {
+    if (!m_search_query.empty() || m_path.size() == 1) {
         parent_siblings = &m_root_tree;
     } else {
         parent_siblings = &(m_path[m_path.size() - 2]->children);
     }
 
-    auto active_parent = m_path.back();
+    auto active_parent = (!m_search_query.empty() || m_path.empty()) ? nullptr : m_path.back();
     for (size_t i = 0; i < parent_siblings->size(); ++i) {
         const auto& item = (*parent_siblings)[i];
         bool is_active = (item == active_parent);
@@ -290,19 +294,7 @@ void MillerView::rebuild_parent_column() {
         text_lp.gravity = Gravity::CenterVertical;
         item_row->add_view(text_box, text_lp);
 
-        // Trailing indicator: Only show '›' for expandable categories
-        if (item->is_category) {
-            auto trail_view = TextViewBuilder::create()
-                ->text("›")
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-                ->build();
-            LayoutParams trail_lp;
-            trail_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-            trail_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            trail_lp.gravity = Gravity::CenterVertical;
-            item_row->add_view(trail_view, trail_lp);
-        }
+
 
         Color bg = is_active ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
         int stroke_w = is_active ? 1 : 0;
@@ -355,7 +347,40 @@ void MillerView::rebuild_current_column() {
     auto config = Config::get();
 
     const auto& list = get_current_list();
-    if (list.empty()) return;
+    if (list.empty()) {
+        if (!m_search_query.empty()) {
+            auto empty_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->gravity(Gravity::Center)
+                ->padding(16, 32)
+                ->spacing(8)
+                ->build();
+
+            auto empty_icon = TextViewBuilder::create()
+                ->text("🔍")
+                ->textSize(static_cast<int>(config->metrics.font_size * 2))
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.5f))
+                ->build();
+            empty_box->add_view(empty_icon);
+
+            auto empty_text = TextViewBuilder::create()
+                ->text("No settings found")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            empty_box->add_view(empty_text);
+
+            auto empty_hint = TextViewBuilder::create()
+                ->text("No matches for \"" + m_search_query + "\"")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+                ->build();
+            empty_box->add_view(empty_hint);
+
+            m_current_layout->add_view(empty_box);
+        }
+        return;
+    }
 
     m_current_index = std::clamp(m_current_index, 0, static_cast<int>(list.size()) - 1);
 
@@ -413,21 +438,7 @@ void MillerView::rebuild_current_column() {
         text_lp.gravity = Gravity::CenterVertical;
         item_row->add_view(text_box, text_lp);
 
-        // Trailing indicator: Only show '›' for expandable categories.
-        // No right-end indicators (no ON/OFF, no slider values) in navigation columns
-        // to eliminate costly backend queries before landing on proper preview.
-        if (item->is_category) {
-            auto trail_view = TextViewBuilder::create()
-                ->text("›")
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-                ->build();
-            LayoutParams trail_lp;
-            trail_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-            trail_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            trail_lp.gravity = Gravity::CenterVertical;
-            item_row->add_view(trail_view, trail_lp);
-        }
+
 
         // Wrap in CardView for selection styling
         Color bg = is_selected ? config->colors.primary_container.with_alpha(0.65f) : Color::transparent();
@@ -473,8 +484,1364 @@ void MillerView::add_preview_card(std::shared_ptr<View> card) {
     m_preview_layout->add_view(std::move(card), lp);
 }
 
+// ==============================================================================
+// Reusable Form Builders (Craftsmanship & DRY Standards)
+// ==============================================================================
+
+std::shared_ptr<LinearLayout> MillerView::create_form_card(const std::shared_ptr<Config>& config) {
+    return LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(16, 16)
+        ->spacing(12)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+        ->cornerRadius(12)
+        ->build();
+}
+
+void MillerView::add_form_divider(const std::shared_ptr<LinearLayout>& card, const std::shared_ptr<Config>& config) {
+    auto divider = LinearLayoutBuilder::create()
+        ->backgroundColor(config->colors.outline.with_alpha(0.12f))
+        ->build();
+    LayoutParams dlp;
+    dlp.width = static_cast<int>(LayoutDimension::MatchParent);
+    dlp.height = 1;
+    card->add_view(divider, dlp);
+}
+
+int MillerView::register_actionable_control(PreviewControlType type,
+                                            std::function<void()> on_activate,
+                                            std::function<void()> on_open_dropdown,
+                                            std::function<void(float)> on_adjust) {
+    int idx = static_cast<int>(m_actionable_controls.size());
+    m_actionable_controls.push_back({type, std::move(on_activate), std::move(on_open_dropdown), std::move(on_adjust)});
+    return idx;
+}
+
+void MillerView::add_form_toggle(
+    const std::shared_ptr<LinearLayout>& card,
+    const std::shared_ptr<Config>& config,
+    const std::string& title,
+    const std::string& hint,
+    bool checked,
+    std::function<void(bool)> on_toggle)
+{
+    int ctrl_idx = static_cast<int>(m_actionable_controls.size());
+    bool focused = is_control_focused(ctrl_idx);
+
+    auto row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->gravity(Gravity::CenterVertical)
+        ->padding(10, 8)
+        ->spacing(12)
+        ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
+        ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
+        ->cornerRadius(8)
+        ->build();
+
+    auto box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(2)
+        ->build();
+
+    auto title_view = TextViewBuilder::create()
+        ->text(title)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    box->add_view(title_view);
+
+    if (!hint.empty()) {
+        auto hint_view = TextViewBuilder::create()
+            ->text(hint)
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        box->add_view(hint_view);
+    }
+
+    LayoutParams box_lp;
+    box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    box_lp.weight = 1.0f;
+    box_lp.gravity = Gravity::CenterVertical;
+    row->add_view(box, box_lp);
+
+    auto sw = SwitchBuilder::create()
+        ->checked(checked)
+        ->onCheckedChanged([this, on_toggle](bool val) {
+            if (on_toggle) on_toggle(val);
+            notify_state_changed();
+        })
+        ->build();
+    row->add_view(sw);
+    card->add_view(row);
+
+    register_actionable_control(PreviewControlType::Switch, [sw]() {
+        if (sw) sw->toggle();
+    });
+}
+
+void MillerView::add_form_slider(
+    const std::shared_ptr<LinearLayout>& card,
+    const std::shared_ptr<Config>& config,
+    const std::string& title,
+    const std::string& hint,
+    float initial_val,
+    const std::string& initial_label,
+    std::function<std::string(float)> on_change)
+{
+    int ctrl_idx = static_cast<int>(m_actionable_controls.size());
+    bool focused = is_control_focused(ctrl_idx);
+
+    auto block = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(4)
+        ->padding(10, 8)
+        ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
+        ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
+        ->cornerRadius(8)
+        ->build();
+
+    auto header = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->gravity(Gravity::CenterVertical)
+        ->build();
+
+    auto box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(2)
+        ->build();
+
+    auto title_view = TextViewBuilder::create()
+        ->text(title)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    box->add_view(title_view);
+
+    if (!hint.empty()) {
+        auto hint_view = TextViewBuilder::create()
+            ->text(hint)
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        box->add_view(hint_view);
+    }
+
+    LayoutParams box_lp;
+    box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    box_lp.weight = 1.0f;
+    box_lp.gravity = Gravity::CenterVertical;
+    header->add_view(box, box_lp);
+
+    auto val_label = TextViewBuilder::create()
+        ->text(initial_label)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.primary)
+        ->build();
+    LayoutParams val_lp;
+    val_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+    val_lp.gravity = Gravity::CenterVertical;
+    header->add_view(val_label, val_lp);
+    block->add_view(header);
+
+    auto slider = SliderBuilder::create()
+        ->value(initial_val)
+        ->onValueChanged([this, val_label, on_change](float val, bool user) {
+            (void)user;
+            if (on_change) {
+                std::string text = on_change(val);
+                val_label->set_text(text);
+                val_label->request_redraw();
+            }
+            notify_state_changed();
+        })
+        ->build();
+    LayoutParams sl_lp;
+    sl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    sl_lp.height = 24;
+    block->add_view(slider, sl_lp);
+
+    card->add_view(block);
+
+    register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [slider, val_label, on_change](float delta) {
+        if (!slider) return;
+        float new_val = std::clamp(slider->get_value() + delta, 0.0f, 1.0f);
+        slider->set_value(new_val);
+        if (on_change) {
+            std::string text = on_change(new_val);
+            if (val_label) {
+                val_label->set_text(text);
+                val_label->request_redraw();
+            }
+        }
+    });
+}
+
+void MillerView::add_form_spinner(
+    const std::shared_ptr<LinearLayout>& card,
+    const std::shared_ptr<Config>& config,
+    const std::string& title,
+    const std::string& hint,
+    const std::vector<std::string>& items,
+    int cur_idx,
+    std::function<void(int, const std::string&)> on_select)
+{
+    int ctrl_idx = static_cast<int>(m_actionable_controls.size());
+    bool focused = is_control_focused(ctrl_idx);
+
+    auto block = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(6)
+        ->padding(10, 8)
+        ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
+        ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
+        ->cornerRadius(8)
+        ->build();
+
+    auto box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(2)
+        ->build();
+
+    auto title_view = TextViewBuilder::create()
+        ->text(title)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    box->add_view(title_view);
+
+    if (!hint.empty()) {
+        auto hint_view = TextViewBuilder::create()
+            ->text(hint)
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        box->add_view(hint_view);
+    }
+    block->add_view(box);
+
+    auto spinner = SpinnerBuilder::create()
+        ->items(items)
+        ->selectedIndex(cur_idx)
+        ->fontSize(config->metrics.font_size)
+        ->padding(12, 6)
+        ->cornerRadius(8)
+        ->onItemSelected([this, on_select](int idx, const std::string& val) {
+            if (on_select) on_select(idx, val);
+            notify_state_changed();
+        })
+        ->build();
+    LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+    block->add_view(spinner, sp_lp);
+    card->add_view(block);
+
+    register_actionable_control(PreviewControlType::Spinner,
+        [spinner]() { if (spinner) spinner->open_dropdown(); },
+        [spinner]() { if (spinner) spinner->open_dropdown(); },
+        nullptr
+    );
+}
+
+// ==============================================================================
+// Modular Domain Preview Renderers
+// ==============================================================================
+
+void MillerView::render_empty_preview(const std::shared_ptr<Config>& config) {
+    auto placeholder = TextViewBuilder::create()
+        ->text("No item selected")
+        ->center(true)
+        ->textColor(config->colors.on_surface_variant)
+        ->build();
+    add_preview_card(placeholder);
+}
+
+void MillerView::render_category_children_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    m_preview_layout->set_padding(Padding(12, 12));
+    m_preview_layout->set_divider_spacing(4);
+
+    for (size_t i = 0; i < item->children.size(); ++i) {
+        const auto& child = item->children[i];
+
+        auto item_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->padding(10, 8)
+            ->spacing(10)
+            ->build();
+
+        auto icon_view = TextViewBuilder::create()
+            ->text(child->icon.empty() ? "⚙" : child->icon)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface_variant)
+            ->build();
+        LayoutParams icon_lp;
+        icon_lp.width = 24;
+        icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        icon_lp.gravity = Gravity::CenterVertical;
+        item_row->add_view(icon_view, icon_lp);
+
+        auto text_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(1)
+            ->build();
+
+        auto title_view = TextViewBuilder::create()
+            ->text(child->title)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->ellipsize(true)
+            ->build();
+        text_box->add_view(title_view);
+
+        if (!child->subtitle.empty()) {
+            auto sub_view = TextViewBuilder::create()
+                ->text(child->subtitle)
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->ellipsize(true)
+                ->build();
+            text_box->add_view(sub_view);
+        }
+
+        LayoutParams text_lp;
+        text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        text_lp.weight = 1.0f;
+        text_lp.gravity = Gravity::CenterVertical;
+        item_row->add_view(text_box, text_lp);
+
+        auto row_card = CardViewBuilder::create()
+            ->style(CardStyle::Filled)
+            ->backgroundColor(Color::transparent())
+            ->cornerRadius(8)
+            ->elevation(0)
+            ->addView(item_row)
+            ->build();
+
+        row_card->set_on_click_listener([this, i]() {
+            navigate_enter();
+            m_current_index = static_cast<int>(i);
+            rebuild_columns();
+            notify_state_changed();
+        });
+
+        m_preview_layout->add_view(row_card);
+    }
+}
+
+void MillerView::render_tiling_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    if (!item || !item->tiling_cfg) return;
+    bool show_layout = (item->id == "tile_mode");
+    bool show_windows = (item->id == "tile_windows");
+    bool show_split = (item->id == "tile_split");
+    bool show_focus = (item->id == "tile_focus");
+
+    auto main_card = create_form_card(config);
+
+    // 1. Layout Mode
+    if (show_layout) {
+        int cur_mode_idx = 0;
+        for (size_t i = 0; i < item->tiling_cfg->available_layout_modes.size(); ++i) {
+            if (item->tiling_cfg->available_layout_modes[i] == item->tiling_cfg->layout_mode) {
+                cur_mode_idx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        add_form_spinner(
+            main_card, config,
+            "Tiling algorithm",
+            "",
+            item->tiling_cfg->available_layout_modes,
+            cur_mode_idx,
+            [item](int idx, const std::string& val) {
+                (void)idx;
+                item->tiling_cfg->layout_mode = val;
+            }
+        );
+    }
+
+    // 2. Windows
+    if (show_windows) {
+        add_form_slider(
+            main_card, config,
+            "Inner window gap",
+            "Spacing between adjacent tiled windows (in pixels)",
+            static_cast<float>(item->tiling_cfg->inner_gap) / 32.0f,
+            std::to_string(item->tiling_cfg->inner_gap) + " px",
+            [item](float val) -> std::string {
+                int px = static_cast<int>(std::round(val * 32.0f));
+                item->tiling_cfg->inner_gap = px;
+                return std::to_string(px) + " px";
+            }
+        );
+
+        add_form_slider(
+            main_card, config,
+            "Outer screen edge gap",
+            "Margin between window borders and monitor screen edges",
+            static_cast<float>(item->tiling_cfg->outer_gap) / 48.0f,
+            std::to_string(item->tiling_cfg->outer_gap) + " px",
+            [item](float val) -> std::string {
+                int px = static_cast<int>(std::round(val * 48.0f));
+                item->tiling_cfg->outer_gap = px;
+                return std::to_string(px) + " px";
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Smart gaps",
+            "Automatically collapse gaps and borders when only one window is open",
+            item->tiling_cfg->smart_gaps,
+            [item](bool val) {
+                item->tiling_cfg->smart_gaps = val;
+            }
+        );
+
+        add_form_slider(
+            main_card, config,
+            "Window border width",
+            "Border stroke thickness in pixels (0 disables window borders)",
+            static_cast<float>(item->tiling_cfg->border_width) / 8.0f,
+            item->tiling_cfg->border_width == 0 ? "Disabled (0 px)" : (std::to_string(item->tiling_cfg->border_width) + " px"),
+            [item](float val) -> std::string {
+                int px = static_cast<int>(std::round(val * 8.0f));
+                item->tiling_cfg->border_width = px;
+                return px == 0 ? "Disabled (0 px)" : (std::to_string(px) + " px");
+            }
+        );
+
+        add_form_slider(
+            main_card, config,
+            "Window corner radius",
+            "Rounding curvature applied to window frames and drop shadows",
+            static_cast<float>(item->tiling_cfg->corner_radius) / 32.0f,
+            std::to_string(item->tiling_cfg->corner_radius) + " px",
+            [item](float val) -> std::string {
+                int px = static_cast<int>(std::round(val * 32.0f));
+                item->tiling_cfg->corner_radius = px;
+                return std::to_string(px) + " px";
+            }
+        );
+
+        int cur_act_idx = 0;
+        for (size_t i = 0; i < item->tiling_cfg->active_border_presets.size(); ++i) {
+            if (item->tiling_cfg->active_border_presets[i] == item->tiling_cfg->active_border_preset) {
+                cur_act_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        add_form_spinner(
+            main_card, config,
+            "Active window border color",
+            "Border color or multi-stop linear gradient for focused window",
+            item->tiling_cfg->active_border_presets,
+            cur_act_idx,
+            [item](int idx, const std::string& val) {
+                (void)idx;
+                item->tiling_cfg->active_border_preset = val;
+                if (val.find("Yellow-Red") != std::string::npos) item->tiling_cfg->active_border_value = "#ffff00 #ff0000 45deg";
+                else if (val.find("Cyan-Blue") != std::string::npos) item->tiling_cfg->active_border_value = "#00ffcc #0066ff 45deg";
+                else if (val.find("Purple-Blue") != std::string::npos) item->tiling_cfg->active_border_value = "#ff007f #7928ca #0066ff 135deg";
+                else if (val.find("Neon") != std::string::npos) item->tiling_cfg->active_border_value = "#00ff88 #00ccff 90deg";
+                else if (val.find("Monochrome") != std::string::npos) item->tiling_cfg->active_border_value = "#ffffff";
+                else item->tiling_cfg->active_border_value = "#0066ff";
+            }
+        );
+
+        int cur_inact_idx = 0;
+        for (size_t i = 0; i < item->tiling_cfg->inactive_border_presets.size(); ++i) {
+            if (item->tiling_cfg->inactive_border_presets[i] == item->tiling_cfg->inactive_border_preset) {
+                cur_inact_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        add_form_spinner(
+            main_card, config,
+            "Inactive window border color",
+            "Border styling for unfocused background windows",
+            item->tiling_cfg->inactive_border_presets,
+            cur_inact_idx,
+            [item](int idx, const std::string& val) {
+                (void)idx;
+                item->tiling_cfg->inactive_border_preset = val;
+                if (val.find("Dark Slate") != std::string::npos) item->tiling_cfg->inactive_border_value = "#334455 #222d38 45deg";
+                else if (val.find("Graphite") != std::string::npos) item->tiling_cfg->inactive_border_value = "#2d3748";
+                else if (val.find("Muted Amber") != std::string::npos) item->tiling_cfg->inactive_border_value = "#aa9900 #aa3333 45deg";
+                else if (val.find("Subtle") != std::string::npos) item->tiling_cfg->inactive_border_value = "#ffffff33";
+                else item->tiling_cfg->inactive_border_value = "#00000000";
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Border specular shading",
+            "Subtle 3D lighting and specular bevel depth across the border stroke",
+            item->tiling_cfg->border_shading,
+            [item](bool val) {
+                item->tiling_cfg->border_shading = val;
+            }
+        );
+
+        if (item->tiling_cfg->border_shading) {
+            add_form_slider(
+                main_card, config,
+                "Shading intensity",
+                "Specular bevel strength across the window frame",
+                item->tiling_cfg->border_shading_strength,
+                std::to_string(static_cast<int>(item->tiling_cfg->border_shading_strength * 100)) + "%",
+                [item](float val) -> std::string {
+                    item->tiling_cfg->border_shading_strength = val;
+                    return std::to_string(static_cast<int>(val * 100)) + "%";
+                }
+            );
+        }
+
+        add_form_toggle(
+            main_card, config,
+            "Direct border drag resizing",
+            "Resize windows by dragging directly on window borders without modifier key",
+            item->tiling_cfg->resize_on_border,
+            [item](bool val) {
+                item->tiling_cfg->resize_on_border = val;
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Auto-float fixed-size dialogs",
+            "Automatically floats splash screens and dialogs declaring fixed min/max size constraints",
+            item->tiling_cfg->auto_float_fixed_size,
+            [item](bool val) {
+                item->tiling_cfg->auto_float_fixed_size = val;
+            }
+        );
+    }
+
+    // 3. Dwindle (BSP) Tuning
+    if (show_split) {
+        float initial_ratio_norm = (item->tiling_cfg->default_split_ratio - 0.20f) / 0.60f;
+        int r_pct = static_cast<int>(std::round(item->tiling_cfg->default_split_ratio * 100.0f));
+        add_form_slider(
+            main_card, config,
+            "Default split ratio",
+            "Initial screen division ratio when a new window partitions a workspace",
+            initial_ratio_norm,
+            std::to_string(r_pct) + "% / " + std::to_string(100 - r_pct) + "%",
+            [item](float val) -> std::string {
+                float ratio = 0.20f + val * 0.60f;
+                item->tiling_cfg->default_split_ratio = ratio;
+                int pct = static_cast<int>(std::round(ratio * 100.0f));
+                return std::to_string(pct) + "% / " + std::to_string(100 - pct) + "%";
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Smart cursor-aware splitting",
+            "Cursor position inside target window dictates horizontal or vertical split side",
+            item->tiling_cfg->smart_split,
+            [item](bool val) {
+                item->tiling_cfg->smart_split = val;
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Split focused window",
+            "New windows partition the currently active window instead of spawning at the spiral tail",
+            item->tiling_cfg->split_focus,
+            [item](bool val) {
+                item->tiling_cfg->split_focus = val;
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Preserve split orientation",
+            "Retains horizontal or vertical split axes when windows are moved or closed",
+            item->tiling_cfg->preserve_split,
+            [item](bool val) {
+                item->tiling_cfg->preserve_split = val;
+            }
+        );
+
+        float initial_mult_norm = (item->tiling_cfg->split_width_multiplier - 0.8f) / 1.7f;
+        auto format_mult = [](float m) -> std::string {
+            char buf[16];
+            std::snprintf(buf, sizeof(buf), "%.1f×", m);
+            return std::string(buf);
+        };
+        add_form_slider(
+            main_card, config,
+            "Widescreen split width multiplier",
+            "Aspect ratio threshold to favor side-by-side columns (width >= height × mult)",
+            initial_mult_norm,
+            format_mult(item->tiling_cfg->split_width_multiplier),
+            [item, format_mult](float val) -> std::string {
+                float mult = 0.8f + val * 1.7f;
+                item->tiling_cfg->split_width_multiplier = mult;
+                return format_mult(mult);
+            }
+        );
+    }
+
+    // 4. Focus Behaviour
+    if (show_focus) {
+        add_form_toggle(
+            main_card, config,
+            "Focus follows mouse (Sloppy focus)",
+            "Moving mouse cursor over a window automatically shifts keyboard focus to it",
+            item->tiling_cfg->focus_follows_mouse,
+            [item](bool val) {
+                item->tiling_cfg->focus_follows_mouse = val;
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Click to focus and raise",
+            "Clicking anywhere on an unfocused window brings it to the top of its layer and activates it",
+            item->tiling_cfg->click_to_focus,
+            [item](bool val) {
+                item->tiling_cfg->click_to_focus = val;
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Warp cursor on focus change",
+            "Automatically moves mouse pointer to the center of the focused window on keyboard navigation",
+            item->tiling_cfg->warp_cursor_on_focus,
+            [item](bool val) {
+                item->tiling_cfg->warp_cursor_on_focus = val;
+            }
+        );
+
+        add_form_toggle(
+            main_card, config,
+            "Focus on workspace switch",
+            "Automatically restores focus to the last active window when switching workspaces",
+            item->tiling_cfg->focus_on_workspace_switch,
+            [item](bool val) {
+                item->tiling_cfg->focus_on_workspace_switch = val;
+            }
+        );
+    }
+
+    add_preview_card(main_card);
+}
+
+void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    if (!item || !item->wallpaper_cfg) return;
+    auto main_card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(16, 16)
+        ->spacing(16)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+        ->cornerRadius(12)
+        ->build();
+
+    // 1. Display Aspect Ratio Rectangle (16:9 Ratio - 320x180 px)
+    auto display_rect = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->gravity(Gravity::Center)
+        ->backgroundColor(config->colors.surface_variant.with_alpha(0.45f))
+        ->stroke(1, config->colors.outline.with_alpha(0.35f))
+        ->cornerRadius(10)
+        ->spacing(4)
+        ->build();
+
+    auto wp_icon = TextViewBuilder::create()
+        ->text("󰸉")
+        ->textSize(static_cast<int>(config->metrics.font_size * 2))
+        ->textColor(config->colors.primary.with_alpha(0.85f))
+        ->build();
+    display_rect->add_view(wp_icon);
+
+    auto wp_name = TextViewBuilder::create()
+        ->text(item->wallpaper_cfg->current_wallpaper)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    display_rect->add_view(wp_name);
+
+    auto wp_tag = TextViewBuilder::create()
+        ->text("16:9 Display Preview")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+        ->build();
+    display_rect->add_view(wp_tag);
+
+    LayoutParams d_lp;
+    d_lp.width = 320;
+    d_lp.height = 180;
+    d_lp.gravity = Gravity::CenterHorizontal;
+    main_card->add_view(display_rect, d_lp);
+
+    // 2. Bottom Row: Browse Button, Fit Mode Spinner, Apply Button
+    auto bottom_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->gravity(Gravity::CenterVertical)
+        ->spacing(10)
+        ->build();
+
+    int b_idx = static_cast<int>(m_actionable_controls.size());
+    bool b_focused = is_control_focused(b_idx);
+
+    auto on_browse = [this, item]() {
+        static const std::vector<std::string> mock_wallpapers = {
+            "aurora_minimal.png",
+            "cyber_neon.png",
+            "mountain_twilight.png",
+            "forest_mist.png",
+            "abstract_waves.png"
+        };
+        static size_t wp_idx = 0;
+        wp_idx = (wp_idx + 1) % mock_wallpapers.size();
+        item->wallpaper_cfg->current_wallpaper = mock_wallpapers[wp_idx];
+        item->wallpaper_cfg->wallpaper_path = "~/Pictures/Wallpapers/" + mock_wallpapers[wp_idx];
+        rebuild_preview_column();
+        notify_state_changed();
+    };
+
+    auto browse_btn = ButtonBuilder::create()
+        ->text("Browse")
+        ->style(ButtonStyle::Outlined)
+        ->padding(14, 6)
+        ->cornerRadius(8)
+        ->onClick(on_browse)
+        ->build();
+    browse_btn->set_border_width(b_focused ? 2.0 : 1.0);
+    browse_btn->set_border_color(b_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
+    browse_btn->set_selected(b_focused);
+
+    LayoutParams b_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+    b_lp.gravity = Gravity::CenterVertical;
+    bottom_row->add_view(browse_btn, b_lp);
+
+    register_actionable_control(PreviewControlType::Button, on_browse);
+
+    int cur_fit_idx = 0;
+    for (size_t i = 0; i < item->wallpaper_cfg->fit_modes.size(); ++i) {
+        if (item->wallpaper_cfg->fit_modes[i] == item->wallpaper_cfg->fit_mode) {
+            cur_fit_idx = static_cast<int>(i);
+            break;
+        }
+    }
+
+    int s_idx = static_cast<int>(m_actionable_controls.size());
+    bool s_focused = is_control_focused(s_idx);
+
+    auto spin_container = LinearLayoutBuilder::create()
+        ->padding(2, 2)
+        ->stroke(s_focused ? 2 : 0, s_focused ? config->colors.primary : Color::transparent())
+        ->cornerRadius(10)
+        ->build();
+
+    auto fit_spinner = SpinnerBuilder::create()
+        ->items(item->wallpaper_cfg->fit_modes)
+        ->selectedIndex(cur_fit_idx)
+        ->fontSize(config->metrics.font_size)
+        ->padding(12, 6)
+        ->cornerRadius(8)
+        ->onItemSelected([item](int idx, const std::string& val) {
+            (void)idx;
+            item->wallpaper_cfg->fit_mode = val;
+        })
+        ->build();
+    LayoutParams s_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+    s_lp.gravity = Gravity::CenterVertical;
+    spin_container->add_view(fit_spinner, s_lp);
+    bottom_row->add_view(spin_container, s_lp);
+
+    register_actionable_control(PreviewControlType::Spinner,
+        [fit_spinner]() { if (fit_spinner) fit_spinner->open_dropdown(); },
+        [fit_spinner]() { if (fit_spinner) fit_spinner->open_dropdown(); },
+        nullptr
+    );
+
+    int a_idx = static_cast<int>(m_actionable_controls.size());
+    bool a_focused = is_control_focused(a_idx);
+
+    auto on_apply = [this, item]() {
+        item->last_action_message = "Wallpaper applied: " + item->wallpaper_cfg->current_wallpaper;
+        notify_state_changed();
+    };
+
+    auto apply_btn = ButtonBuilder::create()
+        ->text("Apply")
+        ->primary(true)
+        ->padding(16, 6)
+        ->cornerRadius(8)
+        ->onClick(on_apply)
+        ->build();
+    apply_btn->set_border_width(a_focused ? 2.0 : 0.0);
+    apply_btn->set_border_color(a_focused ? config->colors.on_primary : Color::transparent());
+    apply_btn->set_selected(a_focused);
+
+    LayoutParams a_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+    a_lp.gravity = Gravity::CenterVertical;
+    bottom_row->add_view(apply_btn, a_lp);
+
+    register_actionable_control(PreviewControlType::Button, on_apply);
+
+    main_card->add_view(bottom_row);
+    add_preview_card(main_card);
+}
+
+void MillerView::render_keybindings_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    if (!item) return;
+    auto main_card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(16, 16)
+        ->spacing(10)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+        ->cornerRadius(12)
+        ->build();
+
+    for (size_t i = 0; i < item->keybindings.size(); ++i) {
+        const auto& kb = item->keybindings[i];
+
+        if (i > 0) {
+            auto divider = LinearLayoutBuilder::create()
+                ->backgroundColor(config->colors.outline.with_alpha(0.10f))
+                ->build();
+            LayoutParams dlp;
+            dlp.width = static_cast<int>(LayoutDimension::MatchParent);
+            dlp.height = 1;
+            main_card->add_view(divider, dlp);
+        }
+
+        auto row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->spacing(12)
+            ->build();
+
+        auto text_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto act_lbl = TextViewBuilder::create()
+            ->text(kb.action)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        text_box->add_view(act_lbl);
+
+        if (!kb.description.empty()) {
+            auto desc_lbl = TextViewBuilder::create()
+                ->text(kb.description)
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            text_box->add_view(desc_lbl);
+        }
+
+        LayoutParams tb_lp;
+        tb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        tb_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        tb_lp.weight = 1.0f;
+        tb_lp.gravity = Gravity::CenterVertical;
+        row->add_view(text_box, tb_lp);
+
+        auto keys_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->spacing(4)
+            ->build();
+
+        for (size_t k = 0; k < kb.keys.size(); ++k) {
+            if (k > 0) {
+                auto plus_lbl = TextViewBuilder::create()
+                    ->text("+")
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+                    ->build();
+                LayoutParams p_lp;
+                p_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+                p_lp.gravity = Gravity::CenterVertical;
+                keys_box->add_view(plus_lbl, p_lp);
+            }
+
+            auto key_badge = CardViewBuilder::create()
+                ->style(CardStyle::Filled)
+                ->backgroundColor(config->colors.surface_variant.with_alpha(0.6f))
+                ->stroke(1, config->colors.outline.with_alpha(0.35f))
+                ->cornerRadius(6)
+                ->elevation(0)
+                ->addView(
+                    TextViewBuilder::create()
+                        ->text(kb.keys[k])
+                        ->caption(true)
+                        ->textColor(config->colors.primary)
+                        ->padding(8, 4)
+                        ->build()
+                )
+                ->build();
+
+            LayoutParams k_lp;
+            k_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            k_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            k_lp.gravity = Gravity::CenterVertical;
+            keys_box->add_view(key_badge, k_lp);
+        }
+
+        LayoutParams r_lp;
+        r_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        r_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        r_lp.gravity = Gravity::CenterVertical;
+        row->add_view(keys_box, r_lp);
+
+        main_card->add_view(row);
+    }
+
+    add_preview_card(main_card);
+}
+
+void MillerView::render_timeout_lock_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    if (!item) return;
+
+    auto main_card = create_form_card(config);
+
+    auto add_section_header = [&main_card, config](const std::string& title) {
+        auto s_title = TextViewBuilder::create()
+            ->text(title)
+            ->caption(true)
+            ->textColor(config->colors.primary)
+            ->build();
+        main_card->add_view(s_title);
+    };
+
+    // -------------------------------------------------------------
+    // Section 1: Inactivity Timers
+    // -------------------------------------------------------------
+    add_section_header("Inactivity Timers");
+
+    std::vector<int> lock_steps = {1, 2, 5, 10, 15, 30, 0};
+    auto format_lock_mins = [](int mins) -> std::string {
+        if (mins == 0) return "Never";
+        if (mins == 1) return "1 minute";
+        return std::to_string(mins) + " minutes";
+    };
+    int l_cur_idx = 0;
+    for (size_t i = 0; i < lock_steps.size(); ++i) {
+        if (lock_steps[i] == item->timeout_lock_cfg.lock_timeout_minutes) {
+            l_cur_idx = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_slider(
+        main_card, config,
+        "Lock screen after inactivity",
+        "Protects your session and hides open windows",
+        static_cast<float>(l_cur_idx) / static_cast<float>(lock_steps.size() - 1),
+        format_lock_mins(item->timeout_lock_cfg.lock_timeout_minutes),
+        [item, lock_steps, format_lock_mins](float val) -> std::string {
+            int idx = std::clamp(static_cast<int>(std::round(val * static_cast<float>(lock_steps.size() - 1))), 0, static_cast<int>(lock_steps.size() - 1));
+            item->timeout_lock_cfg.lock_timeout_minutes = lock_steps[idx];
+            return format_lock_mins(lock_steps[idx]);
+        }
+    );
+
+    std::vector<int> disp_steps = {1, 2, 5, 10, 15, 30, 60, 0};
+    auto format_disp_mins = [](int mins) -> std::string {
+        if (mins == 0) return "Never";
+        if (mins == 1) return "1 minute";
+        if (mins == 60) return "1 hour";
+        return std::to_string(mins) + " minutes";
+    };
+    int d_cur_idx = 0;
+    for (size_t i = 0; i < disp_steps.size(); ++i) {
+        if (disp_steps[i] == item->timeout_lock_cfg.display_off_minutes) {
+            d_cur_idx = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_slider(
+        main_card, config,
+        "Turn off display after inactivity",
+        "Powers down monitor backlight (DPMS power-off)",
+        static_cast<float>(d_cur_idx) / static_cast<float>(disp_steps.size() - 1),
+        format_disp_mins(item->timeout_lock_cfg.display_off_minutes),
+        [item, disp_steps, format_disp_mins](float val) -> std::string {
+            int idx = std::clamp(static_cast<int>(std::round(val * static_cast<float>(disp_steps.size() - 1))), 0, static_cast<int>(disp_steps.size() - 1));
+            item->timeout_lock_cfg.display_off_minutes = disp_steps[idx];
+            return format_disp_mins(disp_steps[idx]);
+        }
+    );
+
+    std::vector<int> sleep_steps = {5, 10, 15, 30, 60, 120, 0};
+    auto format_sleep_mins = [](int mins) -> std::string {
+        if (mins == 0) return "Never";
+        if (mins < 60) return std::to_string(mins) + " minutes";
+        if (mins == 60) return "1 hour";
+        return std::to_string(mins / 60) + " hours";
+    };
+    int s_cur_idx = 0;
+    for (size_t i = 0; i < sleep_steps.size(); ++i) {
+        if (sleep_steps[i] == item->timeout_lock_cfg.sleep_minutes) {
+            s_cur_idx = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_slider(
+        main_card, config,
+        "Suspend system after inactivity",
+        "Puts the computer into sleep mode to conserve energy",
+        static_cast<float>(s_cur_idx) / static_cast<float>(sleep_steps.size() - 1),
+        format_sleep_mins(item->timeout_lock_cfg.sleep_minutes),
+        [item, sleep_steps, format_sleep_mins](float val) -> std::string {
+            int idx = std::clamp(static_cast<int>(std::round(val * static_cast<float>(sleep_steps.size() - 1))), 0, static_cast<int>(sleep_steps.size() - 1));
+            item->timeout_lock_cfg.sleep_minutes = sleep_steps[idx];
+            return format_sleep_mins(sleep_steps[idx]);
+        }
+    );
+
+    std::vector<int> hib_steps = {30, 60, 120, 240, 0};
+    auto format_hib_mins = [](int mins) -> std::string {
+        if (mins == 0) return "Disabled (Never Hibernate)";
+        if (mins < 60) return std::to_string(mins) + " minutes after sleep";
+        if (mins == 60) return "1 hour after sleep";
+        return std::to_string(mins / 60) + " hours after sleep";
+    };
+    int h_cur_idx = 0;
+    for (size_t i = 0; i < hib_steps.size(); ++i) {
+        if (hib_steps[i] == item->timeout_lock_cfg.hibernate_delay_minutes) {
+            h_cur_idx = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_slider(
+        main_card, config,
+        "Auto-hibernate to disk delay",
+        "Saves RAM state to swap and powers off system",
+        static_cast<float>(h_cur_idx) / static_cast<float>(hib_steps.size() - 1),
+        format_hib_mins(item->timeout_lock_cfg.hibernate_delay_minutes),
+        [item, hib_steps, format_hib_mins](float val) -> std::string {
+            int idx = std::clamp(static_cast<int>(std::round(val * static_cast<float>(hib_steps.size() - 1))), 0, static_cast<int>(hib_steps.size() - 1));
+            item->timeout_lock_cfg.hibernate_delay_minutes = hib_steps[idx];
+            return format_hib_mins(hib_steps[idx]);
+        }
+    );
+
+    // -------------------------------------------------------------
+    // Section 2: Power Triggers & Sleep Modes (systemd-logind)
+    // -------------------------------------------------------------
+    add_form_divider(main_card, config);
+    add_section_header("Power Triggers & Sleep Modes (systemd-logind)");
+
+    std::vector<std::string> sleep_modes = {
+        "Hybrid Sleep (Recommended)",
+        "Sleep (Suspend to RAM)",
+        "Hibernate (Suspend to Disk)"
+    };
+    int sm_sel = 0;
+    for (size_t i = 0; i < sleep_modes.size(); ++i) {
+        if (sleep_modes[i] == item->timeout_lock_cfg.sleep_mode) {
+            sm_sel = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_spinner(
+        main_card, config,
+        "System sleep target",
+        "Method used when system enters sleep",
+        sleep_modes, sm_sel,
+        [item, sleep_modes](int idx, const std::string& val) {
+            (void)idx;
+            item->timeout_lock_cfg.sleep_mode = val;
+        }
+    );
+
+    std::vector<std::string> lid_actions = {
+        "Sleep",
+        "Lock only",
+        "Hibernate",
+        "Turn off display only",
+        "Ignore (Do nothing)"
+    };
+    int la_sel = 0;
+    for (size_t i = 0; i < lid_actions.size(); ++i) {
+        if (lid_actions[i] == item->timeout_lock_cfg.lid_action) {
+            la_sel = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_spinner(
+        main_card, config,
+        "When laptop lid is closed",
+        "Action triggered when lid switch engages",
+        lid_actions, la_sel,
+        [item, lid_actions](int idx, const std::string& val) {
+            (void)idx;
+            item->timeout_lock_cfg.lid_action = val;
+        }
+    );
+
+    std::vector<std::string> pwr_actions = {
+        "Show power menu (miqupower)",
+        "Sleep",
+        "Lock",
+        "Hibernate",
+        "Power off"
+    };
+    int pa_sel = 0;
+    for (size_t i = 0; i < pwr_actions.size(); ++i) {
+        if (pwr_actions[i] == item->timeout_lock_cfg.power_button_action) {
+            pa_sel = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_spinner(
+        main_card, config,
+        "When power button is pressed",
+        "Physical chassis power key response",
+        pwr_actions, pa_sel,
+        [item, pwr_actions](int idx, const std::string& val) {
+            (void)idx;
+            item->timeout_lock_cfg.power_button_action = val;
+        }
+    );
+
+    std::vector<std::string> crit_actions = {
+        "Hibernate",
+        "Sleep",
+        "Power off"
+    };
+    int ca_sel = 0;
+    for (size_t i = 0; i < crit_actions.size(); ++i) {
+        if (crit_actions[i] == item->timeout_lock_cfg.critical_battery_action) {
+            ca_sel = static_cast<int>(i);
+            break;
+        }
+    }
+    add_form_spinner(
+        main_card, config,
+        "When battery reaches critical level (<= 5%)",
+        "Emergency safeguard to prevent sudden power cutoff",
+        crit_actions, ca_sel,
+        [item, crit_actions](int idx, const std::string& val) {
+            (void)idx;
+            item->timeout_lock_cfg.critical_battery_action = val;
+        }
+    );
+
+    // -------------------------------------------------------------
+    // Section 3: Display & Power Behavior
+    // -------------------------------------------------------------
+    add_form_divider(main_card, config);
+    add_section_header("Display & Power Behavior");
+
+    add_form_toggle(
+        main_card, config,
+        "Dim display before turning off",
+        "Reduces backlight to 20% before turning screen off",
+        item->timeout_lock_cfg.dim_screen,
+        [item](bool c) { item->timeout_lock_cfg.dim_screen = c; }
+    );
+
+    add_form_toggle(
+        main_card, config,
+        "Prevent sleep while media is playing",
+        "Wayland idle-inhibit lock when audio or video is active",
+        item->timeout_lock_cfg.prevent_sleep_media,
+        [item](bool c) { item->timeout_lock_cfg.prevent_sleep_media = c; }
+    );
+
+    add_form_toggle(
+        main_card, config,
+        "Energy saver timeouts on battery",
+        "Shortens idle timeouts when running on battery power",
+        item->timeout_lock_cfg.energy_saver_battery,
+        [item](bool c) { item->timeout_lock_cfg.energy_saver_battery = c; }
+    );
+
+    add_form_toggle(
+        main_card, config,
+        "Clamshell mode (keep awake when docked)",
+        "Prevents sleeping on lid close if external display & keyboard are connected",
+        item->timeout_lock_cfg.clamshell_mode,
+        [item](bool c) { item->timeout_lock_cfg.clamshell_mode = c; }
+    );
+
+    // -------------------------------------------------------------
+    // Section 4: Security & Lockscreen (miqulock)
+    // -------------------------------------------------------------
+    add_form_divider(main_card, config);
+    add_section_header("Security & Lockscreen (miqulock)");
+
+    add_form_toggle(
+        main_card, config,
+        "Lock screen before sleep",
+        "Ensures session is secured before system suspends",
+        item->timeout_lock_cfg.lock_before_sleep,
+        [item](bool c) { item->timeout_lock_cfg.lock_before_sleep = c; }
+    );
+
+    add_form_toggle(
+        main_card, config,
+        "Lock immediately when display turns off",
+        "Locks session as soon as DPMS screen backlight powers down",
+        item->timeout_lock_cfg.lock_on_display_off,
+        [item](bool c) { item->timeout_lock_cfg.lock_on_display_off = c; }
+    );
+
+    add_form_toggle(
+        main_card, config,
+        "Require password to unlock",
+        "Prompts for PAM authentication upon waking",
+        item->timeout_lock_cfg.require_password_immediately,
+        [this, item](bool c) {
+            item->timeout_lock_cfg.require_password_immediately = c;
+            rebuild_preview_column();
+        }
+    );
+
+    if (item->timeout_lock_cfg.require_password_immediately) {
+        std::vector<int> grace_steps = {0, 15, 30, 60, 120, 300};
+        auto format_grace = [](int secs) -> std::string {
+            if (secs == 0) return "Immediately (No grace period)";
+            if (secs < 60) return std::to_string(secs) + " seconds";
+            if (secs == 60) return "1 minute";
+            return std::to_string(secs / 60) + " minutes";
+        };
+        int g_cur_idx = 0;
+        for (size_t i = 0; i < grace_steps.size(); ++i) {
+            if (grace_steps[i] == item->timeout_lock_cfg.grace_period_seconds) {
+                g_cur_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        add_form_slider(
+            main_card, config,
+            "Grace period before password is required",
+            "Brief grace window right after display turns off",
+            static_cast<float>(g_cur_idx) / static_cast<float>(grace_steps.size() - 1),
+            format_grace(item->timeout_lock_cfg.grace_period_seconds),
+            [item, grace_steps, format_grace](float val) -> std::string {
+                int idx = std::clamp(static_cast<int>(std::round(val * static_cast<float>(grace_steps.size() - 1))), 0, static_cast<int>(grace_steps.size() - 1));
+                item->timeout_lock_cfg.grace_period_seconds = grace_steps[idx];
+                return format_grace(grace_steps[idx]);
+            }
+        );
+    }
+
+    add_form_toggle(
+        main_card, config,
+        "Show power actions on lockscreen",
+        "Displays Sleep, Restart, and Shut Down buttons in miqulock",
+        item->timeout_lock_cfg.lockscreen_show_power_actions,
+        [item](bool c) { item->timeout_lock_cfg.lockscreen_show_power_actions = c; }
+    );
+
+    add_form_toggle(
+        main_card, config,
+        "24-hour clock format on lockscreen",
+        "Uses 24-hour time notation (%H:%M) on miqulock clock",
+        item->timeout_lock_cfg.lockscreen_24h_clock,
+        [item](bool c) { item->timeout_lock_cfg.lockscreen_24h_clock = c; }
+    );
+
+    add_preview_card(main_card);
+
+    // Terminology Card
+    auto defs_card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(16, 14)
+        ->spacing(8)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+        ->cornerRadius(12)
+        ->build();
+
+    auto defs_title_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->spacing(8)
+        ->gravity(Gravity::CenterVertical)
+        ->build();
+
+    auto defs_icon = TextViewBuilder::create()
+        ->text("󰋼")
+        ->textSize(config->metrics.font_size + 2)
+        ->textColor(config->colors.primary)
+        ->build();
+    LayoutParams deficon_lp;
+    deficon_lp.width = 24;
+    deficon_lp.gravity = Gravity::CenterVertical;
+    defs_title_row->add_view(defs_icon, deficon_lp);
+
+    auto defs_heading = TextViewBuilder::create()
+        ->text("Power & Lock Terminology Explained")
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    defs_title_row->add_view(defs_heading);
+    defs_card->add_view(defs_title_row);
+
+    auto add_def_entry = [&defs_card, config](const std::string& term, const std::string& meaning) {
+        auto row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto t_label = TextViewBuilder::create()
+            ->text(term)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->build();
+        row->add_view(t_label);
+
+        auto m_label = TextViewBuilder::create()
+            ->text(meaning)
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.85f))
+            ->build();
+        row->add_view(m_label);
+
+        LayoutParams r_lp;
+        r_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        r_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        defs_card->add_view(row, r_lp);
+    };
+
+    add_def_entry("Display Off (DPMS)", "Powers down the screen backlight only. The CPU, Wi-Fi, and background applications continue running normally at full speed.");
+    add_def_entry("Sleep (Suspend to RAM)", "Pauses the CPU and freezes open applications in RAM with minimal power draw (~0.3W). Wakes back to your desktop in 1 to 2 seconds.");
+    add_def_entry("Hibernate (Suspend to Disk)", "Writes a complete memory snapshot to swap disk and cuts 100% of power (0W). Preserves your open work indefinitely even on zero battery.");
+    add_def_entry("Hybrid Sleep", "Enters Sleep immediately for fast 1-second wake, then automatically Hibernates to swap disk after prolonged inactivity to protect the battery.");
+    add_def_entry("Lock Screen (miqulock)", "Obscures your workspace behind PAM authentication. Requires your password to unlock while apps continue running uninterrupted in the background.");
+    add_def_entry("Grace Period", "A brief safety window right after the display turns off where pressing any key immediately resumes your desktop without asking for your password.");
+    add_def_entry("Clamshell Docking", "Allows you to close your laptop lid without triggering sleep or lock when an external monitor and keyboard/mouse are connected.");
+
+    add_preview_card(defs_card);
+
+    if (!item->telemetry.empty()) {
+        add_preview_card(create_telemetry_card(item->telemetry, config, item->telemetry_title.empty() ? "Inactivity & security specifications" : item->telemetry_title));
+    }
+}
+
+void MillerView::deferred_rebuild_preview(int delay_ms) {
+    if (auto* eng = AppEngine::instance()) {
+        eng->post_delayed(delay_ms, [this]() {
+            rebuild_preview_column();
+            notify_state_changed();
+        });
+    } else {
+        rebuild_preview_column();
+        notify_state_changed();
+    }
+}
+
 void MillerView::rebuild_preview_column() {
     m_preview_layout->clear_views();
+    m_actionable_controls.clear();
     m_active_primary_switch = nullptr;
     m_active_secondary_switch = nullptr;
     m_active_slider = nullptr;
@@ -486,108 +1853,12 @@ void MillerView::rebuild_preview_column() {
     auto item = get_current_selected_item();
 
     if (!item) {
-        auto placeholder = TextViewBuilder::create()
-            ->text("No item selected")
-            ->center(true)
-            ->textColor(config->colors.on_surface_variant)
-            ->build();
-        add_preview_card(placeholder);
+        render_empty_preview(config);
         return;
     }
 
     if (item->is_category) {
-        // --- DIRECT CONTENTS LIST (GENUINE MILLER CHILD COLUMN) ---
-        m_preview_layout->set_padding(Padding(12, 12));
-        m_preview_layout->set_divider_spacing(4);
-
-        // Child item list matching column style
-        for (size_t i = 0; i < item->children.size(); ++i) {
-            const auto& child = item->children[i];
-
-            auto item_row = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->padding(10, 8)
-                ->spacing(10)
-                ->build();
-
-            // Icon
-            auto icon_view = TextViewBuilder::create()
-                ->text(child->icon.empty() ? "⚙" : child->icon)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface_variant)
-                ->build();
-            LayoutParams icon_lp;
-            icon_lp.width = 24;
-            icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            icon_lp.gravity = Gravity::CenterVertical;
-            item_row->add_view(icon_view, icon_lp);
-
-            // Text container (Title and optional contextual Subtitle)
-            auto text_box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(1)
-                ->build();
-
-            auto title_view = TextViewBuilder::create()
-                ->text(child->title)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->ellipsize(true)
-                ->build();
-            text_box->add_view(title_view);
-
-            if (!child->subtitle.empty()) {
-                auto sub_view = TextViewBuilder::create()
-                    ->text(child->subtitle)
-                    ->caption(true)
-                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                    ->ellipsize(true)
-                    ->build();
-                text_box->add_view(sub_view);
-            }
-
-            LayoutParams text_lp;
-            text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            text_lp.weight = 1.0f;
-            text_lp.gravity = Gravity::CenterVertical;
-            item_row->add_view(text_box, text_lp);
-
-            // Trailing indicator: Only show '›' for expandable categories.
-            // No right-end indicators (no ON/OFF, no slider values) in navigation columns.
-            if (child->is_category) {
-                auto trail_view = TextViewBuilder::create()
-                    ->text("›")
-                    ->caption(true)
-                    ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-                    ->build();
-                LayoutParams trail_lp;
-                trail_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-                trail_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-                trail_lp.gravity = Gravity::CenterVertical;
-                item_row->add_view(trail_view, trail_lp);
-            }
-
-            auto row_card = CardViewBuilder::create()
-                ->style(CardStyle::Filled)
-                ->backgroundColor(Color::transparent())
-                ->cornerRadius(8)
-                ->elevation(0)
-                ->addView(item_row)
-                ->build();
-
-            // Clicking child directly enters category and selects child
-            row_card->set_on_click_listener([this, item, i]() {
-                m_path.push_back(item);
-                m_history_indices.push_back(m_current_index);
-                m_current_index = static_cast<int>(i);
-                m_preview_focused = false;
-                rebuild_columns();
-                notify_state_changed();
-            });
-
-            add_preview_card(row_card);
-        }
+        render_category_children_preview(item, config);
         return;
     }
 
@@ -600,7 +1871,8 @@ void MillerView::rebuild_preview_column() {
         bool is_speaker = (item->id == "sound_speaker");
 
         // 1. Seekbar Card (Volume for Speaker, Gain for Mic)
-        bool slider_focused = m_preview_focused && (m_preview_control_index == 0);
+        int s_idx = static_cast<int>(m_actionable_controls.size());
+        bool slider_focused = is_control_focused(s_idx);
         auto seekbar_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->padding(16, 14)
@@ -652,8 +1924,13 @@ void MillerView::rebuild_preview_column() {
         seekbar_card->add_view(m_active_slider, slider_lp);
         add_preview_card(seekbar_card);
 
+        register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this](float delta) {
+            adjust_active_slider(delta);
+        });
+
         // 2. Mute Card (Toggle Switch)
-        bool mute_focused = m_preview_focused && (m_preview_control_index == 1);
+        int m_idx = static_cast<int>(m_actionable_controls.size());
+        bool mute_focused = is_control_focused(m_idx);
         auto mute_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
@@ -695,7 +1972,7 @@ void MillerView::rebuild_preview_column() {
             ->onCheckedChanged([this, item](bool checked) {
                 item->switch_val = checked;
                 rebuild_current_column();
-                rebuild_preview_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             })
             ->build();
@@ -706,6 +1983,10 @@ void MillerView::rebuild_preview_column() {
         sw_lp.gravity = Gravity::CenterVertical;
         mute_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(mute_card);
+
+        register_actionable_control(PreviewControlType::Switch, [this]() {
+            if (m_active_primary_switch) m_active_primary_switch->toggle();
+        });
 
         // 3. Audio Device Specifications
         if (!item->telemetry.empty()) {
@@ -718,7 +1999,8 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Clean Layout for Wi-Fi: Switch (like Speaker mute), Networks list, Scan button, Telemetry
     if (item->id == "net_wifi") {
         // 1. Wi-Fi Power Toggle Card (Just like mute button of speaker)
-        bool switch_focused = m_preview_focused && (m_preview_control_index == 0);
+        int sw_idx = static_cast<int>(m_actionable_controls.size());
+        bool switch_focused = is_control_focused(sw_idx);
         auto wifi_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
@@ -770,7 +2052,7 @@ void MillerView::rebuild_preview_column() {
             ->onCheckedChanged([this, item](bool checked) {
                 item->switch_val = checked;
                 rebuild_current_column();
-                rebuild_preview_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             })
             ->build();
@@ -781,6 +2063,10 @@ void MillerView::rebuild_preview_column() {
         sw_lp.gravity = Gravity::CenterVertical;
         wifi_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(wifi_card);
+
+        register_actionable_control(PreviewControlType::Switch, [this]() {
+            if (m_active_primary_switch) m_active_primary_switch->toggle();
+        });
 
         // 2. Networks Section (Visible when Wi-Fi is enabled)
         if (item->switch_val) {
@@ -810,6 +2096,15 @@ void MillerView::rebuild_preview_column() {
             nt_lp.gravity = Gravity::CenterVertical;
             net_header_row->add_view(net_title, nt_lp);
 
+            int sc_idx = static_cast<int>(m_actionable_controls.size());
+            bool scan_focused = is_control_focused(sc_idx);
+
+            auto on_scan = [this, item]() {
+                item->last_action_message = "Scan completed • 5 networks found";
+                rebuild_preview_column();
+                notify_state_changed();
+            };
+
             auto scan_btn = ButtonBuilder::create()
                 ->text("Scan")
                 ->flat(true)
@@ -817,18 +2112,20 @@ void MillerView::rebuild_preview_column() {
                 ->textColor(config->colors.primary)
                 ->padding(10, 4)
                 ->cornerRadius(6)
-                ->onClick([this, item]() {
-                    item->last_action_message = "Scan completed • 5 networks found";
-                    rebuild_preview_column();
-                    notify_state_changed();
-                })
+                ->onClick(on_scan)
                 ->build();
+            scan_btn->set_border_width(scan_focused ? 2.0 : 0.0);
+            scan_btn->set_border_color(scan_focused ? config->colors.primary : Color::transparent());
+            scan_btn->set_selected(scan_focused);
+
             LayoutParams scan_lp;
             scan_lp.width = static_cast<int>(LayoutDimension::WrapContent);
             scan_lp.height = 28;
             scan_lp.gravity = Gravity::CenterVertical;
             net_header_row->add_view(scan_btn, scan_lp);
             net_card->add_view(net_header_row);
+
+            register_actionable_control(PreviewControlType::Button, on_scan);
 
             if (!item->last_action_message.empty()) {
                 auto scan_status = TextViewBuilder::create()
@@ -914,16 +2211,20 @@ void MillerView::rebuild_preview_column() {
                 }
 
                 Color row_bg = is_conn ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
+                int net_idx = static_cast<int>(m_actionable_controls.size());
+                bool net_focused = is_control_focused(net_idx);
+
                 auto net_row_card = CardViewBuilder::create()
                     ->style(CardStyle::Filled)
                     ->backgroundColor(row_bg)
+                    ->stroke(net_focused ? 2 : 0, net_focused ? config->colors.primary : Color::transparent())
                     ->cornerRadius(8)
                     ->elevation(0)
                     ->addView(row_content)
                     ->build();
 
-                // Clicking network: switches connection to this network
-                net_row_card->set_on_click_listener([this, item, ni]() {
+                auto on_connect = [this, item, ni]() {
+                    if (ni >= item->wifi_networks.size()) return;
                     for (size_t k = 0; k < item->wifi_networks.size(); ++k) {
                         if (k == ni) {
                             item->wifi_networks[k].status = "Connected";
@@ -931,9 +2232,13 @@ void MillerView::rebuild_preview_column() {
                             item->wifi_networks[k].status = "Saved";
                         }
                     }
-                    rebuild_preview_column();
+                    deferred_rebuild_preview();
                     notify_state_changed();
-                });
+                };
+
+                // Clicking network: switches connection to this network
+                net_row_card->set_on_click_listener(on_connect);
+                register_actionable_control(PreviewControlType::Button, on_connect);
 
                 net_card->add_view(net_row_card);
             }
@@ -952,7 +2257,8 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Clean Layout for Bluetooth: Switch (like Wi-Fi), Devices list, Scan button, Telemetry
     if (item->id == "net_bluetooth") {
         // 1. Bluetooth Power Toggle Card
-        bool switch_focused = m_preview_focused && (m_preview_control_index == 0);
+        int sw_idx = static_cast<int>(m_actionable_controls.size());
+        bool switch_focused = is_control_focused(sw_idx);
         auto bt_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
@@ -1020,7 +2326,7 @@ void MillerView::rebuild_preview_column() {
             ->onCheckedChanged([this, item](bool checked) {
                 item->switch_val = checked;
                 rebuild_current_column();
-                rebuild_preview_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             })
             ->build();
@@ -1031,6 +2337,10 @@ void MillerView::rebuild_preview_column() {
         sw_lp.gravity = Gravity::CenterVertical;
         bt_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(bt_card);
+
+        register_actionable_control(PreviewControlType::Switch, [this]() {
+            if (m_active_primary_switch) m_active_primary_switch->toggle();
+        });
 
         // 2. Devices Section (Visible when Bluetooth is enabled)
         if (item->switch_val) {
@@ -1060,6 +2370,43 @@ void MillerView::rebuild_preview_column() {
             dt_lp.gravity = Gravity::CenterVertical;
             dev_header_row->add_view(dev_title, dt_lp);
 
+            int sc_idx = static_cast<int>(m_actionable_controls.size());
+            bool scan_focused = is_control_focused(sc_idx);
+
+            auto on_scan = [this, item]() {
+                bool found_new = false;
+                bool already_has_bose = false;
+                for (const auto& d : item->bt_devices) {
+                    if (d.name == "Bose QuietComfort 45") {
+                        already_has_bose = true;
+                        break;
+                    }
+                }
+                if (!already_has_bose) {
+                    item->bt_devices.push_back({"Bose QuietComfort 45", "Tap to pair", "󰋋", ""});
+                    item->last_action_message = "Scan completed • Found Bose QuietComfort 45";
+                    found_new = true;
+                } else {
+                    bool already_has_mx = false;
+                    for (const auto& d : item->bt_devices) {
+                        if (d.name == "MX Anywhere 3S") {
+                            already_has_mx = true;
+                            break;
+                        }
+                    }
+                    if (!already_has_mx) {
+                        item->bt_devices.push_back({"MX Anywhere 3S", "Tap to pair", "󰍽", ""});
+                        item->last_action_message = "Scan completed • Found MX Anywhere 3S";
+                        found_new = true;
+                    }
+                }
+                if (!found_new) {
+                    item->last_action_message = "Scan completed • All nearby devices discovered";
+                }
+                rebuild_preview_column();
+                notify_state_changed();
+            };
+
             auto scan_btn = ButtonBuilder::create()
                 ->text("Scan")
                 ->flat(true)
@@ -1067,46 +2414,20 @@ void MillerView::rebuild_preview_column() {
                 ->textColor(config->colors.primary)
                 ->padding(10, 4)
                 ->cornerRadius(6)
-                ->onClick([this, item]() {
-                    bool found_new = false;
-                    bool already_has_bose = false;
-                    for (const auto& d : item->bt_devices) {
-                        if (d.name == "Bose QuietComfort 45") {
-                            already_has_bose = true;
-                            break;
-                        }
-                    }
-                    if (!already_has_bose) {
-                        item->bt_devices.push_back({"Bose QuietComfort 45", "Tap to pair", "󰋋", ""});
-                        item->last_action_message = "Scan completed • Found Bose QuietComfort 45";
-                        found_new = true;
-                    } else {
-                        bool already_has_mx = false;
-                        for (const auto& d : item->bt_devices) {
-                            if (d.name == "MX Anywhere 3S") {
-                                already_has_mx = true;
-                                break;
-                            }
-                        }
-                        if (!already_has_mx) {
-                            item->bt_devices.push_back({"MX Anywhere 3S", "Tap to pair", "󰍽", ""});
-                            item->last_action_message = "Scan completed • Found MX Anywhere 3S";
-                            found_new = true;
-                        }
-                    }
-                    if (!found_new) {
-                        item->last_action_message = "Scan completed • All nearby devices discovered";
-                    }
-                    rebuild_preview_column();
-                    notify_state_changed();
-                })
+                ->onClick(on_scan)
                 ->build();
+            scan_btn->set_border_width(scan_focused ? 2.0 : 0.0);
+            scan_btn->set_border_color(scan_focused ? config->colors.primary : Color::transparent());
+            scan_btn->set_selected(scan_focused);
+
             LayoutParams scan_lp;
             scan_lp.width = static_cast<int>(LayoutDimension::WrapContent);
             scan_lp.height = 28;
             scan_lp.gravity = Gravity::CenterVertical;
             dev_header_row->add_view(scan_btn, scan_lp);
             dev_card->add_view(dev_header_row);
+
+            register_actionable_control(PreviewControlType::Button, on_scan);
 
             if (!item->last_action_message.empty()) {
                 auto scan_status = TextViewBuilder::create()
@@ -1188,16 +2509,20 @@ void MillerView::rebuild_preview_column() {
                 }
 
                 Color row_bg = is_conn ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
+                int dev_idx = static_cast<int>(m_actionable_controls.size());
+                bool dev_focused = is_control_focused(dev_idx);
+
                 auto dev_row_card = CardViewBuilder::create()
                     ->style(CardStyle::Filled)
                     ->backgroundColor(row_bg)
+                    ->stroke(dev_focused ? 2 : 0, dev_focused ? config->colors.primary : Color::transparent())
                     ->cornerRadius(8)
                     ->elevation(0)
                     ->addView(row_content)
                     ->build();
 
-                // Clicking device: connects it (or pairs & connects if Tap to pair)
-                dev_row_card->set_on_click_listener([this, item, di]() {
+                auto on_dev_connect = [this, item, di]() {
+                    if (di >= item->bt_devices.size()) return;
                     for (size_t k = 0; k < item->bt_devices.size(); ++k) {
                         if (k == di) {
                             item->bt_devices[k].status = "Connected";
@@ -1208,9 +2533,13 @@ void MillerView::rebuild_preview_column() {
                             item->bt_devices[k].status = "Paired";
                         }
                     }
-                    rebuild_preview_column();
+                    deferred_rebuild_preview();
                     notify_state_changed();
-                });
+                };
+
+                // Clicking device: connects it (or pairs & connects if Tap to pair)
+                dev_row_card->set_on_click_listener(on_dev_connect);
+                register_actionable_control(PreviewControlType::Button, on_dev_connect);
 
                 dev_card->add_view(dev_row_card);
             }
@@ -1258,6 +2587,15 @@ void MillerView::rebuild_preview_column() {
             ht_lp.gravity = Gravity::CenterVertical;
             header_row->add_view(header_title, ht_lp);
 
+            int r_idx = static_cast<int>(m_actionable_controls.size());
+            bool renew_focused = is_control_focused(r_idx);
+
+            auto on_renew = [this, item]() {
+                item->last_action_message = "DHCP lease renewed • IPv4 192.168.1.105";
+                rebuild_preview_column();
+                notify_state_changed();
+            };
+
             auto renew_btn = ButtonBuilder::create()
                 ->text("Renew DHCP")
                 ->flat(true)
@@ -1265,18 +2603,20 @@ void MillerView::rebuild_preview_column() {
                 ->textColor(config->colors.primary)
                 ->padding(10, 4)
                 ->cornerRadius(6)
-                ->onClick([this, item]() {
-                    item->last_action_message = "DHCP lease renewed • IPv4 192.168.1.105";
-                    rebuild_preview_column();
-                    notify_state_changed();
-                })
+                ->onClick(on_renew)
                 ->build();
+            renew_btn->set_border_width(renew_focused ? 2.0 : 0.0);
+            renew_btn->set_border_color(renew_focused ? config->colors.primary : Color::transparent());
+            renew_btn->set_selected(renew_focused);
+
             LayoutParams renew_lp;
             renew_lp.width = static_cast<int>(LayoutDimension::WrapContent);
             renew_lp.height = 28;
             renew_lp.gravity = Gravity::CenterVertical;
             header_row->add_view(renew_btn, renew_lp);
             profile_card->add_view(header_row);
+
+            register_actionable_control(PreviewControlType::Button, on_renew);
 
             if (!item->last_action_message.empty()) {
                 auto renew_status = TextViewBuilder::create()
@@ -1398,7 +2738,8 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Clean Layout for Airplane Mode: Master Switch + Bottom Info of affected radios
     if (item->id == "net_airplane") {
         // 1. Airplane Mode Primary Switch Card
-        bool switch_focused = m_preview_focused && (m_preview_control_index == 0);
+        int sw_idx = static_cast<int>(m_actionable_controls.size());
+        bool switch_focused = is_control_focused(sw_idx);
         auto airplane_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
@@ -1450,7 +2791,7 @@ void MillerView::rebuild_preview_column() {
             ->onCheckedChanged([this, item](bool checked) {
                 item->switch_val = checked;
                 rebuild_current_column();
-                rebuild_preview_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             })
             ->build();
@@ -1461,6 +2802,10 @@ void MillerView::rebuild_preview_column() {
         sw_lp.gravity = Gravity::CenterVertical;
         airplane_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(airplane_card);
+
+        register_actionable_control(PreviewControlType::Switch, [this]() {
+            if (m_active_primary_switch) m_active_primary_switch->toggle();
+        });
 
         // 2. Bottom Info Card: What things are going to be disabled
         auto info_card = LinearLayoutBuilder::create()
@@ -1668,6 +3013,9 @@ void MillerView::rebuild_preview_column() {
             }
         }
 
+        int sp_idx = static_cast<int>(m_actionable_controls.size());
+        bool sp_focused = is_control_focused(sp_idx);
+
         // Single Spinner on a NEW line
         auto dns_spinner = SpinnerBuilder::create()
             ->items(item->private_dns_cfg.options)
@@ -1696,8 +3044,21 @@ void MillerView::rebuild_preview_column() {
             })
             ->build();
 
+        auto spin_container = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->stroke(sp_focused ? 2 : 0, sp_focused ? config->colors.primary : Color::transparent())
+            ->cornerRadius(8)
+            ->build();
+
         LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        cfg_card->add_view(dns_spinner, sp_lp);
+        spin_container->add_view(dns_spinner, sp_lp);
+        cfg_card->add_view(spin_container, sp_lp);
+
+        register_actionable_control(PreviewControlType::Spinner,
+            [dns_spinner]() { if (dns_spinner) dns_spinner->open_dropdown(); },
+            [dns_spinner]() { if (dns_spinner) dns_spinner->open_dropdown(); },
+            nullptr
+        );
 
         // Hostname Label
         auto host_lbl = TextViewBuilder::create()
@@ -1830,7 +3191,8 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Interactive UI for Firewall
     if (item->is_firewall) {
         // 1. Top Card: Simple Bluetooth-like On/Off Switch with Subtitle "Powered by UFW"
-        bool switch_focused = m_preview_focused && (m_preview_control_index == 0);
+        int sw_idx = static_cast<int>(m_actionable_controls.size());
+        bool switch_focused = is_control_focused(sw_idx);
         auto fw_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
@@ -1881,7 +3243,7 @@ void MillerView::rebuild_preview_column() {
             ->onCheckedChanged([this, item](bool checked) {
                 item->firewall_cfg.enabled = checked;
                 rebuild_current_column();
-                rebuild_preview_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             })
             ->build();
@@ -1893,6 +3255,10 @@ void MillerView::rebuild_preview_column() {
         fw_card->add_view(m_active_primary_switch, sw_lp);
 
         add_preview_card(fw_card);
+
+        register_actionable_control(PreviewControlType::Switch, [this]() {
+            if (m_active_primary_switch) m_active_primary_switch->toggle();
+        });
 
         if (item->firewall_cfg.enabled) {
             // 2. Policy Card: Incoming Spinner, Outgoing Spinner
@@ -1929,6 +3295,9 @@ void MillerView::rebuild_preview_column() {
                 }
             }
 
+            int in_idx = static_cast<int>(m_actionable_controls.size());
+            bool in_focused = is_control_focused(in_idx);
+
             auto in_spinner = SpinnerBuilder::create()
                 ->items(in_policies)
                 ->selectedIndex(in_sel)
@@ -1940,8 +3309,21 @@ void MillerView::rebuild_preview_column() {
                     item->firewall_cfg.incoming_policy = val;
                 })
                 ->build();
+
+            auto in_container = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->stroke(in_focused ? 2 : 0, in_focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
+                ->build();
             LayoutParams in_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-            policy_card->add_view(in_spinner, in_sp_lp);
+            in_container->add_view(in_spinner, in_sp_lp);
+            policy_card->add_view(in_container, in_sp_lp);
+
+            register_actionable_control(PreviewControlType::Spinner,
+                [in_spinner]() { if (in_spinner) in_spinner->open_dropdown(); },
+                [in_spinner]() { if (in_spinner) in_spinner->open_dropdown(); },
+                nullptr
+            );
 
             // Outgoing traffic
             auto out_lbl = TextViewBuilder::create()
@@ -1960,6 +3342,9 @@ void MillerView::rebuild_preview_column() {
                 }
             }
 
+            int out_idx = static_cast<int>(m_actionable_controls.size());
+            bool out_focused = is_control_focused(out_idx);
+
             auto out_spinner = SpinnerBuilder::create()
                 ->items(out_policies)
                 ->selectedIndex(out_sel)
@@ -1971,8 +3356,21 @@ void MillerView::rebuild_preview_column() {
                     item->firewall_cfg.outgoing_policy = val;
                 })
                 ->build();
+
+            auto out_container = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->stroke(out_focused ? 2 : 0, out_focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
+                ->build();
             LayoutParams out_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-            policy_card->add_view(out_spinner, out_sp_lp);
+            out_container->add_view(out_spinner, out_sp_lp);
+            policy_card->add_view(out_container, out_sp_lp);
+
+            register_actionable_control(PreviewControlType::Spinner,
+                [out_spinner]() { if (out_spinner) out_spinner->open_dropdown(); },
+                [out_spinner]() { if (out_spinner) out_spinner->open_dropdown(); },
+                nullptr
+            );
 
             add_preview_card(policy_card);
 
@@ -2022,6 +3420,9 @@ void MillerView::rebuild_preview_column() {
                 }
             }
 
+            int p_idx = static_cast<int>(m_actionable_controls.size());
+            bool p_focused = is_control_focused(p_idx);
+
             auto preset_spinner = SpinnerBuilder::create()
                 ->items(presets)
                 ->selectedIndex(preset_sel)
@@ -2035,9 +3436,22 @@ void MillerView::rebuild_preview_column() {
                     preset_desc->request_redraw();
                 })
                 ->build();
+
+            auto p_container = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->stroke(p_focused ? 2 : 0, p_focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
+                ->build();
             LayoutParams preset_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-            preset_card->add_view(preset_spinner, preset_sp_lp);
+            p_container->add_view(preset_spinner, preset_sp_lp);
+            preset_card->add_view(p_container, preset_sp_lp);
             preset_card->add_view(preset_desc);
+
+            register_actionable_control(PreviewControlType::Spinner,
+                [preset_spinner]() { if (preset_spinner) preset_spinner->open_dropdown(); },
+                [preset_spinner]() { if (preset_spinner) preset_spinner->open_dropdown(); },
+                nullptr
+            );
 
             add_preview_card(preset_card);
 
@@ -2068,15 +3482,21 @@ void MillerView::rebuild_preview_column() {
             rtitle_lp.gravity = Gravity::CenterVertical;
             rules_hdr->add_view(rules_title, rtitle_lp);
 
+            int add_idx = static_cast<int>(m_actionable_controls.size());
+            bool add_focused = is_control_focused(add_idx);
+
             auto add_btn = ButtonBuilder::create()
                 ->text("+ Add Rule")
                 ->style(ButtonStyle::Outlined)
                 ->padding(12, 4)
                 ->cornerRadius(6)
                 ->build();
+            add_btn->set_border_width(add_focused ? 2.0 : 1.0);
+            add_btn->set_border_color(add_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
+            add_btn->set_selected(add_focused);
 
             // When Add Rule button is clicked, show Popup
-            add_btn->set_on_click_listener([this, item, config, add_btn]() {
+            auto on_open_add_rule = [this, item, config, add_btn]() {
                 if (m_active_popup) {
                     m_active_popup->dismiss();
                     m_active_popup = nullptr;
@@ -2170,7 +3590,7 @@ void MillerView::rebuild_preview_column() {
                             m_active_popup->dismiss();
                             m_active_popup = nullptr;
                         }
-                        rebuild_preview_column();
+                        deferred_rebuild_preview();
                         notify_state_changed();
                     })
                     ->build();
@@ -2188,7 +3608,10 @@ void MillerView::rebuild_preview_column() {
                     ->build();
 
                 m_active_popup->show_as_dropdown(add_btn, PopupGravity::BottomEnd);
-            });
+            };
+
+            add_btn->set_on_click_listener(on_open_add_rule);
+            register_actionable_control(PreviewControlType::Button, on_open_add_rule);
 
             LayoutParams add_btn_lp;
             add_btn_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -2200,9 +3623,16 @@ void MillerView::rebuild_preview_column() {
 
             // Vertically stacked switches helper
             auto add_rule_row = [&](const std::string& name, const std::string& desc, bool is_checked, std::function<void(bool)> on_toggle) {
+                int r_idx = static_cast<int>(m_actionable_controls.size());
+                bool r_focused = is_control_focused(r_idx);
+
                 auto row = LinearLayoutBuilder::create()
                     ->orientation(Orientation::Horizontal)
                     ->spacing(12)
+                    ->padding(8, 4)
+                    ->backgroundColor(r_focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
+                    ->stroke(r_focused ? 2 : 0, r_focused ? config->colors.primary : Color::transparent())
+                    ->cornerRadius(8)
                     ->gravity(Gravity::CenterVertical)
                     ->build();
 
@@ -2233,7 +3663,10 @@ void MillerView::rebuild_preview_column() {
 
                 auto sw = SwitchBuilder::create()
                     ->checked(is_checked)
-                    ->onCheckedChanged(std::move(on_toggle))
+                    ->onCheckedChanged([this, on_toggle](bool c) {
+                        if (on_toggle) on_toggle(c);
+                        notify_state_changed();
+                    })
                     ->build();
                 LayoutParams sw_lp;
                 sw_lp.width = 44;
@@ -2242,6 +3675,10 @@ void MillerView::rebuild_preview_column() {
                 row->add_view(sw, sw_lp);
 
                 rules_card->add_view(row);
+
+                register_actionable_control(PreviewControlType::Switch, [sw]() {
+                    if (sw) sw->toggle();
+                });
             };
 
             // Predefined common rules
@@ -2267,12 +3704,15 @@ void MillerView::rebuild_preview_column() {
             add_preview_card(rules_card);
 
             // 5. Monitor Card: Can be disabled with switch
+            int mon_idx = static_cast<int>(m_actionable_controls.size());
+            bool mon_focused = is_control_focused(mon_idx);
+
             auto monitor_card = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->spacing(10)
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
-                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->stroke(mon_focused ? 2 : 1, mon_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
                 ->cornerRadius(12)
                 ->build();
 
@@ -2321,7 +3761,7 @@ void MillerView::rebuild_preview_column() {
                 ->checked(item->firewall_cfg.monitor_enabled)
                 ->onCheckedChanged([this, item](bool checked) {
                     item->firewall_cfg.monitor_enabled = checked;
-                    rebuild_preview_column();
+                    deferred_rebuild_preview();
                     notify_state_changed();
                 })
                 ->build();
@@ -2332,6 +3772,10 @@ void MillerView::rebuild_preview_column() {
             mon_hdr->add_view(mon_sw, mon_sw_lp);
 
             monitor_card->add_view(mon_hdr);
+
+            register_actionable_control(PreviewControlType::Switch, [mon_sw]() {
+                if (mon_sw) mon_sw->toggle();
+            });
 
             if (item->firewall_cfg.monitor_enabled) {
                 std::vector<TelemetryEntry> mon_telemetry = {
@@ -2418,12 +3862,14 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Minimal UI for Display Brightness
     if (item->is_display_brightness) {
         // 1. Simple Brightness Adjusting Card (No hero card)
+        int b_idx = static_cast<int>(m_actionable_controls.size());
+        bool b_focused = is_control_focused(b_idx);
         auto bright_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->padding(16, 14)
             ->spacing(10)
             ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->stroke(b_focused ? 2 : 1, b_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
             ->cornerRadius(12)
             ->build();
 
@@ -2501,6 +3947,18 @@ void MillerView::rebuild_preview_column() {
 
         add_preview_card(bright_card);
 
+        register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this, item, slider, val_label](float delta) {
+            float clamped = std::clamp(item->brightness_val + delta, 0.05f, 1.0f);
+            item->brightness_val = clamped;
+            if (slider) slider->set_value(clamped);
+            int pct = static_cast<int>(std::round(clamped * 100.0f));
+            if (val_label) {
+                val_label->set_text(std::to_string(pct) + "%");
+                val_label->request_redraw();
+            }
+            notify_state_changed();
+        });
+
         if (!item->telemetry.empty()) {
             add_preview_card(create_telemetry_card(item->telemetry, config, item->telemetry_title.empty() ? "Backlight & panel specifications" : item->telemetry_title));
         }
@@ -2509,1889 +3967,25 @@ void MillerView::rebuild_preview_column() {
 
     // Dedicated Interactive UI for Compositor Settings (Tiling, Windows, Split & Focus)
     if (item->is_tiling_config) {
-        bool show_layout = (item->id == "tile_mode");
-        bool show_windows = (item->id == "tile_windows");
-        bool show_split = (item->id == "tile_split");
-        bool show_focus = (item->id == "tile_focus");
-
-        auto main_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->padding(16, 16)
-            ->spacing(12)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
-
-        auto add_divider = [&main_card, config]() {
-            auto divider = LinearLayoutBuilder::create()
-                ->backgroundColor(config->colors.outline.with_alpha(0.12f))
-                ->build();
-            LayoutParams dlp;
-            dlp.width = static_cast<int>(LayoutDimension::MatchParent);
-            dlp.height = 1;
-            main_card->add_view(divider, dlp);
-        };
-
-        auto add_toggle_row = [&](const std::string& title, const std::string& hint, bool checked, std::function<void(bool)> on_toggle) {
-            auto row = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->gravity(Gravity::CenterVertical)
-                ->spacing(12)
-                ->build();
-
-            auto box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(2)
-                ->build();
-
-            auto title_view = TextViewBuilder::create()
-                ->text(title)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            box->add_view(title_view);
-
-            if (!hint.empty()) {
-                auto hint_view = TextViewBuilder::create()
-                    ->text(hint)
-                    ->caption(true)
-                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                    ->build();
-                box->add_view(hint_view);
-            }
-
-            LayoutParams box_lp;
-            box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            box_lp.weight = 1.0f;
-            box_lp.gravity = Gravity::CenterVertical;
-            row->add_view(box, box_lp);
-
-            auto sw = SwitchBuilder::create()
-                ->checked(checked)
-                ->onCheckedChanged([this, on_toggle](bool val) {
-                    if (on_toggle) on_toggle(val);
-                    notify_state_changed();
-                })
-                ->build();
-            row->add_view(sw);
-            main_card->add_view(row);
-        };
-
-        auto add_slider_row = [&](const std::string& title, const std::string& hint, float initial_val, const std::string& initial_label, std::function<std::string(float)> on_change) {
-            auto header = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->gravity(Gravity::CenterVertical)
-                ->build();
-
-            auto box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(2)
-                ->build();
-
-            auto title_view = TextViewBuilder::create()
-                ->text(title)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            box->add_view(title_view);
-
-            if (!hint.empty()) {
-                auto hint_view = TextViewBuilder::create()
-                    ->text(hint)
-                    ->caption(true)
-                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                    ->build();
-                box->add_view(hint_view);
-            }
-
-            LayoutParams box_lp;
-            box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            box_lp.weight = 1.0f;
-            box_lp.gravity = Gravity::CenterVertical;
-            header->add_view(box, box_lp);
-
-            auto val_label = TextViewBuilder::create()
-                ->text(initial_label)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.primary)
-                ->build();
-            LayoutParams val_lp;
-            val_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-            val_lp.gravity = Gravity::CenterVertical;
-            header->add_view(val_label, val_lp);
-            main_card->add_view(header);
-
-            auto slider = SliderBuilder::create()
-                ->value(initial_val)
-                ->onValueChanged([this, val_label, on_change](float val, bool user) {
-                    (void)user;
-                    if (on_change) {
-                        std::string text = on_change(val);
-                        val_label->set_text(text);
-                        val_label->request_redraw();
-                    }
-                    notify_state_changed();
-                })
-                ->build();
-            LayoutParams sl_lp;
-            sl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            sl_lp.height = 24;
-            main_card->add_view(slider, sl_lp);
-        };
-
-        auto add_spinner_block = [&](const std::string& title, const std::string& hint, const std::vector<std::string>& items, int cur_idx, std::function<void(int, const std::string&)> on_select) {
-            auto block = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(6)
-                ->build();
-
-            auto box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(2)
-                ->build();
-
-            auto title_view = TextViewBuilder::create()
-                ->text(title)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            box->add_view(title_view);
-
-            if (!hint.empty()) {
-                auto hint_view = TextViewBuilder::create()
-                    ->text(hint)
-                    ->caption(true)
-                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                    ->build();
-                box->add_view(hint_view);
-            }
-            block->add_view(box);
-
-            auto spinner = SpinnerBuilder::create()
-                ->items(items)
-                ->selectedIndex(cur_idx)
-                ->fontSize(config->metrics.font_size)
-                ->padding(12, 6)
-                ->cornerRadius(8)
-                ->onItemSelected([this, on_select](int idx, const std::string& val) {
-                    if (on_select) on_select(idx, val);
-                    notify_state_changed();
-                })
-                ->build();
-            LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-            block->add_view(spinner, sp_lp);
-            main_card->add_view(block);
-        };
-
-        // -------------------------------------------------------------
-        // 1. Layout Mode
-        // -------------------------------------------------------------
-        if (show_layout) {
-            int cur_mode_idx = 0;
-            for (size_t i = 0; i < item->tiling_cfg->available_layout_modes.size(); ++i) {
-                if (item->tiling_cfg->available_layout_modes[i] == item->tiling_cfg->layout_mode) {
-                    cur_mode_idx = static_cast<int>(i);
-                    break;
-                }
-            }
-
-            add_spinner_block(
-                "Tiling algorithm",
-                "",
-                item->tiling_cfg->available_layout_modes,
-                cur_mode_idx,
-                [item](int idx, const std::string& val) {
-                    (void)idx;
-                    item->tiling_cfg->layout_mode = val;
-                }
-            );
-        }
-
-        // -------------------------------------------------------------
-        // 2. Windows
-        // -------------------------------------------------------------
-        if (show_windows) {
-            // Inner Window Gap (0 to 32 px)
-            add_slider_row(
-                "Inner window gap",
-                "Spacing between adjacent tiled windows (in pixels)",
-                static_cast<float>(item->tiling_cfg->inner_gap) / 32.0f,
-                std::to_string(item->tiling_cfg->inner_gap) + " px",
-                [item](float val) -> std::string {
-                    int px = static_cast<int>(std::round(val * 32.0f));
-                    item->tiling_cfg->inner_gap = px;
-                    return std::to_string(px) + " px";
-                }
-            );
-
-            // Outer Screen Edge Gap (0 to 48 px)
-            add_slider_row(
-                "Outer screen edge gap",
-                "Margin between window borders and monitor screen edges",
-                static_cast<float>(item->tiling_cfg->outer_gap) / 48.0f,
-                std::to_string(item->tiling_cfg->outer_gap) + " px",
-                [item](float val) -> std::string {
-                    int px = static_cast<int>(std::round(val * 48.0f));
-                    item->tiling_cfg->outer_gap = px;
-                    return std::to_string(px) + " px";
-                }
-            );
-
-            // Smart Gaps
-            add_toggle_row(
-                "Smart gaps",
-                "Automatically collapse gaps and borders when only one window is open",
-                item->tiling_cfg->smart_gaps,
-                [item](bool val) {
-                    item->tiling_cfg->smart_gaps = val;
-                }
-            );
-
-            // Window Border Width (0 to 8 px)
-            add_slider_row(
-                "Window border width",
-                "Border stroke thickness in pixels (0 disables window borders)",
-                static_cast<float>(item->tiling_cfg->border_width) / 8.0f,
-                item->tiling_cfg->border_width == 0 ? "Disabled (0 px)" : (std::to_string(item->tiling_cfg->border_width) + " px"),
-                [item](float val) -> std::string {
-                    int px = static_cast<int>(std::round(val * 8.0f));
-                    item->tiling_cfg->border_width = px;
-                    return px == 0 ? "Disabled (0 px)" : (std::to_string(px) + " px");
-                }
-            );
-
-            // Window Corner Radius (0 to 32 px)
-            add_slider_row(
-                "Window corner radius",
-                "Rounding curvature applied to window frames and drop shadows",
-                static_cast<float>(item->tiling_cfg->corner_radius) / 32.0f,
-                std::to_string(item->tiling_cfg->corner_radius) + " px",
-                [item](float val) -> std::string {
-                    int px = static_cast<int>(std::round(val * 32.0f));
-                    item->tiling_cfg->corner_radius = px;
-                    return std::to_string(px) + " px";
-                }
-            );
-
-            // Active Border Color Preset
-            int cur_act_idx = 0;
-            for (size_t i = 0; i < item->tiling_cfg->active_border_presets.size(); ++i) {
-                if (item->tiling_cfg->active_border_presets[i] == item->tiling_cfg->active_border_preset) {
-                    cur_act_idx = static_cast<int>(i);
-                    break;
-                }
-            }
-            add_spinner_block(
-                "Active window border color",
-                "Border color or multi-stop linear gradient for focused window",
-                item->tiling_cfg->active_border_presets,
-                cur_act_idx,
-                [item](int idx, const std::string& val) {
-                    (void)idx;
-                    item->tiling_cfg->active_border_preset = val;
-                    if (val.find("Yellow-Red") != std::string::npos) item->tiling_cfg->active_border_value = "#ffff00 #ff0000 45deg";
-                    else if (val.find("Cyan-Blue") != std::string::npos) item->tiling_cfg->active_border_value = "#00ffcc #0066ff 45deg";
-                    else if (val.find("Purple-Blue") != std::string::npos) item->tiling_cfg->active_border_value = "#ff007f #7928ca #0066ff 135deg";
-                    else if (val.find("Neon") != std::string::npos) item->tiling_cfg->active_border_value = "#00ff88 #00ccff 90deg";
-                    else if (val.find("Monochrome") != std::string::npos) item->tiling_cfg->active_border_value = "#ffffff";
-                    else item->tiling_cfg->active_border_value = "#0066ff";
-                }
-            );
-
-            // Inactive Border Color Preset
-            int cur_inact_idx = 0;
-            for (size_t i = 0; i < item->tiling_cfg->inactive_border_presets.size(); ++i) {
-                if (item->tiling_cfg->inactive_border_presets[i] == item->tiling_cfg->inactive_border_preset) {
-                    cur_inact_idx = static_cast<int>(i);
-                    break;
-                }
-            }
-            add_spinner_block(
-                "Inactive window border color",
-                "Border styling for unfocused background windows",
-                item->tiling_cfg->inactive_border_presets,
-                cur_inact_idx,
-                [item](int idx, const std::string& val) {
-                    (void)idx;
-                    item->tiling_cfg->inactive_border_preset = val;
-                    if (val.find("Dark Slate") != std::string::npos) item->tiling_cfg->inactive_border_value = "#334455 #222d38 45deg";
-                    else if (val.find("Graphite") != std::string::npos) item->tiling_cfg->inactive_border_value = "#2d3748";
-                    else if (val.find("Muted Amber") != std::string::npos) item->tiling_cfg->inactive_border_value = "#aa9900 #aa3333 45deg";
-                    else if (val.find("Subtle") != std::string::npos) item->tiling_cfg->inactive_border_value = "#ffffff33";
-                    else item->tiling_cfg->inactive_border_value = "#00000000";
-                }
-            );
-
-            // Border Specular Shading
-            add_toggle_row(
-                "Border specular shading",
-                "Subtle 3D lighting and specular bevel depth across the border stroke",
-                item->tiling_cfg->border_shading,
-                [item](bool val) {
-                    item->tiling_cfg->border_shading = val;
-                }
-            );
-
-            if (item->tiling_cfg->border_shading) {
-                add_slider_row(
-                    "Shading intensity",
-                    "Specular bevel strength across the window frame",
-                    item->tiling_cfg->border_shading_strength,
-                    std::to_string(static_cast<int>(item->tiling_cfg->border_shading_strength * 100)) + "%",
-                    [item](float val) -> std::string {
-                        item->tiling_cfg->border_shading_strength = val;
-                        return std::to_string(static_cast<int>(val * 100)) + "%";
-                    }
-                );
-            }
-
-            // Direct Border Drag Resizing
-            add_toggle_row(
-                "Direct border drag resizing",
-                "Resize windows by dragging directly on window borders without modifier key",
-                item->tiling_cfg->resize_on_border,
-                [item](bool val) {
-                    item->tiling_cfg->resize_on_border = val;
-                }
-            );
-
-            // Auto-Float Fixed-Size Windows
-            add_toggle_row(
-                "Auto-float fixed-size dialogs",
-                "Automatically floats splash screens and dialogs declaring fixed min/max size constraints",
-                item->tiling_cfg->auto_float_fixed_size,
-                [item](bool val) {
-                    item->tiling_cfg->auto_float_fixed_size = val;
-                }
-            );
-        }
-
-        // -------------------------------------------------------------
-        // 3. Dwindle (BSP) Tuning
-        // -------------------------------------------------------------
-        if (show_split) {
-            // Default Split Ratio (20% to 80%)
-            float initial_ratio_norm = (item->tiling_cfg->default_split_ratio - 0.20f) / 0.60f;
-            int r_pct = static_cast<int>(std::round(item->tiling_cfg->default_split_ratio * 100.0f));
-            add_slider_row(
-                "Default split ratio",
-                "Initial screen division ratio when a new window partitions a workspace",
-                initial_ratio_norm,
-                std::to_string(r_pct) + "% / " + std::to_string(100 - r_pct) + "%",
-                [item](float val) -> std::string {
-                    float ratio = 0.20f + val * 0.60f;
-                    item->tiling_cfg->default_split_ratio = ratio;
-                    int pct = static_cast<int>(std::round(ratio * 100.0f));
-                    return std::to_string(pct) + "% / " + std::to_string(100 - pct) + "%";
-                }
-            );
-
-            // Smart Cursor-Aware Splitting
-            add_toggle_row(
-                "Smart cursor-aware splitting",
-                "Cursor position inside target window dictates horizontal or vertical split side",
-                item->tiling_cfg->smart_split,
-                [item](bool val) {
-                    item->tiling_cfg->smart_split = val;
-                }
-            );
-
-            // Split Focused Window
-            add_toggle_row(
-                "Split focused window",
-                "New windows partition the currently active window instead of spawning at the spiral tail",
-                item->tiling_cfg->split_focus,
-                [item](bool val) {
-                    item->tiling_cfg->split_focus = val;
-                }
-            );
-
-            // Preserve Split Orientation
-            add_toggle_row(
-                "Preserve split orientation",
-                "Retains horizontal or vertical split axes when windows are moved or closed",
-                item->tiling_cfg->preserve_split,
-                [item](bool val) {
-                    item->tiling_cfg->preserve_split = val;
-                }
-            );
-
-            // Widescreen Split Threshold Multiplier (0.8x to 2.5x)
-            float initial_mult_norm = (item->tiling_cfg->split_width_multiplier - 0.8f) / 1.7f;
-            auto format_mult = [](float m) -> std::string {
-                char buf[16];
-                std::snprintf(buf, sizeof(buf), "%.1f×", m);
-                return std::string(buf);
-            };
-            add_slider_row(
-                "Widescreen split width multiplier",
-                "Aspect ratio threshold to favor side-by-side columns (width >= height × mult)",
-                initial_mult_norm,
-                format_mult(item->tiling_cfg->split_width_multiplier),
-                [item, format_mult](float val) -> std::string {
-                    float mult = 0.8f + val * 1.7f;
-                    item->tiling_cfg->split_width_multiplier = mult;
-                    return format_mult(mult);
-                }
-            );
-        }
-
-        // -------------------------------------------------------------
-        // 4. Focus Behaviour
-        // -------------------------------------------------------------
-        if (show_focus) {
-            // Focus Follows Mouse
-            add_toggle_row(
-                "Focus follows mouse (Sloppy focus)",
-                "Moving mouse cursor over a window automatically shifts keyboard focus to it",
-                item->tiling_cfg->focus_follows_mouse,
-                [item](bool val) {
-                    item->tiling_cfg->focus_follows_mouse = val;
-                }
-            );
-
-            // Click to Focus & Raise
-            add_toggle_row(
-                "Click to focus and raise",
-                "Clicking anywhere on an unfocused window brings it to the top of its layer and activates it",
-                item->tiling_cfg->click_to_focus,
-                [item](bool val) {
-                    item->tiling_cfg->click_to_focus = val;
-                }
-            );
-
-            // Warp Cursor to Focused Window
-            add_toggle_row(
-                "Warp cursor on focus change",
-                "Automatically moves mouse pointer to the center of the focused window on keyboard navigation",
-                item->tiling_cfg->warp_cursor_on_focus,
-                [item](bool val) {
-                    item->tiling_cfg->warp_cursor_on_focus = val;
-                }
-            );
-
-            // Focus on Workspace Switch
-            add_toggle_row(
-                "Focus on workspace switch",
-                "Automatically restores focus to the last active window when switching workspaces",
-                item->tiling_cfg->focus_on_workspace_switch,
-                [item](bool val) {
-                    item->tiling_cfg->focus_on_workspace_switch = val;
-                }
-            );
-        }
-
-        add_preview_card(main_card);
+        render_tiling_preview(item, config);
         return;
     }
 
     // Dedicated Interactive UI for Wallpaper
     if (item->is_wallpaper || item->id == "ws_wallpaper") {
-        auto main_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->padding(16, 16)
-            ->spacing(16)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
-
-        // 1. Display Aspect Ratio Rectangle (16:9 Ratio - 320x180 px)
-        auto display_rect = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->gravity(Gravity::Center)
-            ->backgroundColor(config->colors.surface_variant.with_alpha(0.45f))
-            ->stroke(1, config->colors.outline.with_alpha(0.35f))
-            ->cornerRadius(10)
-            ->spacing(4)
-            ->build();
-
-        auto wp_icon = TextViewBuilder::create()
-            ->text("󰸉")
-            ->textSize(static_cast<int>(config->metrics.font_size * 2))
-            ->textColor(config->colors.primary.with_alpha(0.85f))
-            ->build();
-        display_rect->add_view(wp_icon);
-
-        auto wp_name = TextViewBuilder::create()
-            ->text(item->wallpaper_cfg->current_wallpaper)
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        display_rect->add_view(wp_name);
-
-        auto wp_tag = TextViewBuilder::create()
-            ->text("16:9 Display Preview")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-            ->build();
-        display_rect->add_view(wp_tag);
-
-        LayoutParams d_lp;
-        d_lp.width = 320;
-        d_lp.height = 180;
-        d_lp.gravity = Gravity::CenterHorizontal;
-        main_card->add_view(display_rect, d_lp);
-
-        // 2. Bottom Row: Browse Button, Fit Mode Spinner, Apply Button
-        auto bottom_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->spacing(10)
-            ->build();
-
-        auto browse_btn = ButtonBuilder::create()
-            ->text("Browse")
-            ->style(ButtonStyle::Outlined)
-            ->padding(14, 6)
-            ->cornerRadius(8)
-            ->onClick([this, item]() {
-                static const std::vector<std::string> mock_wallpapers = {
-                    "aurora_minimal.png",
-                    "cyber_neon.png",
-                    "mountain_twilight.png",
-                    "forest_mist.png",
-                    "abstract_waves.png"
-                };
-                static size_t wp_idx = 0;
-                wp_idx = (wp_idx + 1) % mock_wallpapers.size();
-                item->wallpaper_cfg->current_wallpaper = mock_wallpapers[wp_idx];
-                item->wallpaper_cfg->wallpaper_path = "~/Pictures/Wallpapers/" + mock_wallpapers[wp_idx];
-                rebuild_preview_column();
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams b_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        b_lp.gravity = Gravity::CenterVertical;
-        bottom_row->add_view(browse_btn, b_lp);
-
-        int cur_fit_idx = 0;
-        for (size_t i = 0; i < item->wallpaper_cfg->fit_modes.size(); ++i) {
-            if (item->wallpaper_cfg->fit_modes[i] == item->wallpaper_cfg->fit_mode) {
-                cur_fit_idx = static_cast<int>(i);
-                break;
-            }
-        }
-
-        auto fit_spinner = SpinnerBuilder::create()
-            ->items(item->wallpaper_cfg->fit_modes)
-            ->selectedIndex(cur_fit_idx)
-            ->fontSize(config->metrics.font_size)
-            ->padding(12, 6)
-            ->cornerRadius(8)
-            ->onItemSelected([item](int idx, const std::string& val) {
-                (void)idx;
-                item->wallpaper_cfg->fit_mode = val;
-            })
-            ->build();
-        LayoutParams s_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        s_lp.gravity = Gravity::CenterVertical;
-        bottom_row->add_view(fit_spinner, s_lp);
-
-        auto apply_btn = ButtonBuilder::create()
-            ->text("Apply")
-            ->primary(true)
-            ->padding(16, 6)
-            ->cornerRadius(8)
-            ->onClick([this, item]() {
-                item->last_action_message = "Wallpaper applied: " + item->wallpaper_cfg->current_wallpaper;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams a_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        a_lp.gravity = Gravity::CenterVertical;
-        bottom_row->add_view(apply_btn, a_lp);
-
-        main_card->add_view(bottom_row);
-        add_preview_card(main_card);
+        render_wallpaper_preview(item, config);
         return;
     }
 
     // Dedicated Single-Card Interactive UI for Keybindings
     if (item->is_keybinding_group) {
-        auto main_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->padding(16, 16)
-            ->spacing(10)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
-
-        for (size_t i = 0; i < item->keybindings.size(); ++i) {
-            const auto& kb = item->keybindings[i];
-
-            if (i > 0) {
-                auto divider = LinearLayoutBuilder::create()
-                    ->backgroundColor(config->colors.outline.with_alpha(0.10f))
-                    ->build();
-                LayoutParams dlp;
-                dlp.width = static_cast<int>(LayoutDimension::MatchParent);
-                dlp.height = 1;
-                main_card->add_view(divider, dlp);
-            }
-
-            auto row = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->gravity(Gravity::CenterVertical)
-                ->spacing(12)
-                ->build();
-
-            auto text_box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(2)
-                ->build();
-
-            auto act_lbl = TextViewBuilder::create()
-                ->text(kb.action)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            text_box->add_view(act_lbl);
-
-            if (!kb.description.empty()) {
-                auto desc_lbl = TextViewBuilder::create()
-                    ->text(kb.description)
-                    ->caption(true)
-                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                    ->build();
-                text_box->add_view(desc_lbl);
-            }
-
-            LayoutParams tb_lp;
-            tb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            tb_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            tb_lp.weight = 1.0f;
-            tb_lp.gravity = Gravity::CenterVertical;
-            row->add_view(text_box, tb_lp);
-
-            auto keys_box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->gravity(Gravity::CenterVertical)
-                ->spacing(4)
-                ->build();
-
-            for (size_t k = 0; k < kb.keys.size(); ++k) {
-                if (k > 0) {
-                    auto plus_lbl = TextViewBuilder::create()
-                        ->text("+")
-                        ->caption(true)
-                        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-                        ->build();
-                    LayoutParams p_lp;
-                    p_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-                    p_lp.gravity = Gravity::CenterVertical;
-                    keys_box->add_view(plus_lbl, p_lp);
-                }
-
-                auto key_badge = CardViewBuilder::create()
-                    ->style(CardStyle::Filled)
-                    ->backgroundColor(config->colors.surface_variant.with_alpha(0.6f))
-                    ->stroke(1, config->colors.outline.with_alpha(0.35f))
-                    ->cornerRadius(6)
-                    ->elevation(0)
-                    ->addView(
-                        TextViewBuilder::create()
-                            ->text(kb.keys[k])
-                            ->caption(true)
-                            ->textColor(config->colors.primary)
-                            ->padding(8, 4)
-                            ->build()
-                    )
-                    ->build();
-
-                LayoutParams k_lp;
-                k_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-                k_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-                k_lp.gravity = Gravity::CenterVertical;
-                keys_box->add_view(key_badge, k_lp);
-            }
-
-            LayoutParams r_lp;
-            r_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-            r_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            r_lp.gravity = Gravity::CenterVertical;
-            row->add_view(keys_box, r_lp);
-
-            main_card->add_view(row);
-        }
-
-        add_preview_card(main_card);
+        render_keybindings_preview(item, config);
         return;
     }
 
     // Dedicated Single-Card Interactive UI for Screen Timeout & Lock
     if (item->is_timeout_and_lock) {
-        auto main_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->padding(16, 16)
-            ->spacing(12)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
-
-        auto add_divider = [&main_card, config]() {
-            auto divider = LinearLayoutBuilder::create()
-                ->backgroundColor(config->colors.outline.with_alpha(0.12f))
-                ->build();
-            LayoutParams dlp;
-            dlp.width = static_cast<int>(LayoutDimension::MatchParent);
-            dlp.height = 1;
-            main_card->add_view(divider, dlp);
-        };
-
-        // -------------------------------------------------------------
-        // Section 1: Inactivity Timers
-        // -------------------------------------------------------------
-        auto s1_title = TextViewBuilder::create()
-            ->text("Inactivity Timers")
-            ->caption(true)
-            ->textColor(config->colors.primary)
-            ->build();
-        main_card->add_view(s1_title);
-
-        // Timer 1: Lock Screen Inactivity
-        std::vector<int> lock_steps = {1, 2, 5, 10, 15, 30, 0};
-        auto format_lock_mins = [](int mins) -> std::string {
-            if (mins == 0) return "Never";
-            if (mins == 1) return "1 minute";
-            return std::to_string(mins) + " minutes";
-        };
-
-        auto l_header = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto l_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto l_title = TextViewBuilder::create()
-            ->text("Lock screen after inactivity")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        l_box->add_view(l_title);
-
-        auto l_hint = TextViewBuilder::create()
-            ->text("Protects your session and hides open windows")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        l_box->add_view(l_hint);
-
-        LayoutParams lbox_lp;
-        lbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        lbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        lbox_lp.weight = 1.0f;
-        lbox_lp.gravity = Gravity::CenterVertical;
-        l_header->add_view(l_box, lbox_lp);
-
-        auto l_val_label = TextViewBuilder::create()
-            ->text(format_lock_mins(item->timeout_lock_cfg.lock_timeout_minutes))
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams lval_lp;
-        lval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        lval_lp.gravity = Gravity::CenterVertical;
-        l_header->add_view(l_val_label, lval_lp);
-        main_card->add_view(l_header);
-
-        int cur_l_idx = 0;
-        for (size_t i = 0; i < lock_steps.size(); ++i) {
-            if (lock_steps[i] == item->timeout_lock_cfg.lock_timeout_minutes) {
-                cur_l_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        float initial_l_val = static_cast<float>(cur_l_idx) / static_cast<float>(lock_steps.size() - 1);
-
-        auto l_slider = SliderBuilder::create()
-            ->value(initial_l_val)
-            ->onValueChanged([this, item, l_val_label, lock_steps, format_lock_mins](float val, bool user) {
-                (void)user;
-                int idx = static_cast<int>(std::round(val * static_cast<float>(lock_steps.size() - 1)));
-                idx = std::clamp(idx, 0, static_cast<int>(lock_steps.size() - 1));
-                int mins = lock_steps[idx];
-                item->timeout_lock_cfg.lock_timeout_minutes = mins;
-                l_val_label->set_text(format_lock_mins(mins));
-                l_val_label->request_redraw();
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams lsl_lp;
-        lsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        lsl_lp.height = 24;
-        main_card->add_view(l_slider, lsl_lp);
-
-        // Timer 2: Turn Off Display Inactivity
-        std::vector<int> disp_steps = {1, 2, 5, 10, 15, 30, 60, 0};
-        auto format_disp_mins = [](int mins) -> std::string {
-            if (mins == 0) return "Never";
-            if (mins == 1) return "1 minute";
-            return std::to_string(mins) + " minutes";
-        };
-
-        auto d_header = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto d_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto d_title = TextViewBuilder::create()
-            ->text("Turn off display after inactivity")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        d_box->add_view(d_title);
-
-        auto d_hint = TextViewBuilder::create()
-            ->text("Powers off screen backlight to save power and battery")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        d_box->add_view(d_hint);
-
-        LayoutParams dbox_lp;
-        dbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        dbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        dbox_lp.weight = 1.0f;
-        dbox_lp.gravity = Gravity::CenterVertical;
-        d_header->add_view(d_box, dbox_lp);
-
-        auto d_val_label = TextViewBuilder::create()
-            ->text(format_disp_mins(item->timeout_lock_cfg.display_off_minutes))
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams dval_lp;
-        dval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        dval_lp.gravity = Gravity::CenterVertical;
-        d_header->add_view(d_val_label, dval_lp);
-        main_card->add_view(d_header);
-
-        int cur_d_idx = 2; // 5 min default
-        for (size_t i = 0; i < disp_steps.size(); ++i) {
-            if (disp_steps[i] == item->timeout_lock_cfg.display_off_minutes) {
-                cur_d_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        float initial_d_val = static_cast<float>(cur_d_idx) / static_cast<float>(disp_steps.size() - 1);
-
-        auto d_slider = SliderBuilder::create()
-            ->value(initial_d_val)
-            ->onValueChanged([this, item, d_val_label, disp_steps, format_disp_mins](float val, bool user) {
-                (void)user;
-                int idx = static_cast<int>(std::round(val * static_cast<float>(disp_steps.size() - 1)));
-                idx = std::clamp(idx, 0, static_cast<int>(disp_steps.size() - 1));
-                int mins = disp_steps[idx];
-                item->timeout_lock_cfg.display_off_minutes = mins;
-                d_val_label->set_text(format_disp_mins(mins));
-                d_val_label->request_redraw();
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams dsl_lp;
-        dsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        dsl_lp.height = 24;
-        main_card->add_view(d_slider, dsl_lp);
-
-        // Timer 3: Sleep Inactivity
-        std::vector<int> sleep_steps = {5, 10, 15, 30, 60, 120, 0};
-        auto format_sleep_mins = [](int mins) -> std::string {
-            if (mins == 0) return "Never";
-            if (mins == 60) return "1 hour";
-            if (mins > 60) return std::to_string(mins / 60) + " hours";
-            return std::to_string(mins) + " minutes";
-        };
-
-        auto sleep_header = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto sleep_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto sleep_title = TextViewBuilder::create()
-            ->text("Put computer to sleep after inactivity")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        sleep_box->add_view(sleep_title);
-
-        auto sleep_hint = TextViewBuilder::create()
-            ->text("Pauses apps and halts CPU while holding memory in RAM")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        sleep_box->add_view(sleep_hint);
-
-        LayoutParams sleepbox_lp;
-        sleepbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        sleepbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        sleepbox_lp.weight = 1.0f;
-        sleepbox_lp.gravity = Gravity::CenterVertical;
-        sleep_header->add_view(sleep_box, sleepbox_lp);
-
-        auto sleep_val_label = TextViewBuilder::create()
-            ->text(format_sleep_mins(item->timeout_lock_cfg.sleep_minutes))
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams sleepval_lp;
-        sleepval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        sleepval_lp.gravity = Gravity::CenterVertical;
-        sleep_header->add_view(sleep_val_label, sleepval_lp);
-        main_card->add_view(sleep_header);
-
-        int cur_sleep_idx = 2; // 15 min default
-        for (size_t i = 0; i < sleep_steps.size(); ++i) {
-            if (sleep_steps[i] == item->timeout_lock_cfg.sleep_minutes) {
-                cur_sleep_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        float initial_sleep_val = static_cast<float>(cur_sleep_idx) / static_cast<float>(sleep_steps.size() - 1);
-
-        auto sleep_slider = SliderBuilder::create()
-            ->value(initial_sleep_val)
-            ->onValueChanged([this, item, sleep_val_label, sleep_steps, format_sleep_mins](float val, bool user) {
-                (void)user;
-                int idx = static_cast<int>(std::round(val * static_cast<float>(sleep_steps.size() - 1)));
-                idx = std::clamp(idx, 0, static_cast<int>(sleep_steps.size() - 1));
-                int mins = sleep_steps[idx];
-                item->timeout_lock_cfg.sleep_minutes = mins;
-                sleep_val_label->set_text(format_sleep_mins(mins));
-                sleep_val_label->request_redraw();
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams sleepsl_lp;
-        sleepsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        sleepsl_lp.height = 24;
-        main_card->add_view(sleep_slider, sleepsl_lp);
-
-        // Timer 4: Auto-Hibernate Delay
-        std::vector<int> hib_steps = {30, 60, 120, 240, 0};
-        auto format_hib_mins = [](int mins) -> std::string {
-            if (mins == 0) return "Never (Stay in sleep)";
-            if (mins == 60) return "1 hour";
-            if (mins > 60) return std::to_string(mins / 60) + " hours";
-            return std::to_string(mins) + " minutes";
-        };
-
-        auto hib_header = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto hib_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto hib_title = TextViewBuilder::create()
-            ->text("Auto-hibernate after prolonged sleep")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        hib_box->add_view(hib_title);
-
-        auto hib_hint = TextViewBuilder::create()
-            ->text("Writes memory to swap disk to eliminate battery drain while asleep")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        hib_box->add_view(hib_hint);
-
-        LayoutParams hibbox_lp;
-        hibbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        hibbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        hibbox_lp.weight = 1.0f;
-        hibbox_lp.gravity = Gravity::CenterVertical;
-        hib_header->add_view(hib_box, hibbox_lp);
-
-        auto hib_val_label = TextViewBuilder::create()
-            ->text(format_hib_mins(item->timeout_lock_cfg.hibernate_delay_minutes))
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams hibval_lp;
-        hibval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        hibval_lp.gravity = Gravity::CenterVertical;
-        hib_header->add_view(hib_val_label, hibval_lp);
-        main_card->add_view(hib_header);
-
-        int cur_hib_idx = 2; // 120 min default
-        for (size_t i = 0; i < hib_steps.size(); ++i) {
-            if (hib_steps[i] == item->timeout_lock_cfg.hibernate_delay_minutes) {
-                cur_hib_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        float initial_hib_val = static_cast<float>(cur_hib_idx) / static_cast<float>(hib_steps.size() - 1);
-
-        auto hib_slider = SliderBuilder::create()
-            ->value(initial_hib_val)
-            ->onValueChanged([this, item, hib_val_label, hib_steps, format_hib_mins](float val, bool user) {
-                (void)user;
-                int idx = static_cast<int>(std::round(val * static_cast<float>(hib_steps.size() - 1)));
-                idx = std::clamp(idx, 0, static_cast<int>(hib_steps.size() - 1));
-                int mins = hib_steps[idx];
-                item->timeout_lock_cfg.hibernate_delay_minutes = mins;
-                hib_val_label->set_text(format_hib_mins(mins));
-                hib_val_label->request_redraw();
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams hibsl_lp;
-        hibsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        hibsl_lp.height = 24;
-        main_card->add_view(hib_slider, hibsl_lp);
-
-        add_divider();
-
-        // -------------------------------------------------------------
-        // Section 2: Power Triggers & Sleep Modes (systemd-logind)
-        // -------------------------------------------------------------
-        auto s2_title = TextViewBuilder::create()
-            ->text("Power Triggers & Sleep Modes")
-            ->caption(true)
-            ->textColor(config->colors.primary)
-            ->build();
-        main_card->add_view(s2_title);
-
-        // 1. Sleep Mode
-        auto sm_block = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(6)
-            ->build();
-
-        auto sm_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto sm_title = TextViewBuilder::create()
-            ->text("System sleep mode")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        sm_box->add_view(sm_title);
-
-        auto sm_hint = TextViewBuilder::create()
-            ->text("Low-power hardware state when sleep is invoked")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        sm_box->add_view(sm_hint);
-        sm_block->add_view(sm_box);
-
-        std::vector<std::string> sleep_modes = {
-            "Hybrid Sleep (Recommended)",
-            "Sleep (RAM)",
-            "Hibernate (Disk)"
-        };
-        int cur_sm_idx = 0;
-        for (size_t i = 0; i < sleep_modes.size(); ++i) {
-            if (sleep_modes[i] == item->timeout_lock_cfg.sleep_mode) {
-                cur_sm_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        auto sm_spinner = SpinnerBuilder::create()
-            ->items(sleep_modes)
-            ->selectedIndex(cur_sm_idx)
-            ->fontSize(config->metrics.font_size)
-            ->padding(12, 6)
-            ->cornerRadius(8)
-            ->onItemSelected([this, item](int idx, const std::string& val) {
-                (void)idx;
-                item->timeout_lock_cfg.sleep_mode = val;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams smsp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        sm_block->add_view(sm_spinner, smsp_lp);
-        main_card->add_view(sm_block);
-
-        // 2. Lid Switch Action
-        auto lid_action_block = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(6)
-            ->build();
-
-        auto la_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto la_title = TextViewBuilder::create()
-            ->text("When laptop lid is closed")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        la_box->add_view(la_title);
-
-        auto la_hint = TextViewBuilder::create()
-            ->text("Hardware action triggered upon shutting laptop lid (HandleLidSwitch)")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        la_box->add_view(la_hint);
-        lid_action_block->add_view(la_box);
-
-        std::vector<std::string> lid_actions = {
-            "Sleep",
-            "Lock session only",
-            "Hibernate",
-            "Turn off display only",
-            "Ignore (Do nothing)"
-        };
-        int cur_la_idx = 0;
-        for (size_t i = 0; i < lid_actions.size(); ++i) {
-            if (lid_actions[i] == item->timeout_lock_cfg.lid_action) {
-                cur_la_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        auto la_spinner = SpinnerBuilder::create()
-            ->items(lid_actions)
-            ->selectedIndex(cur_la_idx)
-            ->fontSize(config->metrics.font_size)
-            ->padding(12, 6)
-            ->cornerRadius(8)
-            ->onItemSelected([this, item](int idx, const std::string& val) {
-                (void)idx;
-                item->timeout_lock_cfg.lid_action = val;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams lasp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        lid_action_block->add_view(la_spinner, lasp_lp);
-        main_card->add_view(lid_action_block);
-
-        // 3. Power Button Action
-        auto pwr_action_block = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(6)
-            ->build();
-
-        auto pa_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto pa_title = TextViewBuilder::create()
-            ->text("When power button is pressed")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        pa_box->add_view(pa_title);
-
-        auto pa_hint = TextViewBuilder::create()
-            ->text("Action triggered on physical power button press (HandlePowerKey)")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        pa_box->add_view(pa_hint);
-        pwr_action_block->add_view(pa_box);
-
-        std::vector<std::string> pwr_actions = {
-            "Show power menu (miqupower)",
-            "Sleep",
-            "Lock session",
-            "Hibernate",
-            "Power off immediately"
-        };
-        int cur_pa_idx = 0;
-        for (size_t i = 0; i < pwr_actions.size(); ++i) {
-            if (pwr_actions[i] == item->timeout_lock_cfg.power_button_action) {
-                cur_pa_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        auto pa_spinner = SpinnerBuilder::create()
-            ->items(pwr_actions)
-            ->selectedIndex(cur_pa_idx)
-            ->fontSize(config->metrics.font_size)
-            ->padding(12, 6)
-            ->cornerRadius(8)
-            ->onItemSelected([this, item](int idx, const std::string& val) {
-                (void)idx;
-                item->timeout_lock_cfg.power_button_action = val;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams pasp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        pwr_action_block->add_view(pa_spinner, pasp_lp);
-        main_card->add_view(pwr_action_block);
-
-        // 4. Critical Battery Action
-        auto crit_action_block = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(6)
-            ->build();
-
-        auto ca_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto ca_title = TextViewBuilder::create()
-            ->text("Critical battery level action")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        ca_box->add_view(ca_title);
-
-        auto ca_hint = TextViewBuilder::create()
-            ->text("Emergency power action when battery reaches 5% (UPower)")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        ca_box->add_view(ca_hint);
-        crit_action_block->add_view(ca_box);
-
-        std::vector<std::string> crit_actions = {
-            "Hibernate",
-            "Sleep",
-            "Power off immediately"
-        };
-        int cur_ca_idx = 0;
-        for (size_t i = 0; i < crit_actions.size(); ++i) {
-            if (crit_actions[i] == item->timeout_lock_cfg.critical_battery_action) {
-                cur_ca_idx = static_cast<int>(i);
-                break;
-            }
-        }
-        auto ca_spinner = SpinnerBuilder::create()
-            ->items(crit_actions)
-            ->selectedIndex(cur_ca_idx)
-            ->fontSize(config->metrics.font_size)
-            ->padding(12, 6)
-            ->cornerRadius(8)
-            ->onItemSelected([this, item](int idx, const std::string& val) {
-                (void)idx;
-                item->timeout_lock_cfg.critical_battery_action = val;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams casp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        crit_action_block->add_view(ca_spinner, casp_lp);
-        main_card->add_view(crit_action_block);
-
-        add_divider();
-
-        // -------------------------------------------------------------
-        // Section 3: Display & Power Behavior
-        // -------------------------------------------------------------
-        auto s3_title = TextViewBuilder::create()
-            ->text("Display & Power Behavior")
-            ->caption(true)
-            ->textColor(config->colors.primary)
-            ->build();
-        main_card->add_view(s3_title);
-
-        auto dim_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto dim_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto dim_title = TextViewBuilder::create()
-            ->text("Dim screen before turning off")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        dim_box->add_view(dim_title);
-
-        auto dim_hint = TextViewBuilder::create()
-            ->text("Gradually reduces brightness as a gentle warning before sleep")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        dim_box->add_view(dim_hint);
-
-        LayoutParams dimbox_lp;
-        dimbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        dimbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        dimbox_lp.weight = 1.0f;
-        dimbox_lp.gravity = Gravity::CenterVertical;
-        dim_row->add_view(dim_box, dimbox_lp);
-
-        auto dim_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.dim_screen)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.dim_screen = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams dimsw_lp;
-        dimsw_lp.width = 44;
-        dimsw_lp.height = 24;
-        dimsw_lp.gravity = Gravity::CenterVertical;
-        dim_row->add_view(dim_switch, dimsw_lp);
-        main_card->add_view(dim_row);
-
-        auto prev_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto prev_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto prev_title = TextViewBuilder::create()
-            ->text("Prevent sleep during media playback")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        prev_box->add_view(prev_title);
-
-        auto prev_hint = TextViewBuilder::create()
-            ->text("Keeps screen awake while watching video or listening to audio")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        prev_box->add_view(prev_hint);
-
-        LayoutParams prevbox_lp;
-        prevbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        prevbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        prevbox_lp.weight = 1.0f;
-        prevbox_lp.gravity = Gravity::CenterVertical;
-        prev_row->add_view(prev_box, prevbox_lp);
-
-        auto prev_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.prevent_sleep_media)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.prevent_sleep_media = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams prevsw_lp;
-        prevsw_lp.width = 44;
-        prevsw_lp.height = 24;
-        prevsw_lp.gravity = Gravity::CenterVertical;
-        prev_row->add_view(prev_switch, prevsw_lp);
-        main_card->add_view(prev_row);
-
-        auto bat_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto bat_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto bat_title = TextViewBuilder::create()
-            ->text("Shorten timeouts on battery power")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        bat_box->add_view(bat_title);
-
-        auto bat_hint = TextViewBuilder::create()
-            ->text("Automatically reduces inactivity delays by 50% when running on battery")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        bat_box->add_view(bat_hint);
-
-        LayoutParams batbox_lp;
-        batbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        batbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        batbox_lp.weight = 1.0f;
-        batbox_lp.gravity = Gravity::CenterVertical;
-        bat_row->add_view(bat_box, batbox_lp);
-
-        auto bat_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.energy_saver_battery)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.energy_saver_battery = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams batsw_lp;
-        batsw_lp.width = 44;
-        batsw_lp.height = 24;
-        batsw_lp.gravity = Gravity::CenterVertical;
-        bat_row->add_view(bat_switch, batsw_lp);
-        main_card->add_view(bat_row);
-
-        auto clam_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto clam_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto clam_title = TextViewBuilder::create()
-            ->text("Stay awake when closed if external monitor is connected")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        clam_box->add_view(clam_title);
-
-        auto clam_hint = TextViewBuilder::create()
-            ->text("Clamshell docking • Continues display output to external monitor")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        clam_box->add_view(clam_hint);
-
-        LayoutParams clambox_lp;
-        clambox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        clambox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        clambox_lp.weight = 1.0f;
-        clambox_lp.gravity = Gravity::CenterVertical;
-        clam_row->add_view(clam_box, clambox_lp);
-
-        auto clam_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.clamshell_mode)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.clamshell_mode = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams clamsw_lp;
-        clamsw_lp.width = 44;
-        clamsw_lp.height = 24;
-        clamsw_lp.gravity = Gravity::CenterVertical;
-        clam_row->add_view(clam_switch, clamsw_lp);
-        main_card->add_view(clam_row);
-
-        add_divider();
-
-        // -------------------------------------------------------------
-        // Section 4: Security & Lockscreen (miqulock)
-        // -------------------------------------------------------------
-        auto s4_title = TextViewBuilder::create()
-            ->text("Security & Lockscreen (miqulock)")
-            ->caption(true)
-            ->textColor(config->colors.primary)
-            ->build();
-        main_card->add_view(s4_title);
-
-        // 1. Lock before sleep
-        auto lock_sleep_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto ls_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto ls_title = TextViewBuilder::create()
-            ->text("Lock session before system enters sleep")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        ls_box->add_view(ls_title);
-
-        auto ls_hint = TextViewBuilder::create()
-            ->text("miquidle before_sleep_cmd • Delays suspend until screen is fully locked")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        ls_box->add_view(ls_hint);
-
-        LayoutParams lsbox_lp;
-        lsbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        lsbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        lsbox_lp.weight = 1.0f;
-        lsbox_lp.gravity = Gravity::CenterVertical;
-        lock_sleep_row->add_view(ls_box, lsbox_lp);
-
-        auto ls_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.lock_before_sleep)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.lock_before_sleep = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams lssw_lp;
-        lssw_lp.width = 44;
-        lssw_lp.height = 24;
-        lssw_lp.gravity = Gravity::CenterVertical;
-        lock_sleep_row->add_view(ls_switch, lssw_lp);
-        main_card->add_view(lock_sleep_row);
-
-        // 2. Lock on display off
-        auto dispoff_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto dispoff_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto dispoff_title = TextViewBuilder::create()
-            ->text("Lock session when display turns off")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        dispoff_box->add_view(dispoff_title);
-
-        auto dispoff_hint = TextViewBuilder::create()
-            ->text("Secures session as soon as screen powers down or sleeps")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        dispoff_box->add_view(dispoff_hint);
-
-        LayoutParams dispoffbox_lp;
-        dispoffbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        dispoffbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        dispoffbox_lp.weight = 1.0f;
-        dispoffbox_lp.gravity = Gravity::CenterVertical;
-        dispoff_row->add_view(dispoff_box, dispoffbox_lp);
-
-        auto dispoff_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.lock_on_display_off)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.lock_on_display_off = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams dispoffsw_lp;
-        dispoffsw_lp.width = 44;
-        dispoffsw_lp.height = 24;
-        dispoffsw_lp.gravity = Gravity::CenterVertical;
-        dispoff_row->add_view(dispoff_switch, dispoffsw_lp);
-        main_card->add_view(dispoff_row);
-
-        // 3. Require password immediately
-        auto pwd_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto pwd_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto pwd_title = TextViewBuilder::create()
-            ->text("Require password immediately on wake")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        pwd_box->add_view(pwd_title);
-
-        auto pwd_hint = TextViewBuilder::create()
-            ->text("Prompts for password instantly when screen is engaged")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        pwd_box->add_view(pwd_hint);
-
-        LayoutParams pwdbox_lp;
-        pwdbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        pwdbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        pwdbox_lp.weight = 1.0f;
-        pwdbox_lp.gravity = Gravity::CenterVertical;
-        pwd_row->add_view(pwd_box, pwdbox_lp);
-
-        auto pwd_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.require_password_immediately)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.require_password_immediately = checked;
-                if (checked) {
-                    item->timeout_lock_cfg.grace_period_seconds = 0;
-                } else if (item->timeout_lock_cfg.grace_period_seconds == 0) {
-                    item->timeout_lock_cfg.grace_period_seconds = 15;
-                }
-                rebuild_preview_column();
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams pwdsw_lp;
-        pwdsw_lp.width = 44;
-        pwdsw_lp.height = 24;
-        pwdsw_lp.gravity = Gravity::CenterVertical;
-        pwd_row->add_view(pwd_switch, pwdsw_lp);
-        main_card->add_view(pwd_row);
-
-        auto format_grace = [](int secs) -> std::string {
-            if (secs == 0) return "0 seconds (Instant)";
-            if (secs < 60) return std::to_string(secs) + " seconds";
-            return std::to_string(secs / 60) + (secs == 60 ? " minute" : " minutes");
-        };
-
-        if (!item->timeout_lock_cfg.require_password_immediately) {
-            auto g_header = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->gravity(Gravity::CenterVertical)
-                ->build();
-
-            auto g_box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(2)
-                ->build();
-
-            auto g_title = TextViewBuilder::create()
-                ->text("Grace period window")
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            g_box->add_view(g_title);
-
-            auto g_hint = TextViewBuilder::create()
-                ->text("Wake without entering password if activity occurs within window")
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                ->build();
-            g_box->add_view(g_hint);
-
-            LayoutParams grow_lp;
-            grow_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            grow_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            grow_lp.weight = 1.0f;
-            grow_lp.gravity = Gravity::CenterVertical;
-            g_header->add_view(g_box, grow_lp);
-
-            std::vector<int> grace_steps = {5, 15, 30, 60, 120, 300};
-
-            auto g_val_label = TextViewBuilder::create()
-                ->text(format_grace(item->timeout_lock_cfg.grace_period_seconds))
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.primary)
-                ->build();
-            LayoutParams gval_lp;
-            gval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-            gval_lp.gravity = Gravity::CenterVertical;
-            g_header->add_view(g_val_label, gval_lp);
-            main_card->add_view(g_header);
-
-            int cur_g_idx = 1;
-            for (size_t i = 0; i < grace_steps.size(); ++i) {
-                if (grace_steps[i] == item->timeout_lock_cfg.grace_period_seconds) {
-                    cur_g_idx = static_cast<int>(i);
-                    break;
-                }
-            }
-            float initial_g_val = static_cast<float>(cur_g_idx) / static_cast<float>(grace_steps.size() - 1);
-
-            auto g_slider = SliderBuilder::create()
-                ->value(initial_g_val)
-                ->onValueChanged([this, item, g_val_label, grace_steps, format_grace](float val, bool user) {
-                    (void)user;
-                    int idx = static_cast<int>(std::round(val * static_cast<float>(grace_steps.size() - 1)));
-                    idx = std::clamp(idx, 0, static_cast<int>(grace_steps.size() - 1));
-                    int secs = grace_steps[idx];
-                    item->timeout_lock_cfg.grace_period_seconds = secs;
-                    g_val_label->set_text(format_grace(secs));
-                    g_val_label->request_redraw();
-                    notify_state_changed();
-                })
-                ->build();
-            LayoutParams gsl_lp;
-            gsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            gsl_lp.height = 24;
-            main_card->add_view(g_slider, gsl_lp);
-        }
-
-        // 4. Show power buttons on lockscreen
-        auto act_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto act_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto act_title = TextViewBuilder::create()
-            ->text("Show power buttons on lockscreen")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        act_box->add_view(act_title);
-
-        auto act_hint = TextViewBuilder::create()
-            ->text("miqulock show_power_actions • Sleep, Hibernate, and Power Off controls")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        act_box->add_view(act_hint);
-
-        LayoutParams actbox_lp;
-        actbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        actbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        actbox_lp.weight = 1.0f;
-        actbox_lp.gravity = Gravity::CenterVertical;
-        act_row->add_view(act_box, actbox_lp);
-
-        auto act_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.lockscreen_show_power_actions)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.lockscreen_show_power_actions = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams actsw_lp;
-        actsw_lp.width = 44;
-        actsw_lp.height = 24;
-        actsw_lp.gravity = Gravity::CenterVertical;
-        act_row->add_view(act_switch, actsw_lp);
-        main_card->add_view(act_row);
-
-        // 5. 24-hour clock on lockscreen
-        auto clk_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto clk_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto clk_title = TextViewBuilder::create()
-            ->text("Use 24-hour clock on lockscreen")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        clk_box->add_view(clk_title);
-
-        auto clk_hint = TextViewBuilder::create()
-            ->text("miqulock time_format • Displays %H:%M instead of 12-hour AM/PM")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        clk_box->add_view(clk_hint);
-
-        LayoutParams clkbox_lp;
-        clkbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        clkbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        clkbox_lp.weight = 1.0f;
-        clkbox_lp.gravity = Gravity::CenterVertical;
-        clk_row->add_view(clk_box, clkbox_lp);
-
-        auto clk_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.lockscreen_24h_clock)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.lockscreen_24h_clock = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams clksw_lp;
-        clksw_lp.width = 44;
-        clksw_lp.height = 24;
-        clksw_lp.gravity = Gravity::CenterVertical;
-        clk_row->add_view(clk_switch, clksw_lp);
-        main_card->add_view(clk_row);
-
-        add_preview_card(main_card);
-
-        // -------------------------------------------------------------
-        // Definitions & Terminology Explained Card
-        // -------------------------------------------------------------
-        auto defs_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->padding(16, 16)
-            ->spacing(10)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
-
-        auto defs_title_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->spacing(8)
-            ->build();
-
-        auto defs_icon = TextViewBuilder::create()
-            ->text("󰋼")
-            ->textSize(config->metrics.font_size + 2)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams deficon_lp;
-        deficon_lp.width = 24;
-        deficon_lp.gravity = Gravity::CenterVertical;
-        defs_title_row->add_view(defs_icon, deficon_lp);
-
-        auto defs_heading = TextViewBuilder::create()
-            ->text("Power & Lock Terminology Explained")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        defs_title_row->add_view(defs_heading);
-        defs_card->add_view(defs_title_row);
-
-        auto add_def_entry = [&defs_card, config](const std::string& term, const std::string& meaning) {
-            auto row = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(2)
-                ->build();
-
-            auto t_label = TextViewBuilder::create()
-                ->text(term)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.primary)
-                ->build();
-            row->add_view(t_label);
-
-            auto m_label = TextViewBuilder::create()
-                ->text(meaning)
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.85f))
-                ->build();
-            row->add_view(m_label);
-
-            LayoutParams r_lp;
-            r_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            r_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            defs_card->add_view(row, r_lp);
-        };
-
-        add_def_entry("Display Off (DPMS)", "Powers down the screen backlight only. The CPU, Wi-Fi, and background applications continue running normally at full speed.");
-        add_def_entry("Sleep (Suspend to RAM)", "Pauses the CPU and freezes open applications in RAM with minimal power draw (~0.3W). Wakes back to your desktop in 1 to 2 seconds.");
-        add_def_entry("Hibernate (Suspend to Disk)", "Writes a complete memory snapshot to swap disk and cuts 100% of power (0W). Preserves your open work indefinitely even on zero battery.");
-        add_def_entry("Hybrid Sleep", "Enters Sleep immediately for fast 1-second wake, then automatically Hibernates to swap disk after prolonged inactivity to protect the battery.");
-        add_def_entry("Lock Screen (miqulock)", "Obscures your workspace behind PAM authentication. Requires your password to unlock while apps continue running uninterrupted in the background.");
-        add_def_entry("Grace Period", "A brief safety window right after the display turns off where pressing any key immediately resumes your desktop without asking for your password.");
-        add_def_entry("Clamshell Docking", "Allows you to close your laptop lid without triggering sleep or lock when an external monitor and keyboard/mouse are connected.");
-
-        add_preview_card(defs_card);
-
-        if (!item->telemetry.empty()) {
-            add_preview_card(create_telemetry_card(item->telemetry, config, item->telemetry_title.empty() ? "Inactivity & security specifications" : item->telemetry_title));
-        }
+        render_timeout_lock_preview(item, config);
         return;
     }
 
@@ -4399,12 +3993,14 @@ void MillerView::rebuild_preview_column() {
     if (item->is_display_nightlight) {
         // 1. Hero switch card (Enable or Disable)
         bool is_nl_on = item->nightlight_cfg.enabled;
+        int nl_idx = static_cast<int>(m_actionable_controls.size());
+        bool nl_focused = is_control_focused(nl_idx);
         auto hero_sw_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->stroke(nl_focused ? 2 : 1, nl_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
             ->cornerRadius(12)
             ->build();
 
@@ -4448,7 +4044,7 @@ void MillerView::rebuild_preview_column() {
             ->checked(is_nl_on)
             ->onCheckedChanged([this, item](bool checked) {
                 item->nightlight_cfg.enabled = checked;
-                rebuild_preview_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             })
             ->build();
@@ -4461,14 +4057,20 @@ void MillerView::rebuild_preview_column() {
 
         add_preview_card(hero_sw_card);
 
+        register_actionable_control(PreviewControlType::Switch, [nl_switch]() {
+            if (nl_switch) nl_switch->toggle();
+        });
+
         // 2. If enabled, adjust warmth card
         if (is_nl_on) {
+            int w_idx = static_cast<int>(m_actionable_controls.size());
+            bool warmth_focused = is_control_focused(w_idx);
             auto warmth_card = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->padding(16, 14)
                 ->spacing(10)
                 ->backgroundColor(config->colors.surface)
-                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->stroke(warmth_focused ? 2 : 1, warmth_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
                 ->cornerRadius(12)
                 ->build();
 
@@ -4537,6 +4139,17 @@ void MillerView::rebuild_preview_column() {
             warmth_card->add_view(w_slider, wsl_lp);
 
             add_preview_card(warmth_card);
+
+            register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this, item, w_slider, w_label, format_kelvin](float delta) {
+                float new_val = std::clamp(item->nightlight_cfg.warmth + delta, 0.0f, 1.0f);
+                item->nightlight_cfg.warmth = new_val;
+                if (w_slider) w_slider->set_value(new_val);
+                if (w_label) {
+                    w_label->set_text(format_kelvin(new_val));
+                    w_label->request_redraw();
+                }
+                notify_state_changed();
+            });
         }
 
         if (!item->telemetry.empty()) {
@@ -4655,12 +4268,15 @@ void MillerView::rebuild_preview_column() {
         if (!item->battery_cfg) return;
 
         // 1. Operating Profile Card with Spinner
+        int p_idx = static_cast<int>(m_actionable_controls.size());
+        bool prof_focused = is_control_focused(p_idx);
+
         auto prof_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->stroke(prof_focused ? 2 : 1, prof_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
             ->cornerRadius(12)
             ->build();
 
@@ -4686,24 +4302,6 @@ void MillerView::rebuild_preview_column() {
             }
         }
 
-        auto prof_spinner = SpinnerBuilder::create()
-            ->items(item->battery_cfg->available_profiles)
-            ->selectedIndex(prof_sel_idx)
-            ->fontSize(config->metrics.font_size)
-            ->padding(12, 6)
-            ->cornerRadius(8)
-            ->onItemSelected([this, item](int idx, const std::string& val) {
-                (void)idx;
-                item->battery_cfg->power_profile = val;
-                item->battery_cfg->power_saver = (val == "Power Saver");
-                rebuild_preview_column();
-                notify_state_changed();
-            })
-            ->build();
-
-        LayoutParams psp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        prof_card->add_view(prof_spinner, psp_lp);
-
         auto get_profile_desc = [item]() -> std::string {
             if (item->battery_cfg->power_profile == "Power Saver") {
                 return "Limits CPU frequency to base clock, pauses background indexing, and forces 60 Hz display refresh.";
@@ -4718,9 +4316,45 @@ void MillerView::rebuild_preview_column() {
             ->caption(true)
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
+
+        auto prof_spinner = SpinnerBuilder::create()
+            ->items(item->battery_cfg->available_profiles)
+            ->selectedIndex(prof_sel_idx)
+            ->fontSize(config->metrics.font_size)
+            ->padding(12, 6)
+            ->cornerRadius(8)
+            ->onItemSelected([this, item, prof_desc, get_profile_desc](int idx, const std::string& val) {
+                (void)idx;
+                item->battery_cfg->power_profile = val;
+                item->battery_cfg->power_saver = (val == "Power Saver");
+                if (prof_desc) {
+                    prof_desc->set_text(get_profile_desc());
+                    prof_desc->request_redraw();
+                }
+                rebuild_current_column();
+                notify_state_changed();
+
+                // Safely defer full preview rebuild until after the dropdown popup has cleanly dismissed
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(20, [this]() {
+                        rebuild_preview_column();
+                        notify_state_changed();
+                    });
+                }
+            })
+            ->build();
+
+        LayoutParams psp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        prof_card->add_view(prof_spinner, psp_lp);
         prof_card->add_view(prof_desc);
 
         add_preview_card(prof_card);
+
+        register_actionable_control(PreviewControlType::Spinner,
+            [prof_spinner]() { if (prof_spinner) prof_spinner->open_dropdown(); },
+            [prof_spinner]() { if (prof_spinner) prof_spinner->open_dropdown(); },
+            nullptr
+        );
 
         // 3. Power Management Specifications Telemetry Card
         std::string active_draw = item->battery_cfg->power_saver ? "5.2 W (Power Saver Active)" :
@@ -4814,29 +4448,39 @@ void MillerView::rebuild_preview_column() {
             pill_lp.gravity = Gravity::CenterVertical;
             mon_card->add_view(pill_card, pill_lp);
         } else {
+            int prim_idx = static_cast<int>(m_actionable_controls.size());
+            bool prim_focused = is_control_focused(prim_idx);
+
+            auto on_make_primary = [this, item]() {
+                const auto& list = get_current_list();
+                for (auto& m : list) {
+                    if (m->is_monitor) {
+                        m->monitor_cfg.is_primary = (m == item);
+                    }
+                }
+                rebuild_current_column();
+                rebuild_preview_column();
+                notify_state_changed();
+            };
+
             auto make_prim_btn = ButtonBuilder::create()
                 ->text("Make Primary")
                 ->primary(true)
                 ->padding(10, 4)
                 ->cornerRadius(6)
-                ->onClick([this, item]() {
-                    const auto& list = get_current_list();
-                    for (auto& m : list) {
-                        if (m->is_monitor) {
-                            m->monitor_cfg.is_primary = (m == item);
-                        }
-                    }
-                    rebuild_current_column();
-                    rebuild_preview_column();
-                    notify_state_changed();
-                })
+                ->onClick(on_make_primary)
                 ->build();
+            make_prim_btn->set_border_width(prim_focused ? 2.0 : 0.0);
+            make_prim_btn->set_border_color(prim_focused ? config->colors.primary : Color::transparent());
+            make_prim_btn->set_selected(prim_focused);
 
             LayoutParams prim_lp;
             prim_lp.width = static_cast<int>(LayoutDimension::WrapContent);
             prim_lp.height = 28;
             prim_lp.gravity = Gravity::CenterVertical;
             mon_card->add_view(make_prim_btn, prim_lp);
+
+            register_actionable_control(PreviewControlType::Button, on_make_primary);
         }
 
         add_preview_card(mon_card);
@@ -4872,10 +4516,16 @@ void MillerView::rebuild_preview_column() {
                                       const std::vector<std::string>& options,
                                       const std::string& current_val,
                                       std::function<void(const std::string&)> on_select) {
+            int s_idx = static_cast<int>(m_actionable_controls.size());
+            bool focused = is_control_focused(s_idx);
+
             auto row = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
                 ->gravity(Gravity::CenterVertical)
-                ->padding(0, 3)
+                ->padding(6, 4)
+                ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
+                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
                 ->build();
 
             auto lbl = TextViewBuilder::create()
@@ -4914,6 +4564,12 @@ void MillerView::rebuild_preview_column() {
             LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
             sp_lp.gravity = Gravity::CenterVertical;
             row->add_view(spinner, sp_lp);
+
+            register_actionable_control(PreviewControlType::Spinner,
+                [spinner]() { if (spinner) spinner->open_dropdown(); },
+                [spinner]() { if (spinner) spinner->open_dropdown(); },
+                nullptr
+            );
 
             return row;
         };
@@ -5056,71 +4712,104 @@ void MillerView::rebuild_preview_column() {
             ->build();
 
         // 1. Open Button
+        int o_idx = static_cast<int>(m_actionable_controls.size());
+        bool o_focused = is_control_focused(o_idx);
+
+        auto on_open = [this, item]() {
+            item->app_info.is_running = true;
+            if (item->app_info.pid <= 0) item->app_info.pid = 4920;
+            item->last_action_message = "Launched " + item->app_info.app_name + " (running, PID " + std::to_string(item->app_info.pid) + ")";
+            rebuild_preview_column();
+            notify_state_changed();
+        };
+
         auto open_btn = ButtonBuilder::create()
             ->text("Open")
             ->primary(true)
             ->padding(16, 5)
             ->cornerRadius(6)
-            ->onClick([this, item]() {
-                item->app_info.is_running = true;
-                if (item->app_info.pid <= 0) item->app_info.pid = 4920;
-                item->last_action_message = "Launched " + item->app_info.app_name + " (running, PID " + std::to_string(item->app_info.pid) + ")";
-                rebuild_preview_column();
-                notify_state_changed();
-            })
+            ->onClick(on_open)
             ->build();
+        open_btn->set_border_width(o_focused ? 2.0 : 0.0);
+        open_btn->set_border_color(o_focused ? config->colors.on_primary : Color::transparent());
+        open_btn->set_selected(o_focused);
+
         LayoutParams open_lp;
         open_lp.width = static_cast<int>(LayoutDimension::WrapContent);
         open_lp.height = 30;
         open_lp.gravity = Gravity::CenterVertical;
         actions_box->add_view(open_btn, open_lp);
 
+        register_actionable_control(PreviewControlType::Button, on_open);
+
         // 2. Force Close Button
         bool is_running = item->app_info.is_running;
+        int fc_idx = static_cast<int>(m_actionable_controls.size());
+        bool fc_focused = is_control_focused(fc_idx);
+
+        auto on_force_close = [this, item]() {
+            if (item->app_info.is_running) {
+                int old_pid = item->app_info.pid;
+                item->app_info.is_running = false;
+                item->app_info.pid = 0;
+                item->last_action_message = "Force closed " + item->app_info.app_name + " (terminated PID " + std::to_string(old_pid > 0 ? old_pid : 4821) + ")";
+            } else {
+                item->last_action_message = item->app_info.app_name + " is not running";
+            }
+            rebuild_preview_column();
+            notify_state_changed();
+        };
+
         auto force_close_btn = ButtonBuilder::create()
             ->text("Force Close")
             ->style(ButtonStyle::Outlined)
             ->padding(14, 5)
             ->cornerRadius(6)
-            ->onClick([this, item]() {
-                if (item->app_info.is_running) {
-                    int old_pid = item->app_info.pid;
-                    item->app_info.is_running = false;
-                    item->app_info.pid = 0;
-                    item->last_action_message = "Force closed " + item->app_info.app_name + " (terminated PID " + std::to_string(old_pid > 0 ? old_pid : 4821) + ")";
-                } else {
-                    item->last_action_message = item->app_info.app_name + " is not running";
-                }
-                rebuild_preview_column();
-                notify_state_changed();
-            })
+            ->onClick(on_force_close)
             ->build();
         if (!is_running) {
             force_close_btn->set_text_color(config->colors.on_surface_variant.with_alpha(0.4f));
         }
+        force_close_btn->set_border_width(fc_focused ? 2.0 : 1.0);
+        force_close_btn->set_border_color(fc_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
+        force_close_btn->set_selected(fc_focused);
+
         LayoutParams fc_lp;
         fc_lp.width = static_cast<int>(LayoutDimension::WrapContent);
         fc_lp.height = 30;
         fc_lp.gravity = Gravity::CenterVertical;
         actions_box->add_view(force_close_btn, fc_lp);
 
+        register_actionable_control(PreviewControlType::Button, on_force_close);
+
         // 3. Uninstall Button
+        int un_idx = static_cast<int>(m_actionable_controls.size());
+        bool un_focused = is_control_focused(un_idx);
+
+        auto on_uninstall = [this, item]() {
+            item->last_action_message = "Uninstall requested for " + item->app_info.app_name;
+            rebuild_preview_column();
+            notify_state_changed();
+        };
+
         auto uninstall_btn = ButtonBuilder::create()
             ->text("Uninstall")
             ->style(ButtonStyle::Outlined)
             ->padding(14, 5)
             ->cornerRadius(6)
-            ->onClick([this, item]() {
-                item->last_action_message = "Uninstall requested for " + item->app_info.app_name;
-                rebuild_preview_column();
-                notify_state_changed();
-            })
+            ->onClick(on_uninstall)
             ->build();
+        uninstall_btn->set_border_width(un_focused ? 2.0 : 1.0);
+        uninstall_btn->set_border_color(un_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
+        uninstall_btn->set_selected(un_focused);
+
         LayoutParams un_lp;
         un_lp.width = static_cast<int>(LayoutDimension::WrapContent);
         un_lp.height = 30;
         un_lp.gravity = Gravity::CenterVertical;
         actions_box->add_view(uninstall_btn, un_lp);
+
+        register_actionable_control(PreviewControlType::Button, on_uninstall);
 
         if (!item->last_action_message.empty()) {
             auto feedback = TextViewBuilder::create()
@@ -5217,6 +4906,9 @@ void MillerView::rebuild_preview_column() {
         if (item->app_info.network_policy == "Local Only") sel_idx = 1;
         else if (item->app_info.network_policy == "Block") sel_idx = 2;
 
+        int sp_idx = static_cast<int>(m_actionable_controls.size());
+        bool sp_focused = is_control_focused(sp_idx);
+
         auto net_spinner = SpinnerBuilder::create()
             ->items(spinner_items)
             ->selectedIndex(sel_idx)
@@ -5243,8 +4935,20 @@ void MillerView::rebuild_preview_column() {
             })
             ->build();
 
+        auto sp_container = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->stroke(sp_focused ? 2 : 0, sp_focused ? config->colors.primary : Color::transparent())
+            ->cornerRadius(8)
+            ->build();
         LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        net_card->add_view(net_spinner, sp_lp);
+        sp_container->add_view(net_spinner, sp_lp);
+        net_card->add_view(sp_container, sp_lp);
+
+        register_actionable_control(PreviewControlType::Spinner,
+            [net_spinner]() { if (net_spinner) net_spinner->open_dropdown(); },
+            [net_spinner]() { if (net_spinner) net_spinner->open_dropdown(); },
+            nullptr
+        );
 
         add_preview_card(net_card);
 
@@ -5275,6 +4979,18 @@ void MillerView::rebuild_preview_column() {
         dt_lp.gravity = Gravity::CenterVertical;
         header_row->add_view(details_title, dt_lp);
 
+        int cc_idx = static_cast<int>(m_actionable_controls.size());
+        bool cc_focused = is_control_focused(cc_idx);
+
+        auto on_clear_cache = [this, item]() {
+            item->app_info.size_data = "0 KB";
+            item->app_info.size_total = item->app_info.size_binary;
+            item->last_action_message = "Cache cleared (storage freed)";
+            rebuild_current_column();
+            rebuild_preview_column();
+            notify_state_changed();
+        };
+
         auto clear_cache_btn = ButtonBuilder::create()
             ->text("Clear Cache")
             ->flat(true)
@@ -5282,21 +4998,20 @@ void MillerView::rebuild_preview_column() {
             ->textColor(config->colors.primary)
             ->padding(10, 4)
             ->cornerRadius(6)
-            ->onClick([this, item]() {
-                item->app_info.size_data = "0 KB";
-                item->app_info.size_total = item->app_info.size_binary;
-                item->last_action_message = "Cache cleared (storage freed)";
-                rebuild_current_column();
-                rebuild_preview_column();
-                notify_state_changed();
-            })
+            ->onClick(on_clear_cache)
             ->build();
+        clear_cache_btn->set_border_width(cc_focused ? 2.0 : 0.0);
+        clear_cache_btn->set_border_color(cc_focused ? config->colors.primary : Color::transparent());
+        clear_cache_btn->set_selected(cc_focused);
+
         LayoutParams cc_lp;
         cc_lp.width = static_cast<int>(LayoutDimension::WrapContent);
         cc_lp.height = 28;
         cc_lp.gravity = Gravity::CenterVertical;
         header_row->add_view(clear_cache_btn, cc_lp);
         details_card->add_view(header_row);
+
+        register_actionable_control(PreviewControlType::Button, on_clear_cache);
 
         if (!item->last_action_message.empty()) {
             auto feedback = TextViewBuilder::create()
@@ -5537,23 +5252,38 @@ void MillerView::rebuild_preview_column() {
                 row_content->add_view(set_btn, set_lp);
             }
 
-            Color row_bg = is_def ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
-            auto cand_row_card = CardViewBuilder::create()
-                ->style(CardStyle::Filled)
-                ->backgroundColor(row_bg)
-                ->cornerRadius(8)
-                ->elevation(0)
-                ->addView(row_content)
-                ->build();
-
-            cand_row_card->set_on_click_listener([this, item, ci]() {
+            int c_idx = register_actionable_control(PreviewControlType::Button, [this, item, ci]() {
+                if (ci >= item->default_app_role.candidates.size()) return;
                 for (size_t k = 0; k < item->default_app_role.candidates.size(); ++k) {
                     item->default_app_role.candidates[k].is_default = (k == ci);
                 }
                 item->subtitle = item->default_app_role.candidates[ci].name;
                 item->last_action_message = "Default updated to " + item->subtitle;
                 rebuild_current_column();
-                rebuild_preview_column();
+                deferred_rebuild_preview();
+                notify_state_changed();
+            });
+            bool c_focused = is_control_focused(c_idx);
+
+            Color row_bg = is_def ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
+            auto cand_row_card = CardViewBuilder::create()
+                ->style(CardStyle::Filled)
+                ->backgroundColor(c_focused ? config->colors.primary_container.with_alpha(0.5f) : row_bg)
+                ->stroke(c_focused ? 2 : 0, c_focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
+                ->elevation(0)
+                ->addView(row_content)
+                ->build();
+
+            cand_row_card->set_on_click_listener([this, item, ci]() {
+                if (ci >= item->default_app_role.candidates.size()) return;
+                for (size_t k = 0; k < item->default_app_role.candidates.size(); ++k) {
+                    item->default_app_role.candidates[k].is_default = (k == ci);
+                }
+                item->subtitle = item->default_app_role.candidates[ci].name;
+                item->last_action_message = "Default updated to " + item->subtitle;
+                rebuild_current_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             });
 
@@ -5641,7 +5371,12 @@ void MillerView::rebuild_preview_column() {
 
     // 2. Primary Toggle Card
     if (item->has_switch) {
-        bool focused = m_preview_focused && (m_preview_control_index == 0);
+        int sw_idx = register_actionable_control(PreviewControlType::Switch, [this]() {
+            if (m_active_primary_switch) {
+                m_active_primary_switch->toggle();
+            }
+        });
+        bool focused = is_control_focused(sw_idx);
 
         auto primary_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
@@ -5683,7 +5418,7 @@ void MillerView::rebuild_preview_column() {
             ->onCheckedChanged([this, item](bool checked) {
                 item->switch_val = checked;
                 rebuild_current_column();
-                rebuild_preview_column();
+                deferred_rebuild_preview();
                 notify_state_changed();
             })
             ->build();
@@ -5710,13 +5445,19 @@ void MillerView::rebuild_preview_column() {
 
         // Secondary Switch
         if (item->has_secondary_switch) {
-            bool focused = m_preview_focused && (m_preview_control_index == 1);
+            int sec_idx = register_actionable_control(PreviewControlType::Switch, [this]() {
+                if (m_active_secondary_switch) {
+                    m_active_secondary_switch->toggle();
+                }
+            });
+            bool focused = is_control_focused(sec_idx);
 
             auto sec_row = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
-                ->padding(6, 6)
+                ->padding(10, 8)
                 ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.2f) : Color::transparent())
-                ->cornerRadius(6)
+                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
                 ->build();
 
             auto sec_lbl = TextViewBuilder::create()
@@ -5735,6 +5476,7 @@ void MillerView::rebuild_preview_column() {
                 ->checked(item->secondary_switch_val)
                 ->onCheckedChanged([this, item](bool checked) {
                     item->secondary_switch_val = checked;
+                    deferred_rebuild_preview();
                     notify_state_changed();
                 })
                 ->build();
@@ -5750,14 +5492,31 @@ void MillerView::rebuild_preview_column() {
 
         // Slider Control
         if (item->has_slider) {
-            bool focused = m_preview_focused && (m_preview_control_index == 2);
+            bool is_read_only = item->slider_read_only;
+            int ctrl_idx = -1;
+            if (!is_read_only) {
+                ctrl_idx = register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this, item](float delta) {
+                    item->slider_val = std::clamp(item->slider_val + delta, 0.0f, 1.0f);
+                    if (m_active_slider) {
+                        m_active_slider->set_value(item->slider_val);
+                    }
+                    if (m_active_slider_label) {
+                        int pct = static_cast<int>(item->slider_val * 100);
+                        m_active_slider_label->set_text(std::to_string(pct) + " " + item->slider_unit);
+                    }
+                    rebuild_current_column();
+                    notify_state_changed();
+                });
+            }
+            bool focused = (ctrl_idx != -1) && is_control_focused(ctrl_idx);
 
             auto slider_box = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->spacing(6)
-                ->padding(6, 6)
+                ->padding(10, 8)
                 ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.2f) : Color::transparent())
-                ->cornerRadius(6)
+                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
                 ->build();
 
             auto s_row = LinearLayoutBuilder::create()
@@ -5776,15 +5535,16 @@ void MillerView::rebuild_preview_column() {
 
             int val_pct = static_cast<int>(item->slider_val * 100);
             m_active_slider_label = TextViewBuilder::create()
-                ->text(std::to_string(val_pct) + " " + item->slider_unit)
-                ->textColor(config->colors.primary)
+                ->text(std::to_string(val_pct) + " " + item->slider_unit + (is_read_only ? " (Read-only)" : ""))
+                ->textColor(is_read_only ? config->colors.on_surface_variant : config->colors.primary)
                 ->build();
             s_row->add_view(m_active_slider_label);
             slider_box->add_view(s_row);
 
             m_active_slider = SliderBuilder::create()
                 ->value(item->slider_val)
-                ->onValueChanged([this, item](float val, bool user) {
+                ->onValueChanged([this, item, is_read_only](float val, bool user) {
+                    if (is_read_only) return;
                     item->slider_val = val;
                     if (m_active_slider_label) {
                         int pct = static_cast<int>(val * 100);
@@ -5805,14 +5565,18 @@ void MillerView::rebuild_preview_column() {
 
         // Action Button
         if (item->has_action) {
-            bool focused = m_preview_focused && (m_preview_control_index == 3);
+            int act_idx = register_actionable_control(PreviewControlType::Button, [this]() {
+                trigger_active_action();
+            });
+            bool focused = is_control_focused(act_idx);
 
             auto action_row = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
                 ->spacing(12)
-                ->padding(6, 6)
+                ->padding(10, 8)
                 ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.2f) : Color::transparent())
-                ->cornerRadius(6)
+                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
+                ->cornerRadius(8)
                 ->build();
 
             m_active_action_btn = ButtonBuilder::create()
@@ -5868,6 +5632,12 @@ void MillerView::rebuild_preview_column() {
             telem_title = "System specifications";
         }
         add_preview_card(create_telemetry_card(item->telemetry, config, telem_title));
+    }
+
+    if (m_actionable_controls.empty()) {
+        m_preview_control_index = 0;
+    } else if (m_preview_control_index >= static_cast<int>(m_actionable_controls.size())) {
+        m_preview_control_index = static_cast<int>(m_actionable_controls.size()) - 1;
     }
 }
 
@@ -5928,8 +5698,56 @@ bool MillerView::navigate_enter() {
     }
 }
 
+void MillerView::set_search_query(const std::string& query) {
+    m_search_query = query;
+    m_search_results.clear();
+    m_current_index = 0;
+    m_preview_focused = false;
+
+    if (!m_search_query.empty()) {
+        std::string lower_query = m_search_query;
+        std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+
+        std::function<void(const std::vector<std::shared_ptr<SettingItem>>&)> search_recursive =
+            [&](const std::vector<std::shared_ptr<SettingItem>>& items) {
+                for (const auto& item : items) {
+                    std::string t = item->title;
+                    std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return std::tolower(c); });
+                    std::string sub = item->subtitle;
+                    std::transform(sub.begin(), sub.end(), sub.begin(), [](unsigned char c) { return std::tolower(c); });
+
+                    if (t.find(lower_query) != std::string::npos ||
+                        sub.find(lower_query) != std::string::npos ||
+                        item->id.find(lower_query) != std::string::npos) {
+                        m_search_results.push_back(item);
+                    }
+
+                    if (!item->children.empty()) {
+                        search_recursive(item->children);
+                    }
+                }
+            };
+
+        search_recursive(m_root_tree);
+    }
+
+    rebuild_columns();
+    notify_state_changed();
+}
+
 bool MillerView::navigate_back() {
     cancel_pending_sibling_click();
+    if (!m_search_query.empty()) {
+        m_search_query.clear();
+        m_search_results.clear();
+        m_current_index = 0;
+        m_preview_focused = false;
+        rebuild_columns();
+        notify_state_changed();
+        return true;
+    }
+
     if (m_preview_focused) {
         m_preview_focused = false;
         rebuild_preview_column();
@@ -5954,27 +5772,39 @@ bool MillerView::navigate_back() {
     return false;
 }
 
+bool MillerView::activate_focused_control() {
+    if (!m_preview_focused || m_actionable_controls.empty()) return false;
+    if (m_preview_control_index >= 0 && m_preview_control_index < static_cast<int>(m_actionable_controls.size())) {
+        const auto& ctrl = m_actionable_controls[m_preview_control_index];
+        if (ctrl.on_activate) {
+            ctrl.on_activate();
+            return true;
+        } else if (ctrl.type == PreviewControlType::Spinner && ctrl.on_open_dropdown) {
+            ctrl.on_open_dropdown();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MillerView::open_focused_spinner() {
+    if (!m_preview_focused || m_actionable_controls.empty()) return false;
+    if (m_preview_control_index >= 0 && m_preview_control_index < static_cast<int>(m_actionable_controls.size())) {
+        const auto& ctrl = m_actionable_controls[m_preview_control_index];
+        if (ctrl.on_open_dropdown) {
+            ctrl.on_open_dropdown();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool MillerView::toggle_active() {
-    auto item = get_current_selected_item();
-    if (m_preview_focused && item && (item->id == "sound_speaker" || item->id == "sound_mic" || item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_firewall)) {
-        if (m_active_primary_switch) {
-            m_active_primary_switch->toggle();
-            return true;
-        }
-    }
-
     if (m_preview_focused) {
-        if (m_preview_control_index == 0 && m_active_primary_switch) {
-            m_active_primary_switch->toggle();
-            return true;
-        } else if (m_preview_control_index == 1 && m_active_secondary_switch) {
-            m_active_secondary_switch->toggle();
-            return true;
-        } else if (m_preview_control_index == 3) {
-            return trigger_active_action();
-        }
+        return activate_focused_control();
     }
 
+    auto item = get_current_selected_item();
     if (item && !item->is_category && item->has_switch) {
         item->switch_val = !item->switch_val;
         rebuild_columns();
@@ -5985,8 +5815,18 @@ bool MillerView::toggle_active() {
 }
 
 bool MillerView::adjust_active_slider(float delta) {
+    if (m_preview_focused && !m_actionable_controls.empty()) {
+        if (m_preview_control_index >= 0 && m_preview_control_index < static_cast<int>(m_actionable_controls.size())) {
+            const auto& ctrl = m_actionable_controls[m_preview_control_index];
+            if (ctrl.type == PreviewControlType::Slider && ctrl.on_adjust) {
+                ctrl.on_adjust(delta);
+                return true;
+            }
+        }
+    }
+
     auto item = get_current_selected_item();
-    if (item && !item->is_category && item->has_slider) {
+    if (item && !item->is_category && item->has_slider && !item->slider_read_only) {
         item->slider_val = std::clamp(item->slider_val + delta, 0.0f, 1.0f);
         if (m_active_slider) {
             m_active_slider->set_value(item->slider_val);
@@ -6000,18 +5840,17 @@ bool MillerView::adjust_active_slider(float delta) {
 }
 
 bool MillerView::focus_next_control() {
-    auto item = get_current_selected_item();
-    int max_c = (item && (item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_firewall)) ? 1 : ((item && (item->id == "sound_speaker" || item->id == "sound_mic")) ? 2 : 4);
-    m_preview_control_index = (m_preview_control_index + 1) % max_c;
+    if (m_actionable_controls.empty()) return false;
+    m_preview_control_index = (m_preview_control_index + 1) % static_cast<int>(m_actionable_controls.size());
     rebuild_preview_column();
     notify_state_changed();
     return true;
 }
 
 bool MillerView::focus_prev_control() {
-    auto item = get_current_selected_item();
-    int max_c = (item && (item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_firewall)) ? 1 : ((item && (item->id == "sound_speaker" || item->id == "sound_mic")) ? 2 : 4);
-    m_preview_control_index = (m_preview_control_index + max_c - 1) % max_c;
+    if (m_actionable_controls.empty()) return false;
+    int count = static_cast<int>(m_actionable_controls.size());
+    m_preview_control_index = (m_preview_control_index + count - 1) % count;
     rebuild_preview_column();
     notify_state_changed();
     return true;
@@ -6032,6 +5871,14 @@ bool MillerView::trigger_active_action() {
 }
 
 std::string MillerView::get_breadcrumb_path() const {
+    if (!m_search_query.empty()) {
+        std::string path = "Settings › Search: \"" + m_search_query + "\"";
+        auto current = get_current_selected_item();
+        if (current) {
+            path += " › " + current->title;
+        }
+        return path;
+    }
     std::string path = "Settings";
     for (const auto& item : m_path) {
         path += " › " + item->title;

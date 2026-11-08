@@ -683,6 +683,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         stor_root->slider_val = 0.42f;
         stor_root->slider_label = "Storage Used (42% • 420.5 GB of 1.0 TB)";
         stor_root->slider_unit = "%";
+        stor_root->slider_read_only = true;
         stor_root->has_switch = true;
         stor_root->switch_val = true;
         stor_root->switch_label = "Periodic SSD TRIM (fstrim.timer)";
@@ -706,6 +707,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         stor_home->slider_val = 0.28f;
         stor_home->slider_label = "User Directory Space (280.4 GB)";
         stor_home->slider_unit = "%";
+        stor_home->slider_read_only = true;
         stor_home->has_switch = true;
         stor_home->switch_val = true;
         stor_home->switch_label = "Automatic Cache Cleaner";

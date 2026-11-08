@@ -290,6 +290,7 @@ public:
     float slider_val = 0.5f;
     std::string slider_label = "Level";
     std::string slider_unit = "%";
+    bool slider_read_only = false;
 
     bool has_action = false;
     std::string action_label = "Execute";

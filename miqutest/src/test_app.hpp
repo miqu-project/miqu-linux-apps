@@ -30,6 +30,7 @@ private:
     std::shared_ptr<CardView> m_back_btn;
     std::shared_ptr<TextView> m_back_label;
     std::shared_ptr<TextView> m_path_label;
+    std::shared_ptr<SearchView> m_search_view;
     std::shared_ptr<MillerView> m_miller_view;
 };
 

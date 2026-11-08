@@ -29,9 +29,14 @@ public:
     bool focus_next_control();
     bool focus_prev_control();
     bool trigger_active_action();
+    bool open_focused_spinner();
+    bool activate_focused_control();
 
     // State Inspection
-    bool can_navigate_back() const { return !m_path.empty(); }
+    bool can_navigate_back() const { return !m_search_query.empty() || m_preview_focused || !m_path.empty(); }
+    void set_search_query(const std::string& query);
+    const std::string& get_search_query() const { return m_search_query; }
+    bool is_searching() const { return !m_search_query.empty(); }
     std::string get_breadcrumb_path() const;
     std::string get_status_text() const;
     bool is_preview_focused() const { return m_preview_focused; }
@@ -45,7 +50,30 @@ private:
     void rebuild_parent_column();
     void rebuild_current_column();
     void rebuild_preview_column();
+    void deferred_rebuild_preview(int delay_ms = 15);
     void add_preview_card(std::shared_ptr<View> card);
+
+    // Reusable Form Builders
+    std::shared_ptr<LinearLayout> create_form_card(const std::shared_ptr<Config>& config);
+    void add_form_divider(const std::shared_ptr<LinearLayout>& card, const std::shared_ptr<Config>& config);
+    void add_form_toggle(const std::shared_ptr<LinearLayout>& card, const std::shared_ptr<Config>& config,
+                        const std::string& title, const std::string& hint, bool checked,
+                        std::function<void(bool)> on_toggle);
+    void add_form_slider(const std::shared_ptr<LinearLayout>& card, const std::shared_ptr<Config>& config,
+                        const std::string& title, const std::string& hint, float initial_val,
+                        const std::string& initial_label, std::function<std::string(float)> on_change);
+    void add_form_spinner(const std::shared_ptr<LinearLayout>& card, const std::shared_ptr<Config>& config,
+                         const std::string& title, const std::string& hint,
+                         const std::vector<std::string>& items, int cur_idx,
+                         std::function<void(int, const std::string&)> on_select);
+
+    // Focused Domain Preview Renderers
+    void render_empty_preview(const std::shared_ptr<Config>& config);
+    void render_category_children_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_tiling_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_wallpaper_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_keybindings_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_timeout_lock_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
 
     std::shared_ptr<SettingItem> get_current_selected_item() const;
     const std::vector<std::shared_ptr<SettingItem>>& get_current_list() const;
@@ -70,7 +98,23 @@ private:
 
     // Focus state: whether user has entered into the preview column controls
     bool m_preview_focused = false;
-    int m_preview_control_index = 0; // 0: primary switch, 1: secondary switch, 2: slider, 3: action button
+    int m_preview_control_index = 0;
+
+    enum class PreviewControlType { Switch, Button, Spinner, Slider };
+    struct ActionableControl {
+        PreviewControlType type = PreviewControlType::Button;
+        std::function<void()> on_activate;       // Space or Return
+        std::function<void()> on_open_dropdown;  // Shift+Down
+        std::function<void(float)> on_adjust;    // Slider adjustment
+    };
+    int register_actionable_control(PreviewControlType type,
+                                    std::function<void()> on_activate = nullptr,
+                                    std::function<void()> on_open_dropdown = nullptr,
+                                    std::function<void(float)> on_adjust = nullptr);
+    bool is_control_focused(int index) const {
+        return m_preview_focused && (m_preview_control_index == index);
+    }
+    std::vector<ActionableControl> m_actionable_controls;
 
     std::function<void()> m_on_state_changed;
 
@@ -87,6 +131,8 @@ private:
     std::shared_ptr<TextView> m_active_slider_label;
     std::shared_ptr<Button> m_active_action_btn;
     std::shared_ptr<TextView> m_active_action_feedback;
+    std::string m_search_query;
+    std::vector<std::shared_ptr<SettingItem>> m_search_results;
     std::shared_ptr<PopupWindow> m_active_popup;
 };
 
