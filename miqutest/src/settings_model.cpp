@@ -527,20 +527,29 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         disp_timeout_lock->timeout_lock_cfg.lock_timeout_minutes = 1;
         disp_timeout_lock->timeout_lock_cfg.display_off_minutes = 5;
         disp_timeout_lock->timeout_lock_cfg.suspend_minutes = 15;
+        disp_timeout_lock->timeout_lock_cfg.hibernate_delay_minutes = 120;
+        disp_timeout_lock->timeout_lock_cfg.sleep_mode = "Suspend-then-Hibernate (Hybrid)";
+        disp_timeout_lock->timeout_lock_cfg.lid_action = "Suspend system";
+        disp_timeout_lock->timeout_lock_cfg.power_button_action = "Show power menu (miqupower)";
+        disp_timeout_lock->timeout_lock_cfg.critical_battery_action = "Hibernate system";
         disp_timeout_lock->timeout_lock_cfg.dim_screen = true;
         disp_timeout_lock->timeout_lock_cfg.prevent_sleep_media = true;
         disp_timeout_lock->timeout_lock_cfg.energy_saver_battery = true;
-        disp_timeout_lock->timeout_lock_cfg.lock_on_display_off = true;
-        disp_timeout_lock->timeout_lock_cfg.lock_on_lid_close = true;
         disp_timeout_lock->timeout_lock_cfg.clamshell_mode = true;
+        disp_timeout_lock->timeout_lock_cfg.lock_before_sleep = true;
+        disp_timeout_lock->timeout_lock_cfg.lock_on_display_off = true;
         disp_timeout_lock->timeout_lock_cfg.require_password_immediately = true;
         disp_timeout_lock->timeout_lock_cfg.grace_period_seconds = 0;
+        disp_timeout_lock->timeout_lock_cfg.lockscreen_show_power_actions = true;
+        disp_timeout_lock->timeout_lock_cfg.lockscreen_24h_clock = true;
         disp_timeout_lock->telemetry_title = "Inactivity & security specifications";
         disp_timeout_lock->telemetry = {
-            {"Idle Timer Daemon", "miquidle (ext-idle-notify-v1)"},
-            {"Session Security", "miqulock (ext-session-lock-v1)"},
-            {"Display Hardware DPMS", "wlr-output-power-management-v1"},
-            {"Suspend Target", "systemd-logind (suspend-then-hibernate)"},
+            {"Inactivity Manager", "miquidle (ext-idle-notify-v1)"},
+            {"Screen Locker", "miqulock (ext-session-lock-v1)"},
+            {"Display DPMS", "wlr-output-power-management-v1"},
+            {"Sleep / Suspend Daemon", "systemd-logind (suspend-then-hibernate)"},
+            {"Lid & Power Keys", "/etc/systemd/logind.conf"},
+            {"Battery & Power Events", "UPower & systemd-udev"},
             {"Clamshell Docking", "Monitored via seat0 & DRM connectors"},
             {"Authentication Provider", "PAM (system-auth)"}
         };

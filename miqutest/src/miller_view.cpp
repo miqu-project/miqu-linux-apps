@@ -2711,17 +2711,355 @@ void MillerView::rebuild_preview_column() {
         suspsl_lp.height = 24;
         main_card->add_view(susp_slider, suspsl_lp);
 
+        // Timer 4: Auto-Hibernate Delay
+        std::vector<int> hib_steps = {30, 60, 120, 240, 0};
+        auto format_hib_mins = [](int mins) -> std::string {
+            if (mins == 0) return "Never (Stay in sleep)";
+            if (mins == 60) return "1 hour";
+            if (mins > 60) return std::to_string(mins / 60) + " hours";
+            return std::to_string(mins) + " minutes";
+        };
+
+        auto hib_header = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto hib_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto hib_title = TextViewBuilder::create()
+            ->text("Auto-hibernate after prolonged sleep")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        hib_box->add_view(hib_title);
+
+        auto hib_hint = TextViewBuilder::create()
+            ->text("Writes memory to swap disk to eliminate battery drain while asleep")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        hib_box->add_view(hib_hint);
+
+        LayoutParams hibbox_lp;
+        hibbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        hibbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        hibbox_lp.weight = 1.0f;
+        hibbox_lp.gravity = Gravity::CenterVertical;
+        hib_header->add_view(hib_box, hibbox_lp);
+
+        auto hib_val_label = TextViewBuilder::create()
+            ->text(format_hib_mins(item->timeout_lock_cfg.hibernate_delay_minutes))
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->build();
+        LayoutParams hibval_lp;
+        hibval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        hibval_lp.gravity = Gravity::CenterVertical;
+        hib_header->add_view(hib_val_label, hibval_lp);
+        main_card->add_view(hib_header);
+
+        int cur_hib_idx = 2; // 120 min default
+        for (size_t i = 0; i < hib_steps.size(); ++i) {
+            if (hib_steps[i] == item->timeout_lock_cfg.hibernate_delay_minutes) {
+                cur_hib_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        float initial_hib_val = static_cast<float>(cur_hib_idx) / static_cast<float>(hib_steps.size() - 1);
+
+        auto hib_slider = SliderBuilder::create()
+            ->value(initial_hib_val)
+            ->onValueChanged([this, item, hib_val_label, hib_steps, format_hib_mins](float val, bool user) {
+                (void)user;
+                int idx = static_cast<int>(std::round(val * static_cast<float>(hib_steps.size() - 1)));
+                idx = std::clamp(idx, 0, static_cast<int>(hib_steps.size() - 1));
+                int mins = hib_steps[idx];
+                item->timeout_lock_cfg.hibernate_delay_minutes = mins;
+                hib_val_label->set_text(format_hib_mins(mins));
+                hib_val_label->request_redraw();
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams hibsl_lp;
+        hibsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        hibsl_lp.height = 24;
+        main_card->add_view(hib_slider, hibsl_lp);
+
         add_divider();
 
         // -------------------------------------------------------------
-        // Section 2: Display & Power Behavior
+        // Section 2: Power Triggers & Sleep Modes (systemd-logind)
         // -------------------------------------------------------------
         auto s2_title = TextViewBuilder::create()
-            ->text("Display & Power Behavior")
+            ->text("Power Triggers & Sleep Modes")
             ->caption(true)
             ->textColor(config->colors.primary)
             ->build();
         main_card->add_view(s2_title);
+
+        // 1. Sleep Mode
+        auto sm_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto sm_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto sm_title = TextViewBuilder::create()
+            ->text("System sleep mode")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        sm_box->add_view(sm_title);
+
+        auto sm_hint = TextViewBuilder::create()
+            ->text("Low-power hardware state when sleep is invoked")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        sm_box->add_view(sm_hint);
+
+        LayoutParams smbox_lp;
+        smbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        smbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        smbox_lp.weight = 1.0f;
+        smbox_lp.gravity = Gravity::CenterVertical;
+        sm_row->add_view(sm_box, smbox_lp);
+
+        std::vector<std::string> sleep_modes = {
+            "Suspend-then-Hibernate (Hybrid)",
+            "Suspend to RAM (Sleep)",
+            "Hibernate to Disk"
+        };
+        int cur_sm_idx = 0;
+        for (size_t i = 0; i < sleep_modes.size(); ++i) {
+            if (sleep_modes[i] == item->timeout_lock_cfg.sleep_mode) {
+                cur_sm_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        auto sm_spinner = SpinnerBuilder::create()
+            ->items(sleep_modes)
+            ->selectedIndex(cur_sm_idx)
+            ->fontSize(config->metrics.font_size)
+            ->padding(10, 4)
+            ->cornerRadius(8)
+            ->onItemSelected([this, item](int idx, const std::string& val) {
+                (void)idx;
+                item->timeout_lock_cfg.sleep_mode = val;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams smsp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
+        smsp_lp.gravity = Gravity::CenterVertical;
+        sm_row->add_view(sm_spinner, smsp_lp);
+        main_card->add_view(sm_row);
+
+        // 2. Lid Switch Action
+        auto lid_action_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto la_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto la_title = TextViewBuilder::create()
+            ->text("When laptop lid is closed")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        la_box->add_view(la_title);
+
+        auto la_hint = TextViewBuilder::create()
+            ->text("Hardware action triggered upon shutting laptop lid (HandleLidSwitch)")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        la_box->add_view(la_hint);
+
+        LayoutParams labox_lp;
+        labox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        labox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        labox_lp.weight = 1.0f;
+        labox_lp.gravity = Gravity::CenterVertical;
+        lid_action_row->add_view(la_box, labox_lp);
+
+        std::vector<std::string> lid_actions = {
+            "Suspend system",
+            "Lock session only",
+            "Hibernate system",
+            "Turn off display only",
+            "Ignore (Do nothing)"
+        };
+        int cur_la_idx = 0;
+        for (size_t i = 0; i < lid_actions.size(); ++i) {
+            if (lid_actions[i] == item->timeout_lock_cfg.lid_action) {
+                cur_la_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        auto la_spinner = SpinnerBuilder::create()
+            ->items(lid_actions)
+            ->selectedIndex(cur_la_idx)
+            ->fontSize(config->metrics.font_size)
+            ->padding(10, 4)
+            ->cornerRadius(8)
+            ->onItemSelected([this, item](int idx, const std::string& val) {
+                (void)idx;
+                item->timeout_lock_cfg.lid_action = val;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams lasp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
+        lasp_lp.gravity = Gravity::CenterVertical;
+        lid_action_row->add_view(la_spinner, lasp_lp);
+        main_card->add_view(lid_action_row);
+
+        // 3. Power Button Action
+        auto pwr_action_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto pa_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto pa_title = TextViewBuilder::create()
+            ->text("When power button is pressed")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        pa_box->add_view(pa_title);
+
+        auto pa_hint = TextViewBuilder::create()
+            ->text("Action triggered on physical power button press (HandlePowerKey)")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        pa_box->add_view(pa_hint);
+
+        LayoutParams pabox_lp;
+        pabox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        pabox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        pabox_lp.weight = 1.0f;
+        pabox_lp.gravity = Gravity::CenterVertical;
+        pwr_action_row->add_view(pa_box, pabox_lp);
+
+        std::vector<std::string> pwr_actions = {
+            "Show power menu (miqupower)",
+            "Suspend system",
+            "Lock session",
+            "Hibernate system",
+            "Power off immediately"
+        };
+        int cur_pa_idx = 0;
+        for (size_t i = 0; i < pwr_actions.size(); ++i) {
+            if (pwr_actions[i] == item->timeout_lock_cfg.power_button_action) {
+                cur_pa_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        auto pa_spinner = SpinnerBuilder::create()
+            ->items(pwr_actions)
+            ->selectedIndex(cur_pa_idx)
+            ->fontSize(config->metrics.font_size)
+            ->padding(10, 4)
+            ->cornerRadius(8)
+            ->onItemSelected([this, item](int idx, const std::string& val) {
+                (void)idx;
+                item->timeout_lock_cfg.power_button_action = val;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams pasp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
+        pasp_lp.gravity = Gravity::CenterVertical;
+        pwr_action_row->add_view(pa_spinner, pasp_lp);
+        main_card->add_view(pwr_action_row);
+
+        // 4. Critical Battery Action
+        auto crit_action_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto ca_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto ca_title = TextViewBuilder::create()
+            ->text("Critical battery level action")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        ca_box->add_view(ca_title);
+
+        auto ca_hint = TextViewBuilder::create()
+            ->text("Emergency power action when battery reaches 5% (UPower)")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        ca_box->add_view(ca_hint);
+
+        LayoutParams cabox_lp;
+        cabox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        cabox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        cabox_lp.weight = 1.0f;
+        cabox_lp.gravity = Gravity::CenterVertical;
+        crit_action_row->add_view(ca_box, cabox_lp);
+
+        std::vector<std::string> crit_actions = {
+            "Hibernate system",
+            "Suspend system",
+            "Power off immediately"
+        };
+        int cur_ca_idx = 0;
+        for (size_t i = 0; i < crit_actions.size(); ++i) {
+            if (crit_actions[i] == item->timeout_lock_cfg.critical_battery_action) {
+                cur_ca_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        auto ca_spinner = SpinnerBuilder::create()
+            ->items(crit_actions)
+            ->selectedIndex(cur_ca_idx)
+            ->fontSize(config->metrics.font_size)
+            ->padding(10, 4)
+            ->cornerRadius(8)
+            ->onItemSelected([this, item](int idx, const std::string& val) {
+                (void)idx;
+                item->timeout_lock_cfg.critical_battery_action = val;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams casp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
+        casp_lp.gravity = Gravity::CenterVertical;
+        crit_action_row->add_view(ca_spinner, casp_lp);
+        main_card->add_view(crit_action_row);
+
+        add_divider();
+
+        // -------------------------------------------------------------
+        // Section 3: Display & Power Behavior
+        // -------------------------------------------------------------
+        auto s3_title = TextViewBuilder::create()
+            ->text("Display & Power Behavior")
+            ->caption(true)
+            ->textColor(config->colors.primary)
+            ->build();
+        main_card->add_view(s3_title);
 
         auto dim_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
@@ -2747,12 +3085,12 @@ void MillerView::rebuild_preview_column() {
             ->build();
         dim_box->add_view(dim_hint);
 
-        LayoutParams drow_lp;
-        drow_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        drow_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        drow_lp.weight = 1.0f;
-        drow_lp.gravity = Gravity::CenterVertical;
-        dim_row->add_view(dim_box, drow_lp);
+        LayoutParams dimbox_lp;
+        dimbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        dimbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        dimbox_lp.weight = 1.0f;
+        dimbox_lp.gravity = Gravity::CenterVertical;
+        dim_row->add_view(dim_box, dimbox_lp);
 
         auto dim_switch = SwitchBuilder::create()
             ->checked(item->timeout_lock_cfg.dim_screen)
@@ -2792,12 +3130,12 @@ void MillerView::rebuild_preview_column() {
             ->build();
         prev_box->add_view(prev_hint);
 
-        LayoutParams prow_lp;
-        prow_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        prow_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        prow_lp.weight = 1.0f;
-        prow_lp.gravity = Gravity::CenterVertical;
-        prev_row->add_view(prev_box, prow_lp);
+        LayoutParams prevbox_lp;
+        prevbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        prevbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        prevbox_lp.weight = 1.0f;
+        prevbox_lp.gravity = Gravity::CenterVertical;
+        prev_row->add_view(prev_box, prevbox_lp);
 
         auto prev_switch = SwitchBuilder::create()
             ->checked(item->timeout_lock_cfg.prevent_sleep_media)
@@ -2837,12 +3175,12 @@ void MillerView::rebuild_preview_column() {
             ->build();
         bat_box->add_view(bat_hint);
 
-        LayoutParams bat_lp;
-        bat_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        bat_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        bat_lp.weight = 1.0f;
-        bat_lp.gravity = Gravity::CenterVertical;
-        bat_row->add_view(bat_box, bat_lp);
+        LayoutParams batbox_lp;
+        batbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        batbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        batbox_lp.weight = 1.0f;
+        batbox_lp.gravity = Gravity::CenterVertical;
+        bat_row->add_view(bat_box, batbox_lp);
 
         auto bat_switch = SwitchBuilder::create()
             ->checked(item->timeout_lock_cfg.energy_saver_battery)
@@ -2857,108 +3195,6 @@ void MillerView::rebuild_preview_column() {
         batsw_lp.gravity = Gravity::CenterVertical;
         bat_row->add_view(bat_switch, batsw_lp);
         main_card->add_view(bat_row);
-
-        add_divider();
-
-        // -------------------------------------------------------------
-        // Section 3: Security & Locking Rules
-        // -------------------------------------------------------------
-        auto s3_title = TextViewBuilder::create()
-            ->text("Security & Lock Rules")
-            ->caption(true)
-            ->textColor(config->colors.primary)
-            ->build();
-        main_card->add_view(s3_title);
-
-        auto dispoff_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto dispoff_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto dispoff_title = TextViewBuilder::create()
-            ->text("Lock session when display turns off")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        dispoff_box->add_view(dispoff_title);
-
-        auto dispoff_hint = TextViewBuilder::create()
-            ->text("Secures session as soon as screen powers down or sleeps")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        dispoff_box->add_view(dispoff_hint);
-
-        LayoutParams dispoff_lp;
-        dispoff_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        dispoff_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        dispoff_lp.weight = 1.0f;
-        dispoff_lp.gravity = Gravity::CenterVertical;
-        dispoff_row->add_view(dispoff_box, dispoff_lp);
-
-        auto dispoff_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.lock_on_display_off)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.lock_on_display_off = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams dispoffsw_lp;
-        dispoffsw_lp.width = 44;
-        dispoffsw_lp.height = 24;
-        dispoffsw_lp.gravity = Gravity::CenterVertical;
-        dispoff_row->add_view(dispoff_switch, dispoffsw_lp);
-        main_card->add_view(dispoff_row);
-
-        auto lid_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto lid_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto lid_title = TextViewBuilder::create()
-            ->text("Lock when laptop lid is closed")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        lid_box->add_view(lid_title);
-
-        auto lid_hint = TextViewBuilder::create()
-            ->text("Immediately secures session upon closing laptop lid")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        lid_box->add_view(lid_hint);
-
-        LayoutParams lrow_lp;
-        lrow_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        lrow_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        lrow_lp.weight = 1.0f;
-        lrow_lp.gravity = Gravity::CenterVertical;
-        lid_row->add_view(lid_box, lrow_lp);
-
-        auto lid_switch = SwitchBuilder::create()
-            ->checked(item->timeout_lock_cfg.lock_on_lid_close)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->timeout_lock_cfg.lock_on_lid_close = checked;
-                notify_state_changed();
-            })
-            ->build();
-        LayoutParams lidsw_lp;
-        lidsw_lp.width = 44;
-        lidsw_lp.height = 24;
-        lidsw_lp.gravity = Gravity::CenterVertical;
-        lid_row->add_view(lid_switch, lidsw_lp);
-        main_card->add_view(lid_row);
 
         auto clam_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
@@ -2984,12 +3220,12 @@ void MillerView::rebuild_preview_column() {
             ->build();
         clam_box->add_view(clam_hint);
 
-        LayoutParams clam_lp;
-        clam_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        clam_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        clam_lp.weight = 1.0f;
-        clam_lp.gravity = Gravity::CenterVertical;
-        clam_row->add_view(clam_box, clam_lp);
+        LayoutParams clambox_lp;
+        clambox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        clambox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        clambox_lp.weight = 1.0f;
+        clambox_lp.gravity = Gravity::CenterVertical;
+        clam_row->add_view(clam_box, clambox_lp);
 
         auto clam_switch = SwitchBuilder::create()
             ->checked(item->timeout_lock_cfg.clamshell_mode)
@@ -3005,6 +3241,111 @@ void MillerView::rebuild_preview_column() {
         clam_row->add_view(clam_switch, clamsw_lp);
         main_card->add_view(clam_row);
 
+        add_divider();
+
+        // -------------------------------------------------------------
+        // Section 4: Security & Lockscreen (miqulock)
+        // -------------------------------------------------------------
+        auto s4_title = TextViewBuilder::create()
+            ->text("Security & Lockscreen (miqulock)")
+            ->caption(true)
+            ->textColor(config->colors.primary)
+            ->build();
+        main_card->add_view(s4_title);
+
+        // 1. Lock before sleep
+        auto lock_sleep_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto ls_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto ls_title = TextViewBuilder::create()
+            ->text("Lock session before system enters sleep")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        ls_box->add_view(ls_title);
+
+        auto ls_hint = TextViewBuilder::create()
+            ->text("miquidle before_sleep_cmd • Delays suspend until screen is fully locked")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        ls_box->add_view(ls_hint);
+
+        LayoutParams lsbox_lp;
+        lsbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        lsbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        lsbox_lp.weight = 1.0f;
+        lsbox_lp.gravity = Gravity::CenterVertical;
+        lock_sleep_row->add_view(ls_box, lsbox_lp);
+
+        auto ls_switch = SwitchBuilder::create()
+            ->checked(item->timeout_lock_cfg.lock_before_sleep)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->timeout_lock_cfg.lock_before_sleep = checked;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams lssw_lp;
+        lssw_lp.width = 44;
+        lssw_lp.height = 24;
+        lssw_lp.gravity = Gravity::CenterVertical;
+        lock_sleep_row->add_view(ls_switch, lssw_lp);
+        main_card->add_view(lock_sleep_row);
+
+        // 2. Lock on display off
+        auto dispoff_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto dispoff_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto dispoff_title = TextViewBuilder::create()
+            ->text("Lock session when display turns off")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        dispoff_box->add_view(dispoff_title);
+
+        auto dispoff_hint = TextViewBuilder::create()
+            ->text("Secures session as soon as screen powers down or sleeps")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        dispoff_box->add_view(dispoff_hint);
+
+        LayoutParams dispoffbox_lp;
+        dispoffbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        dispoffbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        dispoffbox_lp.weight = 1.0f;
+        dispoffbox_lp.gravity = Gravity::CenterVertical;
+        dispoff_row->add_view(dispoff_box, dispoffbox_lp);
+
+        auto dispoff_switch = SwitchBuilder::create()
+            ->checked(item->timeout_lock_cfg.lock_on_display_off)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->timeout_lock_cfg.lock_on_display_off = checked;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams dispoffsw_lp;
+        dispoffsw_lp.width = 44;
+        dispoffsw_lp.height = 24;
+        dispoffsw_lp.gravity = Gravity::CenterVertical;
+        dispoff_row->add_view(dispoff_switch, dispoffsw_lp);
+        main_card->add_view(dispoff_row);
+
+        // 3. Require password immediately
         auto pwd_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->gravity(Gravity::CenterVertical)
@@ -3029,12 +3370,12 @@ void MillerView::rebuild_preview_column() {
             ->build();
         pwd_box->add_view(pwd_hint);
 
-        LayoutParams prow2_lp;
-        prow2_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        prow2_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        prow2_lp.weight = 1.0f;
-        prow2_lp.gravity = Gravity::CenterVertical;
-        pwd_row->add_view(pwd_box, prow2_lp);
+        LayoutParams pwdbox_lp;
+        pwdbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        pwdbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        pwdbox_lp.weight = 1.0f;
+        pwdbox_lp.gravity = Gravity::CenterVertical;
+        pwd_row->add_view(pwd_box, pwdbox_lp);
 
         auto pwd_switch = SwitchBuilder::create()
             ->checked(item->timeout_lock_cfg.require_password_immediately)
@@ -3134,6 +3475,98 @@ void MillerView::rebuild_preview_column() {
             gsl_lp.height = 24;
             main_card->add_view(g_slider, gsl_lp);
         }
+
+        // 4. Show power buttons on lockscreen
+        auto act_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto act_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto act_title = TextViewBuilder::create()
+            ->text("Show power buttons on lockscreen")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        act_box->add_view(act_title);
+
+        auto act_hint = TextViewBuilder::create()
+            ->text("miqulock show_power_actions • Sleep, Hibernate, and Power Off controls")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        act_box->add_view(act_hint);
+
+        LayoutParams actbox_lp;
+        actbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        actbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        actbox_lp.weight = 1.0f;
+        actbox_lp.gravity = Gravity::CenterVertical;
+        act_row->add_view(act_box, actbox_lp);
+
+        auto act_switch = SwitchBuilder::create()
+            ->checked(item->timeout_lock_cfg.lockscreen_show_power_actions)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->timeout_lock_cfg.lockscreen_show_power_actions = checked;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams actsw_lp;
+        actsw_lp.width = 44;
+        actsw_lp.height = 24;
+        actsw_lp.gravity = Gravity::CenterVertical;
+        act_row->add_view(act_switch, actsw_lp);
+        main_card->add_view(act_row);
+
+        // 5. 24-hour clock on lockscreen
+        auto clk_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto clk_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto clk_title = TextViewBuilder::create()
+            ->text("Use 24-hour clock on lockscreen")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        clk_box->add_view(clk_title);
+
+        auto clk_hint = TextViewBuilder::create()
+            ->text("miqulock time_format • Displays %H:%M instead of 12-hour AM/PM")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        clk_box->add_view(clk_hint);
+
+        LayoutParams clkbox_lp;
+        clkbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        clkbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        clkbox_lp.weight = 1.0f;
+        clkbox_lp.gravity = Gravity::CenterVertical;
+        clk_row->add_view(clk_box, clkbox_lp);
+
+        auto clk_switch = SwitchBuilder::create()
+            ->checked(item->timeout_lock_cfg.lockscreen_24h_clock)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->timeout_lock_cfg.lockscreen_24h_clock = checked;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams clksw_lp;
+        clksw_lp.width = 44;
+        clksw_lp.height = 24;
+        clksw_lp.gravity = Gravity::CenterVertical;
+        clk_row->add_view(clk_switch, clksw_lp);
+        main_card->add_view(clk_row);
 
         add_preview_card(main_card);
 

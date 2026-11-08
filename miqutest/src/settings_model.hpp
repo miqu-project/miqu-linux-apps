@@ -159,17 +159,31 @@ struct FirewallConfig {
 };
 
 struct ScreenTimeoutLockConfig {
-    int lock_timeout_minutes = 1;     // Inactivity before locking (1, 2, 5, 10, 15, 30 min, 0 = Never)
-    int display_off_minutes = 5;      // Inactivity before display off (1, 2, 5, 10, 15, 30, 60 min, 0 = Never)
-    int suspend_minutes = 15;         // Inactivity before sleep/suspend (5, 10, 15, 30, 60, 120 min, 0 = Never)
-    bool dim_screen = true;           // Dim screen before display turns off
-    bool prevent_sleep_media = true;  // Keep display awake during media playback
-    bool energy_saver_battery = true; // Conserve power by shortening timeouts on battery
-    bool lock_on_display_off = true;  // Lock session when display turns off
-    bool lock_on_lid_close = true;    // Lock when laptop lid is shut
-    bool clamshell_mode = true;       // Keep awake when closed if external display connected
+    // 1. Inactivity Timers (miquidle listeners)
+    int lock_timeout_minutes = 1;        // Inactivity before locking (1, 2, 5, 10, 15, 30 min, 0 = Never)
+    int display_off_minutes = 5;         // Inactivity before display off (1, 2, 5, 10, 15, 30, 60 min, 0 = Never)
+    int suspend_minutes = 15;            // Inactivity before sleep/suspend (5, 10, 15, 30, 60, 120 min, 0 = Never)
+    int hibernate_delay_minutes = 120;   // Inactivity before auto-hibernate to disk (30, 60, 120, 240 min, 0 = Never)
+
+    // 2. Arch Linux & systemd-logind Power Targets
+    std::string sleep_mode = "Suspend-then-Hibernate (Hybrid)"; // Hybrid, Suspend to RAM, Hibernate to Disk
+    std::string lid_action = "Suspend system";                 // Suspend, Lock session only, Hibernate, Turn off display, Ignore
+    std::string power_button_action = "Show power menu (miqupower)"; // Show power menu, Suspend, Lock, Hibernate, Power off
+    std::string critical_battery_action = "Hibernate system";  // Hibernate, Suspend, Power off
+
+    // 3. Laptop & Display Power Saving
+    bool dim_screen = true;              // Dim screen before display turns off (miquidle pre-timeout)
+    bool prevent_sleep_media = true;     // Keep display awake during media playback (Wayland idle-inhibit)
+    bool energy_saver_battery = true;    // Conserve power by shortening timeouts on battery
+    bool clamshell_mode = true;          // Stay awake when closed if external display connected
+
+    // 4. Security & miqulock Options
+    bool lock_before_sleep = true;       // Lock screen before system suspends/sleeps (miquidle before_sleep_cmd)
+    bool lock_on_display_off = true;     // Lock session when display turns off
     bool require_password_immediately = true; // Demand password on wake
-    int grace_period_seconds = 0;     // Grace period window (0s = Instant, 15s, 30s, 1m, 2m, 5m)
+    int grace_period_seconds = 0;        // Grace period window (0s = Instant, 15s, 30s, 1m, 2m, 5m)
+    bool lockscreen_show_power_actions = true; // miqulock show_power_actions (sleep/reboot/shutdown buttons)
+    bool lockscreen_24h_clock = true;    // miqulock 24-hour time format (%H:%M)
 };
 
 struct NightLightConfig {
