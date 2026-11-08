@@ -174,6 +174,63 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     }
 
     // ==============================================================================
+    // 3. Keybindings (Depth 1)
+    // ==============================================================================
+    {
+        // 3.1 System & Session
+        auto kb_system = SettingItem::create_leaf("kb_system", "System & Session", "", "󰐥");
+        kb_system->is_keybinding_group = true;
+        kb_system->keybindings = {
+            {"Power Menu", "Open system shutdown, restart and suspend dialog", {"Super", "Shift", "Q"}},
+            {"Lock Screen", "Lock session immediately via Wayland lock protocol", {"Super", "Alt", "L"}},
+            {"Reload Compositor", "Reload configuration and dynamic theme files without restart", {"Super", "Shift", "R"}},
+            {"Toggle Overview", "Interactive live workspace expose and window switcher", {"Super", "Tab"}},
+            {"Notification Center", "Toggle slide-out notification drawer and history", {"Super", "N"}}
+        };
+
+        // 3.2 Core Applications
+        auto kb_apps = SettingItem::create_leaf("kb_apps", "Applications", "", "󰀻");
+        kb_apps->is_keybinding_group = true;
+        kb_apps->keybindings = {
+            {"Terminal", "Spawn default terminal emulator (Kitty)", {"Super", "T"}},
+            {"Application Launcher", "Search and launch desktop applications", {"Super", "Space"}},
+            {"Universal Search", "Search commands, web, and system actions", {"Super", "S"}},
+            {"Web Browser", "Launch default web browser (Firefox)", {"Super", "F"}},
+            {"File Manager", "Open terminal file manager (Yazi)", {"Super", "E"}},
+            {"Component Sandbox", "Interactive toolkit test sandbox (Miqu Test)", {"Super", "P"}}
+        };
+
+        // 3.3 Window Management
+        auto kb_windows = SettingItem::create_leaf("kb_windows", "Window Management", "", "󰕰");
+        kb_windows->is_keybinding_group = true;
+        kb_windows->keybindings = {
+            {"Close Window", "Gracefully close the currently active focused window", {"Super", "Q"}},
+            {"Toggle Floating", "Toggle window between floating and tiled layout modes", {"Super", "V"}},
+            {"Toggle Fullscreen", "Expand window to fill display area", {"Super", "M"}},
+            {"Toggle Layout", "Cycle through available tiling layouts (Dwindle, Stack, etc.)", {"Super", "L"}},
+            {"Swap with Master", "Promote active window to dominant master position", {"Super", "Return"}},
+            {"Toggle Split", "Toggle horizontal or vertical binary space partitioning", {"Super", "Alt", "Space"}}
+        };
+
+        // 3.4 Navigation & Workspaces
+        auto kb_nav = SettingItem::create_leaf("kb_nav", "Navigation & Workspaces", "", "󰍹");
+        kb_nav->is_keybinding_group = true;
+        kb_nav->keybindings = {
+            {"Next Window", "Shift keyboard focus to next window in current workspace", {"Super", "J"}},
+            {"Previous Window", "Shift keyboard focus to previous window", {"Super", "K"}},
+            {"Next Workspace", "Switch to adjacent next workspace", {"Super", "Shift", "Right"}},
+            {"Previous Workspace", "Switch to adjacent previous workspace", {"Super", "Shift", "Left"}},
+            {"Switch to Workspace 1..9", "Jump directly to numbered workspace", {"Super", "Shift", "1..9"}},
+            {"Move Window to Workspace 1..9", "Send focused window to numbered workspace", {"Super", "Alt", "1..9"}}
+        };
+
+        root.push_back(SettingItem::create_category(
+            "cat_keybindings", "Keybindings", "󰌌",
+            {kb_system, kb_apps, kb_windows, kb_nav}
+        ));
+    }
+
+    // ==============================================================================
     // 3. Monitors & Displays (Depth 1)
     // ==============================================================================
     {

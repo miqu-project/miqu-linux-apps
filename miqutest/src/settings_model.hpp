@@ -257,9 +257,15 @@ struct TilingConfig {
 struct WallpaperConfig {
     std::string current_wallpaper = "aurora_minimal.png";
     std::string wallpaper_path = "~/Pictures/Wallpapers/aurora_minimal.png";
-    std::string fit_mode = "Aspect Fill";
-    std::vector<std::string> fit_modes = {"Aspect Fill", "Fit", "Stretch", "Center", "Tile"};
+    std::string fit_mode = "Cover";
+    std::vector<std::string> fit_modes = {"Cover", "Fit", "Stretch", "Center", "Tile"};
     std::string display_aspect = "16:9";
+};
+
+struct KeybindingEntry {
+    std::string action;
+    std::string description;
+    std::vector<std::string> keys;
 };
 
 class SettingItem {
@@ -329,6 +335,9 @@ public:
 
     bool is_wallpaper = false;
     std::shared_ptr<WallpaperConfig> wallpaper_cfg = std::make_shared<WallpaperConfig>();
+
+    bool is_keybinding_group = false;
+    std::vector<KeybindingEntry> keybindings;
 
     static std::shared_ptr<SettingItem> create_category(
         std::string id, std::string title, std::string icon,

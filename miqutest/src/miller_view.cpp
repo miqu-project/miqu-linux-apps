@@ -3110,6 +3110,119 @@ void MillerView::rebuild_preview_column() {
         return;
     }
 
+    // Dedicated Single-Card Interactive UI for Keybindings
+    if (item->is_keybinding_group) {
+        auto main_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->padding(16, 16)
+            ->spacing(10)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        for (size_t i = 0; i < item->keybindings.size(); ++i) {
+            const auto& kb = item->keybindings[i];
+
+            if (i > 0) {
+                auto divider = LinearLayoutBuilder::create()
+                    ->backgroundColor(config->colors.outline.with_alpha(0.10f))
+                    ->build();
+                LayoutParams dlp;
+                dlp.width = static_cast<int>(LayoutDimension::MatchParent);
+                dlp.height = 1;
+                main_card->add_view(divider, dlp);
+            }
+
+            auto row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->gravity(Gravity::CenterVertical)
+                ->spacing(12)
+                ->build();
+
+            auto text_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto act_lbl = TextViewBuilder::create()
+                ->text(kb.action)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            text_box->add_view(act_lbl);
+
+            if (!kb.description.empty()) {
+                auto desc_lbl = TextViewBuilder::create()
+                    ->text(kb.description)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                    ->build();
+                text_box->add_view(desc_lbl);
+            }
+
+            LayoutParams tb_lp;
+            tb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            tb_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            tb_lp.weight = 1.0f;
+            tb_lp.gravity = Gravity::CenterVertical;
+            row->add_view(text_box, tb_lp);
+
+            auto keys_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->gravity(Gravity::CenterVertical)
+                ->spacing(4)
+                ->build();
+
+            for (size_t k = 0; k < kb.keys.size(); ++k) {
+                if (k > 0) {
+                    auto plus_lbl = TextViewBuilder::create()
+                        ->text("+")
+                        ->caption(true)
+                        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+                        ->build();
+                    LayoutParams p_lp;
+                    p_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+                    p_lp.gravity = Gravity::CenterVertical;
+                    keys_box->add_view(plus_lbl, p_lp);
+                }
+
+                auto key_badge = CardViewBuilder::create()
+                    ->style(CardStyle::Filled)
+                    ->backgroundColor(config->colors.surface_variant.with_alpha(0.6f))
+                    ->stroke(1, config->colors.outline.with_alpha(0.35f))
+                    ->cornerRadius(6)
+                    ->elevation(0)
+                    ->addView(
+                        TextViewBuilder::create()
+                            ->text(kb.keys[k])
+                            ->caption(true)
+                            ->textColor(config->colors.primary)
+                            ->padding(8, 4)
+                            ->build()
+                    )
+                    ->build();
+
+                LayoutParams k_lp;
+                k_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+                k_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+                k_lp.gravity = Gravity::CenterVertical;
+                keys_box->add_view(key_badge, k_lp);
+            }
+
+            LayoutParams r_lp;
+            r_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            r_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            r_lp.gravity = Gravity::CenterVertical;
+            row->add_view(keys_box, r_lp);
+
+            main_card->add_view(row);
+        }
+
+        add_preview_card(main_card);
+        return;
+    }
+
     // Dedicated Single-Card Interactive UI for Screen Timeout & Lock
     if (item->is_timeout_and_lock) {
         auto main_card = LinearLayoutBuilder::create()
