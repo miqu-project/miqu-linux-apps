@@ -2450,16 +2450,10 @@ void MillerView::rebuild_preview_column() {
 
     // Dedicated Interactive UI for Tiling Layout & Window Management
     if (item->is_tiling_config) {
-        bool is_overview = (item->id == "tile_overview");
-        bool is_mode = (item->id == "tile_mode");
-        bool is_windows = (item->id == "tile_windows");
-        bool is_split = (item->id == "tile_split");
-        bool is_focus = (item->id == "tile_focus");
-
-        bool show_layout = is_overview || is_mode;
-        bool show_windows = is_overview || is_windows;
-        bool show_split = is_overview || is_split;
-        bool show_focus = is_overview || is_focus;
+        bool show_layout = (item->id == "tile_mode");
+        bool show_windows = (item->id == "tile_windows");
+        bool show_split = (item->id == "tile_split");
+        bool show_focus = (item->id == "tile_focus");
 
         auto main_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
@@ -2633,10 +2627,8 @@ void MillerView::rebuild_preview_column() {
             main_card->add_view(block);
         };
 
-        bool needs_divider = false;
-
         // -------------------------------------------------------------
-        // Section 1: Layout Mode
+        // 1. Layout Mode
         // -------------------------------------------------------------
         if (show_layout) {
             auto s1_title = TextViewBuilder::create()
@@ -2656,7 +2648,7 @@ void MillerView::rebuild_preview_column() {
 
             add_spinner_block(
                 "Tiling algorithm",
-                "Dynamic BSP, Master-Stack columns, Fibonacci spiral, or Matrix grid",
+                "Select the active window arrangement engine for this workspace",
                 item->tiling_cfg->available_layout_modes,
                 cur_mode_idx,
                 [item](int idx, const std::string& val) {
@@ -2665,15 +2657,73 @@ void MillerView::rebuild_preview_column() {
                 }
             );
 
-            needs_divider = true;
+            // Algorithmic description block
+            auto desc_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->padding(12, 10)
+                ->spacing(4)
+                ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
+                ->stroke(1, config->colors.outline.with_alpha(0.25f))
+                ->cornerRadius(8)
+                ->build();
+
+            auto desc_title = TextViewBuilder::create()
+                ->text("󰕰  Algorithm Behavior")
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            desc_box->add_view(desc_title);
+
+            std::string desc_text = "Dynamic Binary Space Partitioning (BSP). Windows automatically split recursively into halves based on window aspect ratio and cursor placement. Snappy and adaptive for dynamic multitasking.";
+            if (item->tiling_cfg->layout_mode.find("Master") != std::string::npos) {
+                desc_text = "Master-and-stack layout. The primary master window on the left takes dominant screen area; remaining windows stack vertically along the right column.";
+            } else if (item->tiling_cfg->layout_mode.find("Bottom") != std::string::npos) {
+                desc_text = "Bottom-stack layout. The master window occupies the top half of the screen; auxiliary windows stack horizontally side-by-side across the bottom.";
+            } else if (item->tiling_cfg->layout_mode.find("Centered") != std::string::npos) {
+                desc_text = "Centered-master layout. A prominent central workspace is flanked symmetrically by auxiliary vertical stacks on both left and right.";
+            } else if (item->tiling_cfg->layout_mode.find("Spiral") != std::string::npos) {
+                desc_text = "Fibonacci golden spiral layout. Window splits alternate clockwise between horizontal and vertical for each newly opened window.";
+            } else if (item->tiling_cfg->layout_mode.find("Columns") != std::string::npos) {
+                desc_text = "Equal column partition. Divides available screen space into equal-width vertical columns side-by-side across the monitor.";
+            } else if (item->tiling_cfg->layout_mode.find("Grid") != std::string::npos) {
+                desc_text = "Grid matrix layout. Automatically arranges all open windows into a balanced N × M grid with dynamic row balancing.";
+            } else if (item->tiling_cfg->layout_mode.find("Monocle") != std::string::npos) {
+                desc_text = "Full-screen monocle layout. The focused window fills the entire usable display area; non-focused windows remain stacked underneath.";
+            }
+
+            auto desc_body = TextViewBuilder::create()
+                ->text(desc_text)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            desc_box->add_view(desc_body);
+
+            LayoutParams dbox_lp;
+            dbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            dbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            main_card->add_view(desc_box, dbox_lp);
+
+            // Default Split Ratio (20% to 80%)
+            float initial_ratio_norm = (item->tiling_cfg->default_split_ratio - 0.20f) / 0.60f;
+            int r_pct = static_cast<int>(std::round(item->tiling_cfg->default_split_ratio * 100.0f));
+            add_slider_row(
+                "Initial split ratio",
+                "Screen division ratio when a new window partitions the active workspace",
+                initial_ratio_norm,
+                std::to_string(r_pct) + "% / " + std::to_string(100 - r_pct) + "%",
+                [item](float val) -> std::string {
+                    float ratio = 0.20f + val * 0.60f;
+                    item->tiling_cfg->default_split_ratio = ratio;
+                    int pct = static_cast<int>(std::round(ratio * 100.0f));
+                    return std::to_string(pct) + "% / " + std::to_string(100 - pct) + "%";
+                }
+            );
         }
 
         // -------------------------------------------------------------
-        // Section 2: Windows Geometry & Borders
+        // 2. Windows
         // -------------------------------------------------------------
         if (show_windows) {
-            if (needs_divider) add_divider();
-
             auto s2_title = TextViewBuilder::create()
                 ->text("Windows & Geometry")
                 ->caption(true)
@@ -2891,16 +2941,12 @@ void MillerView::rebuild_preview_column() {
             mc_lp.width = static_cast<int>(LayoutDimension::MatchParent);
             mc_lp.height = static_cast<int>(LayoutDimension::WrapContent);
             main_card->add_view(monitor_canvas, mc_lp);
-
-            needs_divider = true;
         }
 
         // -------------------------------------------------------------
-        // Section 3: Split Behaviour
+        // 3. Split Behaviour
         // -------------------------------------------------------------
         if (show_split) {
-            if (needs_divider) add_divider();
-
             auto s3_title = TextViewBuilder::create()
                 ->text("Split Behaviour")
                 ->caption(true)
@@ -2972,16 +3018,12 @@ void MillerView::rebuild_preview_column() {
                     return format_mult(mult);
                 }
             );
-
-            needs_divider = true;
         }
 
         // -------------------------------------------------------------
-        // Section 4: Focus Behaviour
+        // 4. Focus Behaviour
         // -------------------------------------------------------------
         if (show_focus) {
-            if (needs_divider) add_divider();
-
             auto s4_title = TextViewBuilder::create()
                 ->text("Focus Behaviour")
                 ->caption(true)
@@ -3043,6 +3085,9 @@ void MillerView::rebuild_preview_column() {
         add_preview_card(main_card);
 
         // Section 5: Authoritative miquland.conf Directives Telemetry Card
+        std::vector<TelemetryEntry> tiling_telemetry;
+        std::string telem_title = "Authoritative miquland.conf directives";
+
         std::string mode_token = "dwindle";
         if (item->tiling_cfg->layout_mode.find("Master") != std::string::npos) mode_token = "stack";
         else if (item->tiling_cfg->layout_mode.find("Bottom") != std::string::npos) mode_token = "bstack";
@@ -3057,27 +3102,48 @@ void MillerView::rebuild_preview_column() {
         char mult_buf[16];
         std::snprintf(mult_buf, sizeof(mult_buf), "%.1f", item->tiling_cfg->split_width_multiplier);
 
-        std::vector<TelemetryEntry> tiling_telemetry = {
-            {"general.layout", mode_token},
-            {"general.default_split_ratio", ratio_buf},
-            {"general.smart_gaps", item->tiling_cfg->smart_gaps ? "true" : "false"},
-            {"general.gaps.inner", std::to_string(item->tiling_cfg->inner_gap) + " px"},
-            {"general.gaps.outer", std::to_string(item->tiling_cfg->outer_gap) + " px"},
-            {"general.border.width", std::to_string(item->tiling_cfg->border_width) + " px"},
-            {"general.border.radius", std::to_string(item->tiling_cfg->corner_radius) + " px"},
-            {"general.border.active", item->tiling_cfg->active_border_value},
-            {"general.border.inactive", item->tiling_cfg->inactive_border_value},
-            {"general.border.shading", item->tiling_cfg->border_shading ? "true" : "false"},
-            {"general.dwindle.split_focus", item->tiling_cfg->split_focus ? "true" : "false"},
-            {"general.dwindle.smart_split", item->tiling_cfg->smart_split ? "true" : "false"},
-            {"general.dwindle.preserve_split", item->tiling_cfg->preserve_split ? "true" : "false"},
-            {"general.dwindle.split_width_mult", mult_buf},
-            {"input.follow_mouse", item->tiling_cfg->focus_follows_mouse ? "true (hover focus)" : "false (click focus)"},
-            {"input.warp_cursor", item->tiling_cfg->warp_cursor_on_focus ? "true" : "false"},
-            {"general.auto_float_fixed_size", item->tiling_cfg->auto_float_fixed_size ? "true" : "false"}
-        };
+        if (show_layout) {
+            telem_title = "Layout engine directives (miquland.conf)";
+            tiling_telemetry = {
+                {"general.layout", mode_token},
+                {"general.default_split_ratio", ratio_buf},
+                {"layout.display_name", item->tiling_cfg->layout_mode},
+                {"layout.workspace_rule", "inherit from output defaults"}
+            };
+        } else if (show_windows) {
+            telem_title = "Window geometry & border directives (miquland.conf)";
+            tiling_telemetry = {
+                {"general.gaps.inner", std::to_string(item->tiling_cfg->inner_gap) + " px"},
+                {"general.gaps.outer", std::to_string(item->tiling_cfg->outer_gap) + " px"},
+                {"general.smart_gaps", item->tiling_cfg->smart_gaps ? "true" : "false"},
+                {"general.border.width", std::to_string(item->tiling_cfg->border_width) + " px"},
+                {"general.border.radius", std::to_string(item->tiling_cfg->corner_radius) + " px"},
+                {"general.border.active", item->tiling_cfg->active_border_value},
+                {"general.border.inactive", item->tiling_cfg->inactive_border_value},
+                {"general.border.shading", item->tiling_cfg->border_shading ? "true" : "false"},
+                {"general.resize_on_border", item->tiling_cfg->resize_on_border ? "true" : "false"}
+            };
+        } else if (show_split) {
+            telem_title = "Dwindle & split directives (miquland.conf)";
+            tiling_telemetry = {
+                {"general.default_split_ratio", ratio_buf},
+                {"general.dwindle.smart_split", item->tiling_cfg->smart_split ? "true" : "false"},
+                {"general.dwindle.split_focus", item->tiling_cfg->split_focus ? "true" : "false"},
+                {"general.dwindle.preserve_split", item->tiling_cfg->preserve_split ? "true" : "false"},
+                {"general.dwindle.split_width_mult", mult_buf}
+            };
+        } else if (show_focus) {
+            telem_title = "Input & focus directives (miquland.conf)";
+            tiling_telemetry = {
+                {"input.follow_mouse", item->tiling_cfg->focus_follows_mouse ? "true (hover focus)" : "false (click focus)"},
+                {"input.click_to_focus", item->tiling_cfg->click_to_focus ? "true" : "false"},
+                {"input.warp_cursor", item->tiling_cfg->warp_cursor_on_focus ? "true" : "false"},
+                {"general.auto_float_fixed_size", item->tiling_cfg->auto_float_fixed_size ? "true" : "false"},
+                {"general.focus_on_workspace_switch", item->tiling_cfg->focus_on_workspace_switch ? "true" : "false"}
+            };
+        }
 
-        add_preview_card(create_telemetry_card(tiling_telemetry, config, "Authoritative miquland.conf directives"));
+        add_preview_card(create_telemetry_card(tiling_telemetry, config, telem_title));
         return;
     }
 

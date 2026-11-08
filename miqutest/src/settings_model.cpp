@@ -147,34 +147,29 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     {
         auto shared_tiling = std::make_shared<TilingConfig>();
 
-        // 2.1 Complete Unified Tiling & Window Management Overview
-        auto tile_overview = SettingItem::create_leaf("tile_overview", "Tiling & Window Management", "Layout engines, window geometry, split rules & focus dynamics", "󰕰");
-        tile_overview->is_tiling_config = true;
-        tile_overview->tiling_cfg = shared_tiling;
-
-        // 2.2 Layout Mode
-        auto tile_mode = SettingItem::create_leaf("tile_mode", "Layout Mode", "Active tiling algorithm, binary space partition & columns", "󰕰");
+        // 2.1 Layout Mode
+        auto tile_mode = SettingItem::create_leaf("tile_mode", "Layout Mode", "Tiling algorithm, BSP division, master-stack & monocle", "󰕰");
         tile_mode->is_tiling_config = true;
         tile_mode->tiling_cfg = shared_tiling;
 
-        // 2.3 Window Geometry & Borders
-        auto tile_windows = SettingItem::create_leaf("tile_windows", "Window Geometry & Borders", "Gaps, border stroke, corner radius & gradient styling", "󰃟");
+        // 2.2 Windows
+        auto tile_windows = SettingItem::create_leaf("tile_windows", "Windows", "Window gaps, border width, corner radius & styling", "󰃟");
         tile_windows->is_tiling_config = true;
         tile_windows->tiling_cfg = shared_tiling;
 
-        // 2.4 Split Behaviour
+        // 2.3 Split Behaviour
         auto tile_split = SettingItem::create_leaf("tile_split", "Split Behaviour", "Smart cursor split, focus window division & aspect multipliers", "󰤻");
         tile_split->is_tiling_config = true;
         tile_split->tiling_cfg = shared_tiling;
 
-        // 2.5 Focus & Mouse Behaviour
-        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus & Mouse Behaviour", "Cursor hover focus, window raise, warp & dialog rules", "󰍽");
+        // 2.4 Focus Behaviour
+        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus Behaviour", "Cursor hover focus, window raise, warp & dialog rules", "󰍽");
         tile_focus->is_tiling_config = true;
         tile_focus->tiling_cfg = shared_tiling;
 
         root.push_back(SettingItem::create_category(
             "cat_tiling", "Tiling Layout", "󰕰",
-            {tile_overview, tile_mode, tile_windows, tile_split, tile_focus}
+            {tile_mode, tile_windows, tile_split, tile_focus}
         ));
     }
 
