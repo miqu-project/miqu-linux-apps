@@ -61,7 +61,7 @@ void WallpaperView::build_ui() {
         })
         ->build();
     mode_spinner_->set_layout_params(LayoutParams(
-        210,
+        static_cast<int>(LayoutDimension::WrapContent),
         34
     ));
     mode_spinner_->set_margin(0, 0, 10, 0);
@@ -110,7 +110,7 @@ void WallpaperView::build_ui() {
         })
         ->build();
     fit_spinner_->set_layout_params(LayoutParams(
-        150,
+        static_cast<int>(LayoutDimension::WrapContent),
         34
     ));
     top_bar->add_view(fit_spinner_);

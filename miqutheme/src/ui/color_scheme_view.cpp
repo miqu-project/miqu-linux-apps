@@ -252,7 +252,7 @@ void ColorSchemeView::build_ui() {
         })
         ->build();
     variant_spinner_->set_layout_params(LayoutParams(
-        200,
+        static_cast<int>(LayoutDimension::WrapContent),
         32
     ));
     variant_row->add_view(variant_spinner_);

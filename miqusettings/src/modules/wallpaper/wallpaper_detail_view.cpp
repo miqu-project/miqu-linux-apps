@@ -535,7 +535,7 @@ std::shared_ptr<View> WallpaperDetailView::create_control_header() {
             else if (item == "Tile") set_fit_mode(FitMode::Tile);
         })
         ->build();
-    LayoutParams sp_lp(120, 36);
+    LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
     sp_lp.gravity = Gravity::CenterVertical;
     header_row->add_view(m_fit_spinner, sp_lp);
 

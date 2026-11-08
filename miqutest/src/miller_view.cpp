@@ -4136,7 +4136,7 @@ void MillerView::rebuild_preview_column() {
                 })
                 ->build();
 
-            LayoutParams sp_lp(160, 36);
+            LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
             sp_lp.gravity = Gravity::CenterVertical;
             row->add_view(spinner, sp_lp);
 
@@ -4468,7 +4468,7 @@ void MillerView::rebuild_preview_column() {
             })
             ->build();
 
-        LayoutParams sp_lp(140, 36);
+        LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
         net_card->add_view(net_spinner, sp_lp);
 
         add_preview_card(net_card);
