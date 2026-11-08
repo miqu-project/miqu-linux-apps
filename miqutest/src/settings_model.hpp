@@ -111,6 +111,23 @@ struct PrivateDnsConfig {
     };
 };
 
+struct BatteryConfig {
+    int percentage = 88;
+    bool is_charging = false;
+    bool power_saver = false;
+    std::string power_profile = "Balanced"; // "Power Saver", "Balanced", "Performance"
+    std::vector<std::string> available_profiles = {"Power Saver", "Balanced", "Performance"};
+    bool charge_limit_enabled = true; // 80% Protection limit
+    int charge_limit_pct = 80;
+    std::string health_status = "Healthy";
+    float health_pct = 98.4f;
+    int cycle_count = 142;
+    float design_capacity_wh = 60.0f;
+    float full_capacity_wh = 59.0f;
+    float power_draw_w = 7.8f;
+    float temp_c = 31.4f;
+};
+
 class SettingItem {
 public:
     std::string id;
@@ -154,6 +171,9 @@ public:
 
     bool is_private_dns = false;
     PrivateDnsConfig private_dns_cfg;
+
+    bool is_battery = false;
+    BatteryConfig battery_cfg;
 
     static std::shared_ptr<SettingItem> create_category(
         std::string id, std::string title, std::string icon,

@@ -710,52 +710,27 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // 5. System & Power (Depth 1)
     // ==============================================================================
     {
-        // 5.1 Power Subcategory (Depth 2)
-        auto power_profiles = SettingItem::create_leaf("power_profiles", "Energy Profiles", "CPU governors & battery savers", "󰂄");
-        power_profiles->has_switch = true;
-        power_profiles->switch_val = false;
-        power_profiles->switch_label = "High Performance Turbo Boost";
-        power_profiles->has_secondary_switch = true;
-        power_profiles->secondary_switch_val = true;
-        power_profiles->secondary_switch_label = "Auto-Energy Saver on Low Battery";
-        power_profiles->has_slider = true;
-        power_profiles->slider_val = 0.20f;
-        power_profiles->slider_label = "Display Sleep Timeout (4 min)";
-        power_profiles->slider_unit = "m";
-        power_profiles->has_action = true;
-        power_profiles->action_label = "Refresh Battery Telemetry";
-        power_profiles->telemetry = {
-            {"Current Governor", "powersave (amd-pstate-epp)"},
-            {"Battery Charge", "92% (Discharging, ~5h 20m)"},
-            {"Package Temp", "42.5 °C"}
-        };
-
-        auto power_charge = SettingItem::create_leaf("power_charge", "Charging Longevity", "Battery threshold & cycle health", "󰂑");
-        power_charge->has_switch = true;
-        power_charge->switch_val = true;
-        power_charge->switch_label = "Conservation Mode (80% Max Charge)";
-        power_charge->has_secondary_switch = true;
-        power_charge->secondary_switch_val = true;
-        power_charge->secondary_switch_label = "Fast Charging via USB-PD";
-        power_charge->has_slider = true;
-        power_charge->slider_val = 0.80f;
-        power_charge->slider_label = "Threshold Limit (80%)";
-        power_charge->slider_unit = "%";
-        power_charge->has_action = true;
-        power_charge->action_label = "Recalibrate Battery Gauge";
-        power_charge->telemetry = {
-            {"Cycle Count", "142 cycles"},
+        // 5.1 Battery & Power Saving (Leaf)
+        auto battery = SettingItem::create_leaf("sys_battery", "Battery", "", "󰁹");
+        battery->is_battery = true;
+        battery->battery_cfg.percentage = 88;
+        battery->battery_cfg.is_charging = false;
+        battery->battery_cfg.power_saver = false;
+        battery->battery_cfg.power_profile = "Balanced";
+        battery->battery_cfg.charge_limit_enabled = true;
+        battery->telemetry_title = "Battery & power specifications";
+        battery->telemetry = {
             {"Battery Health", "98.4% of design capacity"},
-            {"Design Capacity", "60.0 Wh"}
+            {"Cycle Count", "142 cycles"},
+            {"Full Charge Capacity", "59.0 Wh (Design: 60.0 Wh)"},
+            {"Power Source", "Battery (Discharging)"},
+            {"Discharge Rate", "7.8 W (Estimated)"},
+            {"Cell Temperature", "31.4 °C"},
+            {"Technology", "Lithium-Polymer (LiPo)"}
         };
 
-        auto sys_power_cat = SettingItem::create_category(
-            "sys_power_cat", "Power & Battery", "󰂄",
-            {power_profiles, power_charge}
-        );
-
-        // 5.2 Diagnostics Subcategory (Depth 2)
-        auto diag_about = SettingItem::create_leaf("diag_about", "About System", "OS versions, kernel & architecture", "󰋽");
+        // 5.2 About System (Leaf)
+        auto diag_about = SettingItem::create_leaf("diag_about", "About System", "", "󰋽");
         diag_about->has_switch = true;
         diag_about->switch_val = false;
         diag_about->switch_label = "Developer Diagnostic Mode";
@@ -768,6 +743,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         diag_about->slider_unit = "%";
         diag_about->has_action = true;
         diag_about->action_label = "Check for Ecosystem Updates";
+        diag_about->telemetry_title = "System specifications";
         diag_about->telemetry = {
             {"Distribution", "Arch Linux (Rolling Release)"},
             {"Linux Kernel", "6.11.7-arch1-1"},
@@ -775,14 +751,9 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Toolkit Version", "miqutoolkit 1.0"}
         };
 
-        auto sys_diag_cat = SettingItem::create_category(
-            "sys_diag_cat", "System & Diagnostics", "󰋽",
-            {diag_about}
-        );
-
         root.push_back(SettingItem::create_category(
-            "cat_system", "System & Power", "󰂄",
-            {sys_power_cat, sys_diag_cat}
+            "cat_system", "Power & System", "󰂄",
+            {battery, diag_about}
         ));
     }
 
