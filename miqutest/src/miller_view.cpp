@@ -2802,9 +2802,9 @@ void MillerView::rebuild_preview_column() {
         main_card->add_view(s2_title);
 
         // 1. Sleep Mode
-        auto sm_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
+        auto sm_block = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(6)
             ->build();
 
         auto sm_box = LinearLayoutBuilder::create()
@@ -2825,13 +2825,7 @@ void MillerView::rebuild_preview_column() {
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
         sm_box->add_view(sm_hint);
-
-        LayoutParams smbox_lp;
-        smbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        smbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        smbox_lp.weight = 1.0f;
-        smbox_lp.gravity = Gravity::CenterVertical;
-        sm_row->add_view(sm_box, smbox_lp);
+        sm_block->add_view(sm_box);
 
         std::vector<std::string> sleep_modes = {
             "Hybrid Sleep (Recommended)",
@@ -2849,7 +2843,7 @@ void MillerView::rebuild_preview_column() {
             ->items(sleep_modes)
             ->selectedIndex(cur_sm_idx)
             ->fontSize(config->metrics.font_size)
-            ->padding(10, 4)
+            ->padding(12, 6)
             ->cornerRadius(8)
             ->onItemSelected([this, item](int idx, const std::string& val) {
                 (void)idx;
@@ -2857,15 +2851,14 @@ void MillerView::rebuild_preview_column() {
                 notify_state_changed();
             })
             ->build();
-        LayoutParams smsp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
-        smsp_lp.gravity = Gravity::CenterVertical;
-        sm_row->add_view(sm_spinner, smsp_lp);
-        main_card->add_view(sm_row);
+        LayoutParams smsp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        sm_block->add_view(sm_spinner, smsp_lp);
+        main_card->add_view(sm_block);
 
         // 2. Lid Switch Action
-        auto lid_action_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
+        auto lid_action_block = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(6)
             ->build();
 
         auto la_box = LinearLayoutBuilder::create()
@@ -2886,13 +2879,7 @@ void MillerView::rebuild_preview_column() {
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
         la_box->add_view(la_hint);
-
-        LayoutParams labox_lp;
-        labox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        labox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        labox_lp.weight = 1.0f;
-        labox_lp.gravity = Gravity::CenterVertical;
-        lid_action_row->add_view(la_box, labox_lp);
+        lid_action_block->add_view(la_box);
 
         std::vector<std::string> lid_actions = {
             "Sleep",
@@ -2912,7 +2899,7 @@ void MillerView::rebuild_preview_column() {
             ->items(lid_actions)
             ->selectedIndex(cur_la_idx)
             ->fontSize(config->metrics.font_size)
-            ->padding(10, 4)
+            ->padding(12, 6)
             ->cornerRadius(8)
             ->onItemSelected([this, item](int idx, const std::string& val) {
                 (void)idx;
@@ -2920,15 +2907,14 @@ void MillerView::rebuild_preview_column() {
                 notify_state_changed();
             })
             ->build();
-        LayoutParams lasp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
-        lasp_lp.gravity = Gravity::CenterVertical;
-        lid_action_row->add_view(la_spinner, lasp_lp);
-        main_card->add_view(lid_action_row);
+        LayoutParams lasp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        lid_action_block->add_view(la_spinner, lasp_lp);
+        main_card->add_view(lid_action_block);
 
         // 3. Power Button Action
-        auto pwr_action_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
+        auto pwr_action_block = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(6)
             ->build();
 
         auto pa_box = LinearLayoutBuilder::create()
@@ -2949,13 +2935,7 @@ void MillerView::rebuild_preview_column() {
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
         pa_box->add_view(pa_hint);
-
-        LayoutParams pabox_lp;
-        pabox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        pabox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        pabox_lp.weight = 1.0f;
-        pabox_lp.gravity = Gravity::CenterVertical;
-        pwr_action_row->add_view(pa_box, pabox_lp);
+        pwr_action_block->add_view(pa_box);
 
         std::vector<std::string> pwr_actions = {
             "Show power menu (miqupower)",
@@ -2975,7 +2955,7 @@ void MillerView::rebuild_preview_column() {
             ->items(pwr_actions)
             ->selectedIndex(cur_pa_idx)
             ->fontSize(config->metrics.font_size)
-            ->padding(10, 4)
+            ->padding(12, 6)
             ->cornerRadius(8)
             ->onItemSelected([this, item](int idx, const std::string& val) {
                 (void)idx;
@@ -2983,15 +2963,14 @@ void MillerView::rebuild_preview_column() {
                 notify_state_changed();
             })
             ->build();
-        LayoutParams pasp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
-        pasp_lp.gravity = Gravity::CenterVertical;
-        pwr_action_row->add_view(pa_spinner, pasp_lp);
-        main_card->add_view(pwr_action_row);
+        LayoutParams pasp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        pwr_action_block->add_view(pa_spinner, pasp_lp);
+        main_card->add_view(pwr_action_block);
 
         // 4. Critical Battery Action
-        auto crit_action_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
+        auto crit_action_block = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(6)
             ->build();
 
         auto ca_box = LinearLayoutBuilder::create()
@@ -3012,13 +2991,7 @@ void MillerView::rebuild_preview_column() {
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
         ca_box->add_view(ca_hint);
-
-        LayoutParams cabox_lp;
-        cabox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        cabox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        cabox_lp.weight = 1.0f;
-        cabox_lp.gravity = Gravity::CenterVertical;
-        crit_action_row->add_view(ca_box, cabox_lp);
+        crit_action_block->add_view(ca_box);
 
         std::vector<std::string> crit_actions = {
             "Hibernate",
@@ -3036,7 +3009,7 @@ void MillerView::rebuild_preview_column() {
             ->items(crit_actions)
             ->selectedIndex(cur_ca_idx)
             ->fontSize(config->metrics.font_size)
-            ->padding(10, 4)
+            ->padding(12, 6)
             ->cornerRadius(8)
             ->onItemSelected([this, item](int idx, const std::string& val) {
                 (void)idx;
@@ -3044,10 +3017,9 @@ void MillerView::rebuild_preview_column() {
                 notify_state_changed();
             })
             ->build();
-        LayoutParams casp_lp(static_cast<int>(LayoutDimension::WrapContent), 34);
-        casp_lp.gravity = Gravity::CenterVertical;
-        crit_action_row->add_view(ca_spinner, casp_lp);
-        main_card->add_view(crit_action_row);
+        LayoutParams casp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        crit_action_block->add_view(ca_spinner, casp_lp);
+        main_card->add_view(crit_action_block);
 
         add_divider();
 
