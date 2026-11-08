@@ -89,16 +89,25 @@ struct PrivateDnsPreset {
 };
 
 struct PrivateDnsConfig {
-    std::string mode = "Strict (Private Provider)";
-    std::string current_provider = "Cloudflare (1.1.1.1)";
-    std::string custom_hostname = "one.one.one.one";
-    std::vector<std::string> available_modes = {"Strict (Private Provider)", "Automatic (Opportunistic)", "Off"};
+    std::string selected_option = "Cloudflare (1.1.1.1)";
+    std::string custom_hostname = "dns.nextdns.io";
+    std::vector<std::string> options = {
+        "Off",
+        "Automatic",
+        "Cloudflare (1.1.1.1)",
+        "Quad9 (Malware Block)",
+        "AdGuard (Ad & Tracker Block)",
+        "Mullvad (Zero-Log Privacy)",
+        "Custom Hostname"
+    };
     std::vector<PrivateDnsPreset> presets = {
+        {"Off", "(Disabled)", "Standard unencrypted DNS assigned by router / local DHCP", "Local Gateway / DHCP"},
+        {"Automatic", "(Automatic opportunistic DoT)", "Opportunistic TLS upgrade if upstream server supports DNS-over-TLS", "Opportunistic TLS (Port 853)"},
         {"Cloudflare (1.1.1.1)", "one.one.one.one", "Fast global anycast resolver with DNS-over-TLS (DoT)", "1.1.1.1 • 1.0.0.1 • 2606:4700:4700::1111"},
         {"Quad9 (Malware Block)", "dns.quad9.net", "Threat intelligence blocking phishing, botnets & malware", "9.9.9.9 • 149.112.112.112 • 2620:fe::fe"},
-        {"AdGuard (Ad & Tracker Block)", "dns.adguard-dns.com", "Filters ads, tracking beacons, telemetry and telemetry counters", "94.140.14.14 • 94.140.15.15"},
+        {"AdGuard (Ad & Tracker Block)", "dns.adguard-dns.com", "Filters ads, tracking beacons, telemetry and counters", "94.140.14.14 • 94.140.15.15"},
         {"Mullvad (Zero-Log Privacy)", "dns.mullvad.net", "Strict zero-logging privacy DNS hosted in Sweden", "194.242.2.2 • 193.19.108.2"},
-        {"Custom Hostname", "dns.custom-resolver.net", "User-specified encrypted DNS-over-TLS upstream endpoint", "Custom TLS endpoint"}
+        {"Custom Hostname", "", "User-specified encrypted DNS-over-TLS upstream resolver endpoint", "Custom TLS endpoint (Port 853)"}
     };
 };
 

@@ -1591,7 +1591,7 @@ void MillerView::rebuild_preview_column() {
             ->cornerRadius(12)
             ->build();
 
-        bool is_encrypted = (item->private_dns_cfg.mode != "Off");
+        bool is_encrypted = (item->private_dns_cfg.selected_option != "Off");
         auto dns_icon = TextViewBuilder::create()
             ->text("󰒍")
             ->textSize(config->metrics.font_size + 4)
@@ -1615,12 +1615,20 @@ void MillerView::rebuild_preview_column() {
         dns_lbl_box->add_view(dns_title);
 
         auto get_status_str = [item]() -> std::string {
-            if (item->private_dns_cfg.mode == "Off") {
+            if (item->private_dns_cfg.selected_option == "Off") {
                 return "Unencrypted (Standard router / DHCP DNS)";
-            } else if (item->private_dns_cfg.mode == "Automatic (Opportunistic)") {
+            } else if (item->private_dns_cfg.selected_option == "Automatic") {
                 return "Opportunistic DoT (Automatic TLS upgrade)";
+            } else if (item->private_dns_cfg.selected_option == "Custom Hostname") {
+                std::string h = item->private_dns_cfg.custom_hostname;
+                return "Encrypted DoT • " + (h.empty() ? "Custom Hostname" : h);
             }
-            return "Encrypted DoT • " + item->private_dns_cfg.custom_hostname;
+            for (const auto& p : item->private_dns_cfg.presets) {
+                if (p.name == item->private_dns_cfg.selected_option) {
+                    return "Encrypted DoT • " + p.hostname;
+                }
+            }
+            return "Encrypted DoT";
         };
 
         auto dns_hint = TextViewBuilder::create()
@@ -1638,8 +1646,10 @@ void MillerView::rebuild_preview_column() {
         dns_card->add_view(dns_lbl_box, dlbl_lp);
 
         // Status Badge Pill
+        std::string badge_str = (item->private_dns_cfg.selected_option == "Off") ? "Off" :
+                                (item->private_dns_cfg.selected_option == "Automatic" ? "Auto DoT ✓" : "Strict DoT ✓");
         auto badge_text = TextViewBuilder::create()
-            ->text(is_encrypted ? "Strict DoT ✓" : "Off")
+            ->text(badge_str)
             ->caption(true)
             ->textColor(is_encrypted ? config->colors.primary : config->colors.on_surface_variant)
             ->padding(8, 4)
@@ -1661,7 +1671,7 @@ void MillerView::rebuild_preview_column() {
 
         m_preview_layout->add_view(dns_card);
 
-        // 2. Configuration Card (Operating Mode & Provider Spinners)
+        // 2. Configuration Card (Single Spinner on new line, Hostname EditText on new line)
         auto cfg_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
@@ -1678,69 +1688,29 @@ void MillerView::rebuild_preview_column() {
             ->build();
         cfg_card->add_view(cfg_title);
 
-        auto create_spinner_row = [&](const std::string& row_title,
-                                      const std::vector<std::string>& options,
-                                      const std::string& current_val,
-                                      int spinner_width,
-                                      std::function<void(const std::string&)> on_select) {
-            auto row = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->gravity(Gravity::CenterVertical)
-                ->padding(0, 3)
-                ->build();
-
-            auto lbl = TextViewBuilder::create()
-                ->text(row_title)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            LayoutParams lbl_lp;
-            lbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            lbl_lp.weight = 1.0f;
-            lbl_lp.gravity = Gravity::CenterVertical;
-            row->add_view(lbl, lbl_lp);
-
-            int sel_idx = 0;
-            for (size_t i = 0; i < options.size(); ++i) {
-                if (options[i] == current_val) {
-                    sel_idx = static_cast<int>(i);
-                    break;
-                }
-            }
-
-            auto spinner = SpinnerBuilder::create()
-                ->items(options)
-                ->selectedIndex(sel_idx)
-                ->fontSize(config->metrics.font_size)
-                ->padding(12, 6)
-                ->cornerRadius(8)
-                ->onItemSelected([options, on_select](int idx, const std::string& val) {
-                    (void)val;
-                    if (idx >= 0 && idx < static_cast<int>(options.size())) {
-                        on_select(options[idx]);
-                    }
-                })
-                ->build();
-
-            LayoutParams sp_lp(spinner_width, 36);
-            sp_lp.gravity = Gravity::CenterVertical;
-            row->add_view(spinner, sp_lp);
-
-            return row;
-        };
+        // Label for Spinner
+        auto sp_lbl = TextViewBuilder::create()
+            ->text("Mode / Provider")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        cfg_card->add_view(sp_lbl);
 
         // Forward declare details views to update in-place without tearing down spinner
         const auto& presets = item->private_dns_cfg.presets;
         const PrivateDnsPreset* active_preset = &presets[0];
         for (const auto& p : presets) {
-            if (p.name == item->private_dns_cfg.current_provider) {
+            if (p.name == item->private_dns_cfg.selected_option) {
                 active_preset = &p;
                 break;
             }
         }
 
+        bool is_custom = (item->private_dns_cfg.selected_option == "Custom Hostname");
+        std::string initial_ep_host = is_custom ? item->private_dns_cfg.custom_hostname : active_preset->hostname;
+
         auto host_val = TextViewBuilder::create()
-            ->text(active_preset->hostname)
+            ->text(initial_ep_host.empty() ? "(Not set)" : initial_ep_host)
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.primary)
             ->build();
@@ -1757,37 +1727,44 @@ void MillerView::rebuild_preview_column() {
             ->textColor(config->colors.on_surface)
             ->build();
 
-        auto sync_dns_ui = [this, item, config, dns_icon, dns_hint, badge_text, badge_card, host_val, desc_val, ip_val]() {
-            bool enc = (item->private_dns_cfg.mode != "Off");
+        std::string initial_edit_text = is_custom ? item->private_dns_cfg.custom_hostname : active_preset->hostname;
+        auto custom_edit = EditTextBuilder::create()
+            ->text(initial_edit_text)
+            ->hint(is_custom ? "Enter custom DoT hostname (e.g. dns.nextdns.io)" : "")
+            ->editable(is_custom)
+            ->padding(14, 8)
+            ->build();
+
+        auto sync_dns_ui = [this, item, config, dns_icon, dns_hint, badge_text, badge_card, host_val, desc_val, ip_val, get_status_str]() {
+            bool enc = (item->private_dns_cfg.selected_option != "Off");
             dns_icon->set_text_color(enc ? config->colors.primary : config->colors.on_surface_variant);
             dns_icon->request_redraw();
 
-            if (item->private_dns_cfg.mode == "Off") {
-                dns_hint->set_text("Unencrypted (Standard router / DHCP DNS)");
-                dns_hint->set_text_color(config->colors.on_surface_variant.with_alpha(0.7f));
+            dns_hint->set_text(get_status_str());
+            dns_hint->set_text_color(enc ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f));
+            dns_hint->request_redraw();
+
+            if (item->private_dns_cfg.selected_option == "Off") {
                 badge_text->set_text("Off");
                 badge_text->set_text_color(config->colors.on_surface_variant);
                 badge_card->set_card_background_color(config->colors.surface_variant);
-            } else if (item->private_dns_cfg.mode == "Automatic (Opportunistic)") {
-                dns_hint->set_text("Opportunistic DoT (Automatic TLS upgrade)");
-                dns_hint->set_text_color(config->colors.primary);
+            } else if (item->private_dns_cfg.selected_option == "Automatic") {
                 badge_text->set_text("Auto DoT ✓");
                 badge_text->set_text_color(config->colors.primary);
                 badge_card->set_card_background_color(config->colors.primary_container.with_alpha(0.4f));
             } else {
-                dns_hint->set_text("Encrypted DoT • " + item->private_dns_cfg.custom_hostname);
-                dns_hint->set_text_color(config->colors.primary);
                 badge_text->set_text("Strict DoT ✓");
                 badge_text->set_text_color(config->colors.primary);
                 badge_card->set_card_background_color(config->colors.primary_container.with_alpha(0.4f));
             }
-            dns_hint->request_redraw();
             badge_text->request_redraw();
             badge_card->request_redraw();
 
+            bool custom = (item->private_dns_cfg.selected_option == "Custom Hostname");
             for (const auto& p : item->private_dns_cfg.presets) {
-                if (p.name == item->private_dns_cfg.current_provider) {
-                    host_val->set_text(p.hostname);
+                if (p.name == item->private_dns_cfg.selected_option) {
+                    std::string h = custom ? item->private_dns_cfg.custom_hostname : p.hostname;
+                    host_val->set_text(h.empty() ? "(Not set)" : h);
                     desc_val->set_text(p.description);
                     ip_val->set_text(p.endpoints);
                     host_val->request_redraw();
@@ -1798,27 +1775,66 @@ void MillerView::rebuild_preview_column() {
             }
         };
 
-        // 1. Operating Mode Spinner Row
-        cfg_card->add_view(create_spinner_row("Operating Mode", item->private_dns_cfg.available_modes, item->private_dns_cfg.mode, 200, [item, sync_dns_ui](const std::string& val) {
-            item->private_dns_cfg.mode = val;
-            sync_dns_ui();
-        }));
-
-        // 2. DNS Provider Preset Row
-        std::vector<std::string> provider_names;
-        for (const auto& p : item->private_dns_cfg.presets) {
-            provider_names.push_back(p.name);
-        }
-        cfg_card->add_view(create_spinner_row("DNS Provider", provider_names, item->private_dns_cfg.current_provider, 200, [item, sync_dns_ui](const std::string& val) {
-            item->private_dns_cfg.current_provider = val;
-            for (const auto& p : item->private_dns_cfg.presets) {
-                if (p.name == val) {
-                    item->private_dns_cfg.custom_hostname = p.hostname;
-                    break;
-                }
+        // Find selected index for Spinner
+        int sel_idx = 0;
+        for (size_t i = 0; i < item->private_dns_cfg.options.size(); ++i) {
+            if (item->private_dns_cfg.options[i] == item->private_dns_cfg.selected_option) {
+                sel_idx = static_cast<int>(i);
+                break;
             }
+        }
+
+        // Single Spinner on a NEW line
+        auto dns_spinner = SpinnerBuilder::create()
+            ->items(item->private_dns_cfg.options)
+            ->selectedIndex(sel_idx)
+            ->fontSize(config->metrics.font_size)
+            ->padding(12, 6)
+            ->cornerRadius(8)
+            ->onItemSelected([item, custom_edit, sync_dns_ui](int idx, const std::string& val) {
+                (void)idx;
+                item->private_dns_cfg.selected_option = val;
+                bool custom = (val == "Custom Hostname");
+                custom_edit->set_editable(custom);
+                if (custom) {
+                    custom_edit->set_text(item->private_dns_cfg.custom_hostname);
+                    custom_edit->set_hint("Enter custom DoT hostname (e.g. dns.nextdns.io)");
+                } else {
+                    for (const auto& p : item->private_dns_cfg.presets) {
+                        if (p.name == val) {
+                            custom_edit->set_text(p.hostname);
+                            custom_edit->set_hint("");
+                            break;
+                        }
+                    }
+                }
+                sync_dns_ui();
+            })
+            ->build();
+
+        LayoutParams sp_lp;
+        sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        sp_lp.height = 36;
+        cfg_card->add_view(dns_spinner, sp_lp);
+
+        // Hostname Label
+        auto host_lbl = TextViewBuilder::create()
+            ->text("Provider Hostname")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        cfg_card->add_view(host_lbl);
+
+        // Conditional EditText on a NEW line
+        custom_edit->set_on_text_changed_listener([item, sync_dns_ui](std::shared_ptr<EditText>, const std::string& new_text) {
+            item->private_dns_cfg.custom_hostname = new_text;
             sync_dns_ui();
-        }));
+        });
+
+        LayoutParams edit_lp;
+        edit_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        edit_lp.height = 38;
+        cfg_card->add_view(custom_edit, edit_lp);
 
         m_preview_layout->add_view(cfg_card);
 

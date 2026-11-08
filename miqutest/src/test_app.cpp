@@ -189,6 +189,13 @@ void TestApp::update_header() {
 void TestApp::handle_key_press(const KeyPressEvent& event) {
     if (!event.pressed || !m_miller_view) return;
 
+    if (m_window && m_window->get_focused_view() && m_window->get_focused_view()->has_focus()) {
+        if (event.keysym == XKB_KEY_Escape) {
+            m_window->clear_focus();
+        }
+        return;
+    }
+
     switch (event.keysym) {
         case XKB_KEY_k:
         case XKB_KEY_Up:

@@ -106,9 +106,8 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         // 1.5 Private DNS (Leaf)
         auto private_dns = SettingItem::create_leaf("net_private_dns", "Private DNS", "", "󰒍");
         private_dns->is_private_dns = true;
-        private_dns->private_dns_cfg.mode = "Strict (Private Provider)";
-        private_dns->private_dns_cfg.current_provider = "Cloudflare (1.1.1.1)";
-        private_dns->private_dns_cfg.custom_hostname = "one.one.one.one";
+        private_dns->private_dns_cfg.selected_option = "Cloudflare (1.1.1.1)";
+        private_dns->private_dns_cfg.custom_hostname = "dns.nextdns.io";
         private_dns->telemetry_title = "DNS & encryption specifications";
         private_dns->telemetry = {
             {"Protocol Standard", "DNS-over-TLS (RFC 7858 / Port 853)"},
