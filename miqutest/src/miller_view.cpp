@@ -2029,6 +2029,54 @@ void MillerView::rebuild_preview_column() {
         lbl_lp.gravity = Gravity::CenterVertical;
         hero_card->add_view(lbl_box, lbl_lp);
 
+        m_preview_layout->add_view(hero_card);
+
+        // 2. Battery Health Card (On a new line)
+        auto health_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->padding(16, 14)
+            ->spacing(12)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto health_icon = TextViewBuilder::create()
+            ->text("󰂑")
+            ->textSize(config->metrics.font_size + 4)
+            ->textColor(config->colors.primary)
+            ->build();
+        LayoutParams hicon_lp;
+        hicon_lp.width = 30;
+        hicon_lp.gravity = Gravity::CenterVertical;
+        health_card->add_view(health_icon, hicon_lp);
+
+        auto hlbl_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto h_title = TextViewBuilder::create()
+            ->text("Battery Health")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        hlbl_box->add_view(h_title);
+
+        auto h_hint = TextViewBuilder::create()
+            ->text("98.4% Maximum Capacity • Normal operating condition")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        hlbl_box->add_view(h_hint);
+
+        LayoutParams hlbl_lp;
+        hlbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        hlbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        hlbl_lp.weight = 1.0f;
+        hlbl_lp.gravity = Gravity::CenterVertical;
+        health_card->add_view(hlbl_box, hlbl_lp);
+
         // Health Badge Pill
         auto badge_text = TextViewBuilder::create()
             ->text("Healthy • 98%")
@@ -2049,9 +2097,9 @@ void MillerView::rebuild_preview_column() {
         badge_lp.width = static_cast<int>(LayoutDimension::WrapContent);
         badge_lp.height = static_cast<int>(LayoutDimension::WrapContent);
         badge_lp.gravity = Gravity::CenterVertical;
-        hero_card->add_view(badge_card, badge_lp);
+        health_card->add_view(badge_card, badge_lp);
 
-        m_preview_layout->add_view(hero_card);
+        m_preview_layout->add_view(health_card);
 
         // 2. Operating Profile Card (Single Spinner on new line)
         auto prof_card = LinearLayoutBuilder::create()

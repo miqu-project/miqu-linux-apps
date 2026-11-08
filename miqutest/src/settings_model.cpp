@@ -707,19 +707,18 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     }
 
     // ==============================================================================
-    // 5. System & Power (Depth 1)
+    // 7. Battery (Depth 1)
     // ==============================================================================
     {
-        // 5.1 Battery & Power Saving (Leaf)
-        auto battery = SettingItem::create_leaf("sys_battery", "Battery", "", "󰁹");
-        battery->is_battery = true;
-        battery->battery_cfg.percentage = 88;
-        battery->battery_cfg.is_charging = false;
-        battery->battery_cfg.power_saver = false;
-        battery->battery_cfg.power_profile = "Balanced";
-        battery->battery_cfg.charge_limit_enabled = true;
-        battery->telemetry_title = "Battery & power specifications";
-        battery->telemetry = {
+        auto battery_leaf = SettingItem::create_leaf("sys_battery", "Battery", "", "󰁹");
+        battery_leaf->is_battery = true;
+        battery_leaf->battery_cfg.percentage = 88;
+        battery_leaf->battery_cfg.is_charging = false;
+        battery_leaf->battery_cfg.power_saver = false;
+        battery_leaf->battery_cfg.power_profile = "Balanced";
+        battery_leaf->battery_cfg.charge_limit_enabled = true;
+        battery_leaf->telemetry_title = "Battery & power specifications";
+        battery_leaf->telemetry = {
             {"Battery Health", "98.4% of design capacity"},
             {"Cycle Count", "142 cycles"},
             {"Full Charge Capacity", "59.0 Wh (Design: 60.0 Wh)"},
@@ -729,18 +728,36 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Technology", "Lithium-Polymer (LiPo)"}
         };
 
-        // 5.2 About System (Leaf)
+        auto energy_profiles = SettingItem::create_leaf("power_profiles", "Energy Profiles", "", "󰌪");
+        energy_profiles->has_switch = true;
+        energy_profiles->switch_val = false;
+        energy_profiles->switch_label = "Auto-Energy Saver on Low Battery (20%)";
+        energy_profiles->has_secondary_switch = true;
+        energy_profiles->secondary_switch_val = true;
+        energy_profiles->secondary_switch_label = "Dim Display When Inactive";
+        energy_profiles->has_slider = true;
+        energy_profiles->slider_val = 0.20f;
+        energy_profiles->slider_label = "Display Sleep Timeout (4 min)";
+        energy_profiles->slider_unit = "m";
+        energy_profiles->telemetry_title = "Power management specifications";
+        energy_profiles->telemetry = {
+            {"Current Governor", "powersave (amd-pstate-epp)"},
+            {"Energy Performance Preference", "balance_power"},
+            {"Platform Profile", "balanced (ACPI platform profile)"},
+            {"Package Temp", "42.5 °C"}
+        };
+
+        root.push_back(SettingItem::create_category(
+            "cat_battery", "Battery", "󰁹",
+            {battery_leaf, energy_profiles}
+        ));
+    }
+
+    // ==============================================================================
+    // 8. About System (Depth 1)
+    // ==============================================================================
+    {
         auto diag_about = SettingItem::create_leaf("diag_about", "About System", "", "󰋽");
-        diag_about->has_switch = true;
-        diag_about->switch_val = false;
-        diag_about->switch_label = "Developer Diagnostic Mode";
-        diag_about->has_secondary_switch = true;
-        diag_about->secondary_switch_val = false;
-        diag_about->secondary_switch_label = "Send Anonymous Performance Metrics";
-        diag_about->has_slider = true;
-        diag_about->slider_val = 1.0f;
-        diag_about->slider_label = "Display DPI Scaling (100%)";
-        diag_about->slider_unit = "%";
         diag_about->has_action = true;
         diag_about->action_label = "Check for Ecosystem Updates";
         diag_about->telemetry_title = "System specifications";
@@ -748,12 +765,29 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Distribution", "Arch Linux (Rolling Release)"},
             {"Linux Kernel", "6.11.7-arch1-1"},
             {"Desktop Compositor", "miquland (C++20)"},
-            {"Toolkit Version", "miqutoolkit 1.0"}
+            {"Toolkit Version", "miqutoolkit 1.0"},
+            {"Hardware Architecture", "x86_64 (Zen 4 / AMD Ryzen)"},
+            {"Memory (RAM)", "32.0 GB LPDDR5-6400"},
+            {"Firmware / UEFI", "UEFI v2.8 (Secure Boot: Active)"}
+        };
+
+        auto diag_dev = SettingItem::create_leaf("diag_dev", "Developer Diagnostics", "", "󰒍");
+        diag_dev->has_switch = true;
+        diag_dev->switch_val = false;
+        diag_dev->switch_label = "Developer Diagnostic Mode";
+        diag_dev->has_secondary_switch = true;
+        diag_dev->secondary_switch_val = false;
+        diag_dev->secondary_switch_label = "Send Anonymous Performance Metrics";
+        diag_dev->telemetry_title = "Diagnostic status";
+        diag_dev->telemetry = {
+            {"Log Level", "info (systemd journald)"},
+            {"Crash Reporting", "coredumpctl active"},
+            {"Wayland Socket", "wayland-0 (miquland)"}
         };
 
         root.push_back(SettingItem::create_category(
-            "cat_system", "Power & System", "󰂄",
-            {battery, diag_about}
+            "cat_about", "About System", "󰋽",
+            {diag_about, diag_dev}
         ));
     }
 
