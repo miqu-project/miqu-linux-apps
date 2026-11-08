@@ -2520,40 +2520,27 @@ void MillerView::rebuild_preview_column() {
             ->build();
 
         auto icon = TextViewBuilder::create()
-            ->text("󰀻")
-            ->textSize(config->metrics.font_size + 4)
+            ->text("󰋽")
+            ->textSize(config->metrics.font_size + 2)
             ->textColor(config->colors.primary)
             ->build();
         LayoutParams icon_lp;
-        icon_lp.width = 30;
+        icon_lp.width = 24;
         icon_lp.gravity = Gravity::CenterVertical;
         card->add_view(icon, icon_lp);
 
-        auto box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto title = TextViewBuilder::create()
-            ->text("Per App Network Access")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        box->add_view(title);
-
         auto hint = TextViewBuilder::create()
             ->text("Please go to Applications->Installed App->App Info->Network Access.")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.85f))
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface_variant)
             ->build();
-        box->add_view(hint);
 
-        LayoutParams box_lp;
-        box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        box_lp.weight = 1.0f;
-        box_lp.gravity = Gravity::CenterVertical;
-        card->add_view(box, box_lp);
+        LayoutParams hint_lp;
+        hint_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        hint_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        hint_lp.weight = 1.0f;
+        hint_lp.gravity = Gravity::CenterVertical;
+        card->add_view(hint, hint_lp);
 
         add_preview_card(card);
         return;
@@ -2863,9 +2850,7 @@ void MillerView::rebuild_preview_column() {
             })
             ->build();
 
-        LayoutParams psp_lp;
-        psp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        psp_lp.height = 36;
+        LayoutParams psp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
         prof_card->add_view(prof_spinner, psp_lp);
 
         auto get_profile_desc = [item]() -> std::string {
