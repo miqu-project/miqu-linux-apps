@@ -241,20 +241,79 @@ void MillerView::rebuild_parent_column() {
         const auto& item = (*parent_siblings)[i];
         bool is_active = (item == active_parent);
 
-        auto row_label = TextViewBuilder::create()
-            ->text(item->icon + " " + item->title)
-            ->textSize(config->metrics.font_size)
-            ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant)
+        auto item_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
             ->padding(10, 8)
+            ->spacing(10)
             ->build();
 
+        // Left Icon
+        auto icon_view = TextViewBuilder::create()
+            ->text(item->icon.empty() ? "⚙" : item->icon)
+            ->textSize(config->metrics.font_size)
+            ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant)
+            ->build();
+        LayoutParams icon_lp;
+        icon_lp.width = 24;
+        icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        icon_lp.gravity = Gravity::CenterVertical;
+        item_row->add_view(icon_view, icon_lp);
+
+        // Text container (Title and optional contextual Subtitle)
+        auto text_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(1)
+            ->build();
+
+        auto title_view = TextViewBuilder::create()
+            ->text(item->title)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->ellipsize(true)
+            ->build();
+        text_box->add_view(title_view);
+
+        if (!item->subtitle.empty()) {
+            auto sub_view = TextViewBuilder::create()
+                ->text(item->subtitle)
+                ->caption(true)
+                ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+                ->ellipsize(true)
+                ->build();
+            text_box->add_view(sub_view);
+        }
+
+        LayoutParams text_lp;
+        text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        text_lp.weight = 1.0f;
+        text_lp.gravity = Gravity::CenterVertical;
+        item_row->add_view(text_box, text_lp);
+
+        // Trailing indicator: Only show '›' for expandable categories
+        if (item->is_category) {
+            auto trail_view = TextViewBuilder::create()
+                ->text("›")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+                ->build();
+            LayoutParams trail_lp;
+            trail_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            trail_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            trail_lp.gravity = Gravity::CenterVertical;
+            item_row->add_view(trail_view, trail_lp);
+        }
+
         Color bg = is_active ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
+        int stroke_w = is_active ? 1 : 0;
+        Color stroke_col = is_active ? config->colors.primary.with_alpha(0.5f) : Color::transparent();
         auto row_card = CardViewBuilder::create()
-            ->style(CardStyle::Filled)
+            ->style(is_active ? CardStyle::Outlined : CardStyle::Filled)
             ->backgroundColor(bg)
-            ->cornerRadius(6)
+            ->stroke(stroke_w, stroke_col)
+            ->cornerRadius(8)
             ->elevation(0)
-            ->addView(row_label)
+            ->addView(item_row)
             ->build();
 
         // Hybrid Interaction: Single-click shifts up one level (Option A)
@@ -2631,13 +2690,6 @@ void MillerView::rebuild_preview_column() {
         // 1. Layout Mode
         // -------------------------------------------------------------
         if (show_layout) {
-            auto s1_title = TextViewBuilder::create()
-                ->text("Layout Mode")
-                ->caption(true)
-                ->textColor(config->colors.primary)
-                ->build();
-            main_card->add_view(s1_title);
-
             int cur_mode_idx = 0;
             for (size_t i = 0; i < item->tiling_cfg->available_layout_modes.size(); ++i) {
                 if (item->tiling_cfg->available_layout_modes[i] == item->tiling_cfg->layout_mode) {
@@ -2648,7 +2700,7 @@ void MillerView::rebuild_preview_column() {
 
             add_spinner_block(
                 "Tiling algorithm",
-                "Select the active window arrangement engine for this workspace",
+                "",
                 item->tiling_cfg->available_layout_modes,
                 cur_mode_idx,
                 [item](int idx, const std::string& val) {
@@ -2656,65 +2708,12 @@ void MillerView::rebuild_preview_column() {
                     item->tiling_cfg->layout_mode = val;
                 }
             );
-
-            // Algorithmic description block
-            auto desc_box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->padding(12, 10)
-                ->spacing(4)
-                ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
-                ->stroke(1, config->colors.outline.with_alpha(0.25f))
-                ->cornerRadius(8)
-                ->build();
-
-            auto desc_title = TextViewBuilder::create()
-                ->text("󰕰  Algorithm Behavior")
-                ->caption(true)
-                ->textColor(config->colors.primary)
-                ->build();
-            desc_box->add_view(desc_title);
-
-            std::string desc_text = "Dynamic Binary Space Partitioning (BSP). Windows automatically split recursively into halves based on window aspect ratio and cursor placement. Snappy and adaptive for dynamic multitasking.";
-            if (item->tiling_cfg->layout_mode.find("Master") != std::string::npos) {
-                desc_text = "Master-and-stack layout. The primary master window on the left takes dominant screen area; remaining windows stack vertically along the right column.";
-            } else if (item->tiling_cfg->layout_mode.find("Bottom") != std::string::npos) {
-                desc_text = "Bottom-stack layout. The master window occupies the top half of the screen; auxiliary windows stack horizontally side-by-side across the bottom.";
-            } else if (item->tiling_cfg->layout_mode.find("Centered") != std::string::npos) {
-                desc_text = "Centered-master layout. A prominent central workspace is flanked symmetrically by auxiliary vertical stacks on both left and right.";
-            } else if (item->tiling_cfg->layout_mode.find("Spiral") != std::string::npos) {
-                desc_text = "Fibonacci golden spiral layout. Window splits alternate clockwise between horizontal and vertical for each newly opened window.";
-            } else if (item->tiling_cfg->layout_mode.find("Columns") != std::string::npos) {
-                desc_text = "Equal column partition. Divides available screen space into equal-width vertical columns side-by-side across the monitor.";
-            } else if (item->tiling_cfg->layout_mode.find("Grid") != std::string::npos) {
-                desc_text = "Grid matrix layout. Automatically arranges all open windows into a balanced N × M grid with dynamic row balancing.";
-            } else if (item->tiling_cfg->layout_mode.find("Monocle") != std::string::npos) {
-                desc_text = "Full-screen monocle layout. The focused window fills the entire usable display area; non-focused windows remain stacked underneath.";
-            }
-
-            auto desc_body = TextViewBuilder::create()
-                ->text(desc_text)
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface_variant)
-                ->build();
-            desc_box->add_view(desc_body);
-
-            LayoutParams dbox_lp;
-            dbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            dbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            main_card->add_view(desc_box, dbox_lp);
         }
 
         // -------------------------------------------------------------
         // 2. Windows
         // -------------------------------------------------------------
         if (show_windows) {
-            auto s2_title = TextViewBuilder::create()
-                ->text("Windows & Geometry")
-                ->caption(true)
-                ->textColor(config->colors.primary)
-                ->build();
-            main_card->add_view(s2_title);
-
             // Inner Window Gap (0 to 32 px)
             add_slider_row(
                 "Inner window gap",
@@ -2868,118 +2867,12 @@ void MillerView::rebuild_preview_column() {
                     item->tiling_cfg->auto_float_fixed_size = val;
                 }
             );
-
-            // Live Interactive Mini Window Geometry Preview
-            int p_outer = std::max(4, item->tiling_cfg->outer_gap / 2);
-            int p_inner = std::max(4, item->tiling_cfg->inner_gap / 2);
-            int p_radius = std::clamp(item->tiling_cfg->corner_radius / 2, 0, 16);
-            int p_border = std::max(1, item->tiling_cfg->border_width);
-
-            auto monitor_canvas = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->padding(p_outer, p_outer)
-                ->spacing(p_inner)
-                ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
-                ->stroke(1, config->colors.outline.with_alpha(0.4f))
-                ->cornerRadius(10)
-                ->build();
-
-            auto win1 = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->padding(8, 8)
-                ->gravity(Gravity::Center)
-                ->backgroundColor(config->colors.surface)
-                ->stroke(p_border, config->colors.primary)
-                ->cornerRadius(p_radius)
-                ->build();
-            auto win1_title = TextViewBuilder::create()
-                ->text("Active Window (Super+1)")
-                ->caption(true)
-                ->textColor(config->colors.primary)
-                ->build();
-            win1->add_view(win1_title);
-            LayoutParams w1_lp;
-            w1_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            w1_lp.height = 64;
-            w1_lp.weight = 1.0f;
-            monitor_canvas->add_view(win1, w1_lp);
-
-            auto win2 = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->padding(8, 8)
-                ->gravity(Gravity::Center)
-                ->backgroundColor(config->colors.surface)
-                ->stroke(std::max(1, p_border), config->colors.outline.with_alpha(0.5f))
-                ->cornerRadius(p_radius)
-                ->build();
-            auto win2_title = TextViewBuilder::create()
-                ->text("Inactive Window (Super+2)")
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant)
-                ->build();
-            win2->add_view(win2_title);
-            LayoutParams w2_lp;
-            w2_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            w2_lp.height = 64;
-            w2_lp.weight = 1.0f;
-            monitor_canvas->add_view(win2, w2_lp);
-
-            auto preview_label = TextViewBuilder::create()
-                ->text("󰍹  Live Workspace Layout Preview (Gaps & Borders)")
-                ->caption(true)
-                ->textColor(config->colors.primary)
-                ->build();
-            main_card->add_view(preview_label);
-
-            LayoutParams mc_lp;
-            mc_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            mc_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            main_card->add_view(monitor_canvas, mc_lp);
         }
 
         // -------------------------------------------------------------
         // 3. Dwindle (BSP) Tuning
         // -------------------------------------------------------------
         if (show_split) {
-            auto s3_title = TextViewBuilder::create()
-                ->text("Dwindle (BSP) Tuning")
-                ->caption(true)
-                ->textColor(config->colors.primary)
-                ->build();
-            main_card->add_view(s3_title);
-
-            bool is_dwindle_active = (item->tiling_cfg->layout_mode.find("Dwindle") != std::string::npos);
-            auto banner = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->padding(12, 10)
-                ->spacing(4)
-                ->backgroundColor(is_dwindle_active ? config->colors.primary_container.with_alpha(0.35f) : config->colors.surface_variant.with_alpha(0.35f))
-                ->stroke(1, is_dwindle_active ? config->colors.primary.with_alpha(0.4f) : config->colors.outline.with_alpha(0.25f))
-                ->cornerRadius(8)
-                ->build();
-
-            auto banner_title = TextViewBuilder::create()
-                ->text(is_dwindle_active ? "󰋼  Active Layout Engine" : "󰅚  Inactive for Current Layout")
-                ->caption(true)
-                ->textColor(is_dwindle_active ? config->colors.primary : config->colors.on_surface_variant)
-                ->build();
-            banner->add_view(banner_title);
-
-            std::string banner_msg = is_dwindle_active 
-                ? "These binary space partition options directly govern window division rules in the active Dwindle layout."
-                : "Active layout is '" + item->tiling_cfg->layout_mode + "'. These options configure the 'dwindle' block in miquland.conf and apply when switching to Dwindle.";
-            auto banner_text = TextViewBuilder::create()
-                ->text(banner_msg)
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant)
-                ->build();
-            banner->add_view(banner_text);
-
-            LayoutParams b_lp;
-            b_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            b_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-            main_card->add_view(banner, b_lp);
-
             // Default Split Ratio (20% to 80%)
             float initial_ratio_norm = (item->tiling_cfg->default_split_ratio - 0.20f) / 0.60f;
             int r_pct = static_cast<int>(std::round(item->tiling_cfg->default_split_ratio * 100.0f));
@@ -3050,13 +2943,6 @@ void MillerView::rebuild_preview_column() {
         // 4. Focus Behaviour
         // -------------------------------------------------------------
         if (show_focus) {
-            auto s4_title = TextViewBuilder::create()
-                ->text("Focus Behaviour")
-                ->caption(true)
-                ->textColor(config->colors.primary)
-                ->build();
-            main_card->add_view(s4_title);
-
             // Focus Follows Mouse
             add_toggle_row(
                 "Focus follows mouse (Sloppy focus)",

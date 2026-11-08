@@ -148,22 +148,22 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         auto shared_tiling = std::make_shared<TilingConfig>();
 
         // 2.1 Layout Mode
-        auto tile_mode = SettingItem::create_leaf("tile_mode", "Layout Mode", "Tiling algorithm, BSP division, master-stack & monocle", "󰕰");
+        auto tile_mode = SettingItem::create_leaf("tile_mode", "Layout Mode", "", "󰕰");
         tile_mode->is_tiling_config = true;
         tile_mode->tiling_cfg = shared_tiling;
 
         // 2.2 Windows
-        auto tile_windows = SettingItem::create_leaf("tile_windows", "Windows", "Gaps, border width, corner radius, styling & auto-float", "󰃟");
+        auto tile_windows = SettingItem::create_leaf("tile_windows", "Windows", "", "󰃟");
         tile_windows->is_tiling_config = true;
         tile_windows->tiling_cfg = shared_tiling;
 
         // 2.3 Dwindle (BSP) Tuning
-        auto tile_split = SettingItem::create_leaf("tile_split", "Dwindle (BSP) Tuning", "Smart cursor split, focus division & aspect ratio for Dwindle", "󰤻");
+        auto tile_split = SettingItem::create_leaf("tile_split", "Dwindle (BSP) Tuning", "", "󰤻");
         tile_split->is_tiling_config = true;
         tile_split->tiling_cfg = shared_tiling;
 
         // 2.4 Focus Behaviour
-        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus Behaviour", "Cursor hover focus, window raise, warp & workspace focus", "󰍽");
+        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus Behaviour", "", "󰍽");
         tile_focus->is_tiling_config = true;
         tile_focus->tiling_cfg = shared_tiling;
 
