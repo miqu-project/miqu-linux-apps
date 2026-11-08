@@ -11,6 +11,27 @@ namespace fs = std::filesystem;
 namespace miqu {
 
 namespace {
+
+inline int get_card_radius(const std::shared_ptr<Config>& config = nullptr) {
+    auto cfg = config ? config : Config::get();
+    return cfg ? cfg->metrics.corner_radius : 12;
+}
+
+inline int get_inner_radius(const std::shared_ptr<Config>& config = nullptr) {
+    auto cfg = config ? config : Config::get();
+    return cfg ? std::max(0, cfg->metrics.corner_radius - 4) : 8;
+}
+
+inline int get_btn_radius(const std::shared_ptr<Config>& config = nullptr) {
+    auto cfg = config ? config : Config::get();
+    return cfg ? std::max(0, cfg->metrics.corner_radius - 6) : 6;
+}
+
+inline int get_chip_radius(const std::shared_ptr<Config>& config = nullptr) {
+    auto cfg = config ? config : Config::get();
+    return cfg ? std::max(0, cfg->metrics.corner_radius / 3) : 4;
+}
+
 std::shared_ptr<View> create_telemetry_card(const std::vector<TelemetryEntry>& telemetry,
                                             const std::shared_ptr<Config>& config,
                                             const std::string& card_title = "Technical specifications") {
@@ -20,7 +41,7 @@ std::shared_ptr<View> create_telemetry_card(const std::vector<TelemetryEntry>& t
         ->padding(16, 14)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(12)
+        ->cornerRadius(get_card_radius(config))
         ->build();
 
     auto telem_title = TextViewBuilder::create()
@@ -183,12 +204,7 @@ void MillerView::sync_theme() {
 
 bool MillerView::on_key(const KeyPressEvent& event) {
     (void)event;
-    // In MillerView, keyboard navigation is managed strictly and authoritatively
-    // through MillerView's navigation methods (navigate_up, navigate_down, etc.).
-    // We consume key events here to prevent un-focused child view hierarchies
-    // (such as preview column spinners and controls) from receiving accidental
-    // fallthrough key dispatches from Window::dispatch_key_event.
-    return true;
+    return false;
 }
 
 const std::vector<std::shared_ptr<SettingItem>>& MillerView::get_current_list() const {
@@ -303,7 +319,7 @@ void MillerView::rebuild_parent_column() {
             ->style(is_active ? CardStyle::Outlined : CardStyle::Filled)
             ->backgroundColor(bg)
             ->stroke(stroke_w, stroke_col)
-            ->cornerRadius(8)
+            ->cornerRadius(get_inner_radius(config))
             ->elevation(0)
             ->addView(item_row)
             ->build();
@@ -449,7 +465,7 @@ void MillerView::rebuild_current_column() {
             ->style(is_selected ? CardStyle::Outlined : CardStyle::Filled)
             ->backgroundColor(bg)
             ->stroke(stroke_w, stroke_col)
-            ->cornerRadius(8)
+            ->cornerRadius(get_inner_radius(config))
             ->elevation(0)
             ->addView(item_row)
             ->build();
@@ -495,7 +511,7 @@ std::shared_ptr<LinearLayout> MillerView::create_form_card(const std::shared_ptr
         ->spacing(12)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(12)
+        ->cornerRadius(get_card_radius(config))
         ->build();
 }
 
@@ -509,15 +525,6 @@ void MillerView::add_form_divider(const std::shared_ptr<LinearLayout>& card, con
     card->add_view(divider, dlp);
 }
 
-int MillerView::register_actionable_control(PreviewControlType type,
-                                            std::function<void()> on_activate,
-                                            std::function<void()> on_open_dropdown,
-                                            std::function<void(float)> on_adjust) {
-    int idx = static_cast<int>(m_actionable_controls.size());
-    m_actionable_controls.push_back({type, std::move(on_activate), std::move(on_open_dropdown), std::move(on_adjust)});
-    return idx;
-}
-
 void MillerView::add_form_toggle(
     const std::shared_ptr<LinearLayout>& card,
     const std::shared_ptr<Config>& config,
@@ -526,17 +533,13 @@ void MillerView::add_form_toggle(
     bool checked,
     std::function<void(bool)> on_toggle)
 {
-    int ctrl_idx = static_cast<int>(m_actionable_controls.size());
-    bool focused = is_control_focused(ctrl_idx);
-
     auto row = LinearLayoutBuilder::create()
         ->orientation(Orientation::Horizontal)
         ->gravity(Gravity::CenterVertical)
         ->padding(10, 8)
         ->spacing(12)
-        ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
-        ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
-        ->cornerRadius(8)
+        ->backgroundColor(Color::transparent())
+        ->cornerRadius(get_inner_radius(config))
         ->build();
 
     auto box = LinearLayoutBuilder::create()
@@ -576,10 +579,6 @@ void MillerView::add_form_toggle(
         ->build();
     row->add_view(sw);
     card->add_view(row);
-
-    register_actionable_control(PreviewControlType::Switch, [sw]() {
-        if (sw) sw->toggle();
-    });
 }
 
 void MillerView::add_form_slider(
@@ -591,16 +590,12 @@ void MillerView::add_form_slider(
     const std::string& initial_label,
     std::function<std::string(float)> on_change)
 {
-    int ctrl_idx = static_cast<int>(m_actionable_controls.size());
-    bool focused = is_control_focused(ctrl_idx);
-
     auto block = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->spacing(4)
         ->padding(10, 8)
-        ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
-        ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
-        ->cornerRadius(8)
+        ->backgroundColor(Color::transparent())
+        ->cornerRadius(get_inner_radius(config))
         ->build();
 
     auto header = LinearLayoutBuilder::create()
@@ -665,19 +660,6 @@ void MillerView::add_form_slider(
     block->add_view(slider, sl_lp);
 
     card->add_view(block);
-
-    register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [slider, val_label, on_change](float delta) {
-        if (!slider) return;
-        float new_val = std::clamp(slider->get_value() + delta, 0.0f, 1.0f);
-        slider->set_value(new_val);
-        if (on_change) {
-            std::string text = on_change(new_val);
-            if (val_label) {
-                val_label->set_text(text);
-                val_label->request_redraw();
-            }
-        }
-    });
 }
 
 void MillerView::add_form_spinner(
@@ -689,16 +671,12 @@ void MillerView::add_form_spinner(
     int cur_idx,
     std::function<void(int, const std::string&)> on_select)
 {
-    int ctrl_idx = static_cast<int>(m_actionable_controls.size());
-    bool focused = is_control_focused(ctrl_idx);
-
     auto block = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->spacing(6)
         ->padding(10, 8)
-        ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
-        ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
-        ->cornerRadius(8)
+        ->backgroundColor(Color::transparent())
+        ->cornerRadius(get_inner_radius(config))
         ->build();
 
     auto box = LinearLayoutBuilder::create()
@@ -728,7 +706,7 @@ void MillerView::add_form_spinner(
         ->selectedIndex(cur_idx)
         ->fontSize(config->metrics.font_size)
         ->padding(12, 6)
-        ->cornerRadius(8)
+        ->cornerRadius(get_inner_radius(config))
         ->onItemSelected([this, on_select](int idx, const std::string& val) {
             if (on_select) on_select(idx, val);
             notify_state_changed();
@@ -737,12 +715,6 @@ void MillerView::add_form_spinner(
     LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
     block->add_view(spinner, sp_lp);
     card->add_view(block);
-
-    register_actionable_control(PreviewControlType::Spinner,
-        [spinner]() { if (spinner) spinner->open_dropdown(); },
-        [spinner]() { if (spinner) spinner->open_dropdown(); },
-        nullptr
-    );
 }
 
 // ==============================================================================
@@ -815,7 +787,7 @@ void MillerView::render_category_children_preview(const std::shared_ptr<SettingI
         auto row_card = CardViewBuilder::create()
             ->style(CardStyle::Filled)
             ->backgroundColor(Color::transparent())
-            ->cornerRadius(8)
+            ->cornerRadius(get_inner_radius(config))
             ->elevation(0)
             ->addView(item_row)
             ->build();
@@ -1143,7 +1115,7 @@ void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& it
         ->spacing(16)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(12)
+        ->cornerRadius(get_card_radius(config))
         ->build();
 
     // 1. Display Aspect Ratio Rectangle (16:9 Ratio - 320x180 px)
@@ -1152,7 +1124,7 @@ void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& it
         ->gravity(Gravity::Center)
         ->backgroundColor(config->colors.surface_variant.with_alpha(0.45f))
         ->stroke(1, config->colors.outline.with_alpha(0.35f))
-        ->cornerRadius(10)
+        ->cornerRadius(get_inner_radius(config))
         ->spacing(4)
         ->build();
 
@@ -1190,9 +1162,6 @@ void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& it
         ->spacing(10)
         ->build();
 
-    int b_idx = static_cast<int>(m_actionable_controls.size());
-    bool b_focused = is_control_focused(b_idx);
-
     auto on_browse = [this, item]() {
         static const std::vector<std::string> mock_wallpapers = {
             "aurora_minimal.png",
@@ -1213,18 +1182,13 @@ void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& it
         ->text("Browse")
         ->style(ButtonStyle::Outlined)
         ->padding(14, 6)
-        ->cornerRadius(8)
+        ->cornerRadius(get_inner_radius(config))
         ->onClick(on_browse)
         ->build();
-    browse_btn->set_border_width(b_focused ? 2.0 : 1.0);
-    browse_btn->set_border_color(b_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
-    browse_btn->set_selected(b_focused);
 
     LayoutParams b_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
     b_lp.gravity = Gravity::CenterVertical;
     bottom_row->add_view(browse_btn, b_lp);
-
-    register_actionable_control(PreviewControlType::Button, on_browse);
 
     int cur_fit_idx = 0;
     for (size_t i = 0; i < item->wallpaper_cfg->fit_modes.size(); ++i) {
@@ -1234,21 +1198,12 @@ void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& it
         }
     }
 
-    int s_idx = static_cast<int>(m_actionable_controls.size());
-    bool s_focused = is_control_focused(s_idx);
-
-    auto spin_container = LinearLayoutBuilder::create()
-        ->padding(2, 2)
-        ->stroke(s_focused ? 2 : 0, s_focused ? config->colors.primary : Color::transparent())
-        ->cornerRadius(10)
-        ->build();
-
     auto fit_spinner = SpinnerBuilder::create()
         ->items(item->wallpaper_cfg->fit_modes)
         ->selectedIndex(cur_fit_idx)
         ->fontSize(config->metrics.font_size)
         ->padding(12, 6)
-        ->cornerRadius(8)
+        ->cornerRadius(get_inner_radius(config))
         ->onItemSelected([item](int idx, const std::string& val) {
             (void)idx;
             item->wallpaper_cfg->fit_mode = val;
@@ -1256,17 +1211,7 @@ void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& it
         ->build();
     LayoutParams s_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
     s_lp.gravity = Gravity::CenterVertical;
-    spin_container->add_view(fit_spinner, s_lp);
-    bottom_row->add_view(spin_container, s_lp);
-
-    register_actionable_control(PreviewControlType::Spinner,
-        [fit_spinner]() { if (fit_spinner) fit_spinner->open_dropdown(); },
-        [fit_spinner]() { if (fit_spinner) fit_spinner->open_dropdown(); },
-        nullptr
-    );
-
-    int a_idx = static_cast<int>(m_actionable_controls.size());
-    bool a_focused = is_control_focused(a_idx);
+    bottom_row->add_view(fit_spinner, s_lp);
 
     auto on_apply = [this, item]() {
         item->last_action_message = "Wallpaper applied: " + item->wallpaper_cfg->current_wallpaper;
@@ -1277,18 +1222,13 @@ void MillerView::render_wallpaper_preview(const std::shared_ptr<SettingItem>& it
         ->text("Apply")
         ->primary(true)
         ->padding(16, 6)
-        ->cornerRadius(8)
+        ->cornerRadius(get_inner_radius(config))
         ->onClick(on_apply)
         ->build();
-    apply_btn->set_border_width(a_focused ? 2.0 : 0.0);
-    apply_btn->set_border_color(a_focused ? config->colors.on_primary : Color::transparent());
-    apply_btn->set_selected(a_focused);
 
     LayoutParams a_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
     a_lp.gravity = Gravity::CenterVertical;
     bottom_row->add_view(apply_btn, a_lp);
-
-    register_actionable_control(PreviewControlType::Button, on_apply);
 
     main_card->add_view(bottom_row);
     add_preview_card(main_card);
@@ -1302,7 +1242,7 @@ void MillerView::render_keybindings_preview(const std::shared_ptr<SettingItem>& 
         ->spacing(10)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(12)
+        ->cornerRadius(get_card_radius(config))
         ->build();
 
     for (size_t i = 0; i < item->keybindings.size(); ++i) {
@@ -1375,7 +1315,7 @@ void MillerView::render_keybindings_preview(const std::shared_ptr<SettingItem>& 
                 ->style(CardStyle::Filled)
                 ->backgroundColor(config->colors.surface_variant.with_alpha(0.6f))
                 ->stroke(1, config->colors.outline.with_alpha(0.35f))
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->elevation(0)
                 ->addView(
                     TextViewBuilder::create()
@@ -1759,7 +1699,7 @@ void MillerView::render_timeout_lock_preview(const std::shared_ptr<SettingItem>&
         ->spacing(8)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(12)
+        ->cornerRadius(get_card_radius(config))
         ->build();
 
     auto defs_title_row = LinearLayoutBuilder::create()
@@ -1841,7 +1781,6 @@ void MillerView::deferred_rebuild_preview(int delay_ms) {
 
 void MillerView::rebuild_preview_column() {
     m_preview_layout->clear_views();
-    m_actionable_controls.clear();
     m_active_primary_switch = nullptr;
     m_active_secondary_switch = nullptr;
     m_active_slider = nullptr;
@@ -1871,15 +1810,13 @@ void MillerView::rebuild_preview_column() {
         bool is_speaker = (item->id == "sound_speaker");
 
         // 1. Seekbar Card (Volume for Speaker, Gain for Mic)
-        int s_idx = static_cast<int>(m_actionable_controls.size());
-        bool slider_focused = is_control_focused(s_idx);
         auto seekbar_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->padding(16, 14)
             ->spacing(10)
             ->backgroundColor(config->colors.surface)
-            ->stroke(slider_focused ? 2 : 1, slider_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto s_header_row = LinearLayoutBuilder::create()
@@ -1924,20 +1861,14 @@ void MillerView::rebuild_preview_column() {
         seekbar_card->add_view(m_active_slider, slider_lp);
         add_preview_card(seekbar_card);
 
-        register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this](float delta) {
-            adjust_active_slider(delta);
-        });
-
         // 2. Mute Card (Toggle Switch)
-        int m_idx = static_cast<int>(m_actionable_controls.size());
-        bool mute_focused = is_control_focused(m_idx);
         auto mute_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(mute_focused ? 2 : 1, mute_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto mute_lbl_box = LinearLayoutBuilder::create()
@@ -1984,10 +1915,6 @@ void MillerView::rebuild_preview_column() {
         mute_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(mute_card);
 
-        register_actionable_control(PreviewControlType::Switch, [this]() {
-            if (m_active_primary_switch) m_active_primary_switch->toggle();
-        });
-
         // 3. Audio Device Specifications
         if (!item->telemetry.empty()) {
             add_preview_card(create_telemetry_card(item->telemetry, config, "Audio device specifications"));
@@ -1999,15 +1926,13 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Clean Layout for Wi-Fi: Switch (like Speaker mute), Networks list, Scan button, Telemetry
     if (item->id == "net_wifi") {
         // 1. Wi-Fi Power Toggle Card (Just like mute button of speaker)
-        int sw_idx = static_cast<int>(m_actionable_controls.size());
-        bool switch_focused = is_control_focused(sw_idx);
         auto wifi_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(switch_focused ? 2 : 1, switch_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto wifi_icon = TextViewBuilder::create()
@@ -2064,10 +1989,6 @@ void MillerView::rebuild_preview_column() {
         wifi_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(wifi_card);
 
-        register_actionable_control(PreviewControlType::Switch, [this]() {
-            if (m_active_primary_switch) m_active_primary_switch->toggle();
-        });
-
         // 2. Networks Section (Visible when Wi-Fi is enabled)
         if (item->switch_val) {
             auto net_card = LinearLayoutBuilder::create()
@@ -2076,7 +1997,7 @@ void MillerView::rebuild_preview_column() {
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
                 ->stroke(1, config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             // Header row with "Networks" title and "Scan" button
@@ -2096,9 +2017,6 @@ void MillerView::rebuild_preview_column() {
             nt_lp.gravity = Gravity::CenterVertical;
             net_header_row->add_view(net_title, nt_lp);
 
-            int sc_idx = static_cast<int>(m_actionable_controls.size());
-            bool scan_focused = is_control_focused(sc_idx);
-
             auto on_scan = [this, item]() {
                 item->last_action_message = "Scan completed • 5 networks found";
                 rebuild_preview_column();
@@ -2111,12 +2029,9 @@ void MillerView::rebuild_preview_column() {
                 ->textSize(config->metrics.font_size)
                 ->textColor(config->colors.primary)
                 ->padding(10, 4)
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->onClick(on_scan)
                 ->build();
-            scan_btn->set_border_width(scan_focused ? 2.0 : 0.0);
-            scan_btn->set_border_color(scan_focused ? config->colors.primary : Color::transparent());
-            scan_btn->set_selected(scan_focused);
 
             LayoutParams scan_lp;
             scan_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -2124,8 +2039,6 @@ void MillerView::rebuild_preview_column() {
             scan_lp.gravity = Gravity::CenterVertical;
             net_header_row->add_view(scan_btn, scan_lp);
             net_card->add_view(net_header_row);
-
-            register_actionable_control(PreviewControlType::Button, on_scan);
 
             if (!item->last_action_message.empty()) {
                 auto scan_status = TextViewBuilder::create()
@@ -2211,14 +2124,11 @@ void MillerView::rebuild_preview_column() {
                 }
 
                 Color row_bg = is_conn ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
-                int net_idx = static_cast<int>(m_actionable_controls.size());
-                bool net_focused = is_control_focused(net_idx);
 
                 auto net_row_card = CardViewBuilder::create()
                     ->style(CardStyle::Filled)
                     ->backgroundColor(row_bg)
-                    ->stroke(net_focused ? 2 : 0, net_focused ? config->colors.primary : Color::transparent())
-                    ->cornerRadius(8)
+                    ->cornerRadius(get_inner_radius(config))
                     ->elevation(0)
                     ->addView(row_content)
                     ->build();
@@ -2238,7 +2148,6 @@ void MillerView::rebuild_preview_column() {
 
                 // Clicking network: switches connection to this network
                 net_row_card->set_on_click_listener(on_connect);
-                register_actionable_control(PreviewControlType::Button, on_connect);
 
                 net_card->add_view(net_row_card);
             }
@@ -2257,15 +2166,13 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Clean Layout for Bluetooth: Switch (like Wi-Fi), Devices list, Scan button, Telemetry
     if (item->id == "net_bluetooth") {
         // 1. Bluetooth Power Toggle Card
-        int sw_idx = static_cast<int>(m_actionable_controls.size());
-        bool switch_focused = is_control_focused(sw_idx);
         auto bt_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(switch_focused ? 2 : 1, switch_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto bt_icon = TextViewBuilder::create()
@@ -2338,10 +2245,6 @@ void MillerView::rebuild_preview_column() {
         bt_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(bt_card);
 
-        register_actionable_control(PreviewControlType::Switch, [this]() {
-            if (m_active_primary_switch) m_active_primary_switch->toggle();
-        });
-
         // 2. Devices Section (Visible when Bluetooth is enabled)
         if (item->switch_val) {
             auto dev_card = LinearLayoutBuilder::create()
@@ -2350,7 +2253,7 @@ void MillerView::rebuild_preview_column() {
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
                 ->stroke(1, config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             // Header row with "Devices" title and "Scan" button
@@ -2369,9 +2272,6 @@ void MillerView::rebuild_preview_column() {
             dt_lp.weight = 1.0f;
             dt_lp.gravity = Gravity::CenterVertical;
             dev_header_row->add_view(dev_title, dt_lp);
-
-            int sc_idx = static_cast<int>(m_actionable_controls.size());
-            bool scan_focused = is_control_focused(sc_idx);
 
             auto on_scan = [this, item]() {
                 bool found_new = false;
@@ -2413,12 +2313,9 @@ void MillerView::rebuild_preview_column() {
                 ->textSize(config->metrics.font_size)
                 ->textColor(config->colors.primary)
                 ->padding(10, 4)
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->onClick(on_scan)
                 ->build();
-            scan_btn->set_border_width(scan_focused ? 2.0 : 0.0);
-            scan_btn->set_border_color(scan_focused ? config->colors.primary : Color::transparent());
-            scan_btn->set_selected(scan_focused);
 
             LayoutParams scan_lp;
             scan_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -2426,8 +2323,6 @@ void MillerView::rebuild_preview_column() {
             scan_lp.gravity = Gravity::CenterVertical;
             dev_header_row->add_view(scan_btn, scan_lp);
             dev_card->add_view(dev_header_row);
-
-            register_actionable_control(PreviewControlType::Button, on_scan);
 
             if (!item->last_action_message.empty()) {
                 auto scan_status = TextViewBuilder::create()
@@ -2509,14 +2404,11 @@ void MillerView::rebuild_preview_column() {
                 }
 
                 Color row_bg = is_conn ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
-                int dev_idx = static_cast<int>(m_actionable_controls.size());
-                bool dev_focused = is_control_focused(dev_idx);
 
                 auto dev_row_card = CardViewBuilder::create()
                     ->style(CardStyle::Filled)
                     ->backgroundColor(row_bg)
-                    ->stroke(dev_focused ? 2 : 0, dev_focused ? config->colors.primary : Color::transparent())
-                    ->cornerRadius(8)
+                    ->cornerRadius(get_inner_radius(config))
                     ->elevation(0)
                     ->addView(row_content)
                     ->build();
@@ -2539,7 +2431,6 @@ void MillerView::rebuild_preview_column() {
 
                 // Clicking device: connects it (or pairs & connects if Tap to pair)
                 dev_row_card->set_on_click_listener(on_dev_connect);
-                register_actionable_control(PreviewControlType::Button, on_dev_connect);
 
                 dev_card->add_view(dev_row_card);
             }
@@ -2567,7 +2458,7 @@ void MillerView::rebuild_preview_column() {
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
                 ->stroke(1, config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             // Header row with "Wired Connection" title and "Renew DHCP" button
@@ -2587,9 +2478,6 @@ void MillerView::rebuild_preview_column() {
             ht_lp.gravity = Gravity::CenterVertical;
             header_row->add_view(header_title, ht_lp);
 
-            int r_idx = static_cast<int>(m_actionable_controls.size());
-            bool renew_focused = is_control_focused(r_idx);
-
             auto on_renew = [this, item]() {
                 item->last_action_message = "DHCP lease renewed • IPv4 192.168.1.105";
                 rebuild_preview_column();
@@ -2602,12 +2490,9 @@ void MillerView::rebuild_preview_column() {
                 ->textSize(config->metrics.font_size)
                 ->textColor(config->colors.primary)
                 ->padding(10, 4)
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->onClick(on_renew)
                 ->build();
-            renew_btn->set_border_width(renew_focused ? 2.0 : 0.0);
-            renew_btn->set_border_color(renew_focused ? config->colors.primary : Color::transparent());
-            renew_btn->set_selected(renew_focused);
 
             LayoutParams renew_lp;
             renew_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -2615,8 +2500,6 @@ void MillerView::rebuild_preview_column() {
             renew_lp.gravity = Gravity::CenterVertical;
             header_row->add_view(renew_btn, renew_lp);
             profile_card->add_view(header_row);
-
-            register_actionable_control(PreviewControlType::Button, on_renew);
 
             if (!item->last_action_message.empty()) {
                 auto renew_status = TextViewBuilder::create()
@@ -2682,7 +2565,7 @@ void MillerView::rebuild_preview_column() {
             auto conn_row_card = CardViewBuilder::create()
                 ->style(CardStyle::Filled)
                 ->backgroundColor(config->colors.primary_container.with_alpha(0.35f))
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->elevation(0)
                 ->addView(conn_row_content)
                 ->build();
@@ -2738,15 +2621,13 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Clean Layout for Airplane Mode: Master Switch + Bottom Info of affected radios
     if (item->id == "net_airplane") {
         // 1. Airplane Mode Primary Switch Card
-        int sw_idx = static_cast<int>(m_actionable_controls.size());
-        bool switch_focused = is_control_focused(sw_idx);
         auto airplane_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(switch_focused ? 2 : 1, switch_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto plane_icon = TextViewBuilder::create()
@@ -2803,10 +2684,6 @@ void MillerView::rebuild_preview_column() {
         airplane_card->add_view(m_active_primary_switch, sw_lp);
         add_preview_card(airplane_card);
 
-        register_actionable_control(PreviewControlType::Switch, [this]() {
-            if (m_active_primary_switch) m_active_primary_switch->toggle();
-        });
-
         // 2. Bottom Info Card: What things are going to be disabled
         auto info_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
@@ -2814,7 +2691,7 @@ void MillerView::rebuild_preview_column() {
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto info_title = TextViewBuilder::create()
@@ -2895,7 +2772,7 @@ void MillerView::rebuild_preview_column() {
             auto pill = CardViewBuilder::create()
                 ->style(CardStyle::Filled)
                 ->backgroundColor(badge_bg)
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->elevation(0)
                 ->addView(status_view)
                 ->build();
@@ -2910,7 +2787,7 @@ void MillerView::rebuild_preview_column() {
             auto row_card = CardViewBuilder::create()
                 ->style(CardStyle::Filled)
                 ->backgroundColor(row_bg)
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->elevation(0)
                 ->addView(row_content)
                 ->build();
@@ -2931,7 +2808,7 @@ void MillerView::rebuild_preview_column() {
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto cfg_title = TextViewBuilder::create()
@@ -3013,16 +2890,13 @@ void MillerView::rebuild_preview_column() {
             }
         }
 
-        int sp_idx = static_cast<int>(m_actionable_controls.size());
-        bool sp_focused = is_control_focused(sp_idx);
-
         // Single Spinner on a NEW line
         auto dns_spinner = SpinnerBuilder::create()
             ->items(item->private_dns_cfg.options)
             ->selectedIndex(sel_idx)
             ->fontSize(config->metrics.font_size)
             ->padding(12, 6)
-            ->cornerRadius(8)
+            ->cornerRadius(get_inner_radius(config))
             ->onItemSelected([item, custom_edit, sync_dns_ui](int idx, const std::string& val) {
                 (void)idx;
                 item->private_dns_cfg.selected_option = val;
@@ -3044,21 +2918,8 @@ void MillerView::rebuild_preview_column() {
             })
             ->build();
 
-        auto spin_container = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->stroke(sp_focused ? 2 : 0, sp_focused ? config->colors.primary : Color::transparent())
-            ->cornerRadius(8)
-            ->build();
-
         LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        spin_container->add_view(dns_spinner, sp_lp);
-        cfg_card->add_view(spin_container, sp_lp);
-
-        register_actionable_control(PreviewControlType::Spinner,
-            [dns_spinner]() { if (dns_spinner) dns_spinner->open_dropdown(); },
-            [dns_spinner]() { if (dns_spinner) dns_spinner->open_dropdown(); },
-            nullptr
-        );
+        cfg_card->add_view(dns_spinner, sp_lp);
 
         // Hostname Label
         auto host_lbl = TextViewBuilder::create()
@@ -3088,7 +2949,7 @@ void MillerView::rebuild_preview_column() {
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto ep_header = LinearLayoutBuilder::create()
@@ -3113,7 +2974,7 @@ void MillerView::rebuild_preview_column() {
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.primary)
             ->padding(10, 4)
-            ->cornerRadius(6)
+            ->cornerRadius(get_btn_radius(config))
             ->onClick([this, item]() {
                 item->last_action_message = "DNS handshake verified • Latency: 3.8 ms";
                 rebuild_preview_column();
@@ -3191,15 +3052,13 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Interactive UI for Firewall
     if (item->is_firewall) {
         // 1. Top Card: Simple Bluetooth-like On/Off Switch with Subtitle "Powered by UFW"
-        int sw_idx = static_cast<int>(m_actionable_controls.size());
-        bool switch_focused = is_control_focused(sw_idx);
         auto fw_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(switch_focused ? 2 : 1, switch_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto fw_icon = TextViewBuilder::create()
@@ -3256,10 +3115,6 @@ void MillerView::rebuild_preview_column() {
 
         add_preview_card(fw_card);
 
-        register_actionable_control(PreviewControlType::Switch, [this]() {
-            if (m_active_primary_switch) m_active_primary_switch->toggle();
-        });
-
         if (item->firewall_cfg.enabled) {
             // 2. Policy Card: Incoming Spinner, Outgoing Spinner
             auto policy_card = LinearLayoutBuilder::create()
@@ -3268,7 +3123,7 @@ void MillerView::rebuild_preview_column() {
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
                 ->stroke(1, config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             auto policy_title = TextViewBuilder::create()
@@ -3295,35 +3150,20 @@ void MillerView::rebuild_preview_column() {
                 }
             }
 
-            int in_idx = static_cast<int>(m_actionable_controls.size());
-            bool in_focused = is_control_focused(in_idx);
-
             auto in_spinner = SpinnerBuilder::create()
                 ->items(in_policies)
                 ->selectedIndex(in_sel)
                 ->fontSize(config->metrics.font_size)
                 ->padding(12, 6)
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->onItemSelected([item, in_policies](int idx, const std::string& val) {
                     (void)idx;
                     item->firewall_cfg.incoming_policy = val;
                 })
                 ->build();
 
-            auto in_container = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->stroke(in_focused ? 2 : 0, in_focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
-                ->build();
             LayoutParams in_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-            in_container->add_view(in_spinner, in_sp_lp);
-            policy_card->add_view(in_container, in_sp_lp);
-
-            register_actionable_control(PreviewControlType::Spinner,
-                [in_spinner]() { if (in_spinner) in_spinner->open_dropdown(); },
-                [in_spinner]() { if (in_spinner) in_spinner->open_dropdown(); },
-                nullptr
-            );
+            policy_card->add_view(in_spinner, in_sp_lp);
 
             // Outgoing traffic
             auto out_lbl = TextViewBuilder::create()
@@ -3342,35 +3182,20 @@ void MillerView::rebuild_preview_column() {
                 }
             }
 
-            int out_idx = static_cast<int>(m_actionable_controls.size());
-            bool out_focused = is_control_focused(out_idx);
-
             auto out_spinner = SpinnerBuilder::create()
                 ->items(out_policies)
                 ->selectedIndex(out_sel)
                 ->fontSize(config->metrics.font_size)
                 ->padding(12, 6)
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->onItemSelected([item, out_policies](int idx, const std::string& val) {
                     (void)idx;
                     item->firewall_cfg.outgoing_policy = val;
                 })
                 ->build();
 
-            auto out_container = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->stroke(out_focused ? 2 : 0, out_focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
-                ->build();
             LayoutParams out_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-            out_container->add_view(out_spinner, out_sp_lp);
-            policy_card->add_view(out_container, out_sp_lp);
-
-            register_actionable_control(PreviewControlType::Spinner,
-                [out_spinner]() { if (out_spinner) out_spinner->open_dropdown(); },
-                [out_spinner]() { if (out_spinner) out_spinner->open_dropdown(); },
-                nullptr
-            );
+            policy_card->add_view(out_spinner, out_sp_lp);
 
             add_preview_card(policy_card);
 
@@ -3381,7 +3206,7 @@ void MillerView::rebuild_preview_column() {
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
                 ->stroke(1, config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             auto preset_title = TextViewBuilder::create()
@@ -3420,15 +3245,12 @@ void MillerView::rebuild_preview_column() {
                 }
             }
 
-            int p_idx = static_cast<int>(m_actionable_controls.size());
-            bool p_focused = is_control_focused(p_idx);
-
             auto preset_spinner = SpinnerBuilder::create()
                 ->items(presets)
                 ->selectedIndex(preset_sel)
                 ->fontSize(config->metrics.font_size)
                 ->padding(12, 6)
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->onItemSelected([item, preset_desc, get_preset_desc](int idx, const std::string& val) {
                     (void)idx;
                     item->firewall_cfg.selected_preset = val;
@@ -3437,21 +3259,9 @@ void MillerView::rebuild_preview_column() {
                 })
                 ->build();
 
-            auto p_container = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->stroke(p_focused ? 2 : 0, p_focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
-                ->build();
             LayoutParams preset_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-            p_container->add_view(preset_spinner, preset_sp_lp);
-            preset_card->add_view(p_container, preset_sp_lp);
+            preset_card->add_view(preset_spinner, preset_sp_lp);
             preset_card->add_view(preset_desc);
-
-            register_actionable_control(PreviewControlType::Spinner,
-                [preset_spinner]() { if (preset_spinner) preset_spinner->open_dropdown(); },
-                [preset_spinner]() { if (preset_spinner) preset_spinner->open_dropdown(); },
-                nullptr
-            );
 
             add_preview_card(preset_card);
 
@@ -3462,7 +3272,7 @@ void MillerView::rebuild_preview_column() {
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
                 ->stroke(1, config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             // Card Header Row: Title on Left, Add Rule Button on Right
@@ -3482,18 +3292,12 @@ void MillerView::rebuild_preview_column() {
             rtitle_lp.gravity = Gravity::CenterVertical;
             rules_hdr->add_view(rules_title, rtitle_lp);
 
-            int add_idx = static_cast<int>(m_actionable_controls.size());
-            bool add_focused = is_control_focused(add_idx);
-
             auto add_btn = ButtonBuilder::create()
                 ->text("+ Add Rule")
                 ->style(ButtonStyle::Outlined)
                 ->padding(12, 4)
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->build();
-            add_btn->set_border_width(add_focused ? 2.0 : 1.0);
-            add_btn->set_border_color(add_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
-            add_btn->set_selected(add_focused);
 
             // When Add Rule button is clicked, show Popup
             auto on_open_add_rule = [this, item, config, add_btn]() {
@@ -3508,7 +3312,7 @@ void MillerView::rebuild_preview_column() {
                     ->spacing(10)
                     ->backgroundColor(config->colors.surface)
                     ->stroke(1, config->colors.outline.with_alpha(0.4f))
-                    ->cornerRadius(12)
+                    ->cornerRadius(get_card_radius(config))
                     ->build();
 
                 auto pop_title = TextViewBuilder::create()
@@ -3565,7 +3369,7 @@ void MillerView::rebuild_preview_column() {
                     ->text("Cancel")
                     ->style(ButtonStyle::Outlined)
                     ->padding(12, 4)
-                    ->cornerRadius(6)
+                    ->cornerRadius(get_btn_radius(config))
                     ->onClick([this]() {
                         if (m_active_popup) {
                             m_active_popup->dismiss();
@@ -3579,7 +3383,7 @@ void MillerView::rebuild_preview_column() {
                     ->text("Add")
                     ->primary(true)
                     ->padding(14, 4)
-                    ->cornerRadius(6)
+                    ->cornerRadius(get_btn_radius(config))
                     ->onClick([this, item, name_edit, port_edit]() {
                         std::string r_name = name_edit->get_text();
                         std::string r_port = port_edit->get_text();
@@ -3602,7 +3406,7 @@ void MillerView::rebuild_preview_column() {
                     ->content(popup_col)
                     ->width(280)
                     ->elevation(6)
-                    ->cornerRadius(12)
+                    ->cornerRadius(get_card_radius(config))
                     ->dismissOnOutsideClick(true)
                     ->dismissOnEscape(true)
                     ->build();
@@ -3611,7 +3415,6 @@ void MillerView::rebuild_preview_column() {
             };
 
             add_btn->set_on_click_listener(on_open_add_rule);
-            register_actionable_control(PreviewControlType::Button, on_open_add_rule);
 
             LayoutParams add_btn_lp;
             add_btn_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -3623,16 +3426,12 @@ void MillerView::rebuild_preview_column() {
 
             // Vertically stacked switches helper
             auto add_rule_row = [&](const std::string& name, const std::string& desc, bool is_checked, std::function<void(bool)> on_toggle) {
-                int r_idx = static_cast<int>(m_actionable_controls.size());
-                bool r_focused = is_control_focused(r_idx);
-
                 auto row = LinearLayoutBuilder::create()
                     ->orientation(Orientation::Horizontal)
                     ->spacing(12)
                     ->padding(8, 4)
-                    ->backgroundColor(r_focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
-                    ->stroke(r_focused ? 2 : 0, r_focused ? config->colors.primary : Color::transparent())
-                    ->cornerRadius(8)
+                    ->backgroundColor(Color::transparent())
+                    ->cornerRadius(get_inner_radius(config))
                     ->gravity(Gravity::CenterVertical)
                     ->build();
 
@@ -3675,10 +3474,6 @@ void MillerView::rebuild_preview_column() {
                 row->add_view(sw, sw_lp);
 
                 rules_card->add_view(row);
-
-                register_actionable_control(PreviewControlType::Switch, [sw]() {
-                    if (sw) sw->toggle();
-                });
             };
 
             // Predefined common rules
@@ -3704,16 +3499,13 @@ void MillerView::rebuild_preview_column() {
             add_preview_card(rules_card);
 
             // 5. Monitor Card: Can be disabled with switch
-            int mon_idx = static_cast<int>(m_actionable_controls.size());
-            bool mon_focused = is_control_focused(mon_idx);
-
             auto monitor_card = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->spacing(10)
                 ->padding(16, 14)
                 ->backgroundColor(config->colors.surface)
-                ->stroke(mon_focused ? 2 : 1, mon_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             auto mon_hdr = LinearLayoutBuilder::create()
@@ -3773,10 +3565,6 @@ void MillerView::rebuild_preview_column() {
 
             monitor_card->add_view(mon_hdr);
 
-            register_actionable_control(PreviewControlType::Switch, [mon_sw]() {
-                if (mon_sw) mon_sw->toggle();
-            });
-
             if (item->firewall_cfg.monitor_enabled) {
                 std::vector<TelemetryEntry> mon_telemetry = {
                     {"Backend Engine", "UFW (iptables / netfilter)"},
@@ -3829,7 +3617,7 @@ void MillerView::rebuild_preview_column() {
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto icon = TextViewBuilder::create()
@@ -3862,15 +3650,13 @@ void MillerView::rebuild_preview_column() {
     // Dedicated Minimal UI for Display Brightness
     if (item->is_display_brightness) {
         // 1. Simple Brightness Adjusting Card (No hero card)
-        int b_idx = static_cast<int>(m_actionable_controls.size());
-        bool b_focused = is_control_focused(b_idx);
         auto bright_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->padding(16, 14)
             ->spacing(10)
             ->backgroundColor(config->colors.surface)
-            ->stroke(b_focused ? 2 : 1, b_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto header_row = LinearLayoutBuilder::create()
@@ -3947,18 +3733,6 @@ void MillerView::rebuild_preview_column() {
 
         add_preview_card(bright_card);
 
-        register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this, item, slider, val_label](float delta) {
-            float clamped = std::clamp(item->brightness_val + delta, 0.05f, 1.0f);
-            item->brightness_val = clamped;
-            if (slider) slider->set_value(clamped);
-            int pct = static_cast<int>(std::round(clamped * 100.0f));
-            if (val_label) {
-                val_label->set_text(std::to_string(pct) + "%");
-                val_label->request_redraw();
-            }
-            notify_state_changed();
-        });
-
         if (!item->telemetry.empty()) {
             add_preview_card(create_telemetry_card(item->telemetry, config, item->telemetry_title.empty() ? "Backlight & panel specifications" : item->telemetry_title));
         }
@@ -3993,15 +3767,13 @@ void MillerView::rebuild_preview_column() {
     if (item->is_display_nightlight) {
         // 1. Hero switch card (Enable or Disable)
         bool is_nl_on = item->nightlight_cfg.enabled;
-        int nl_idx = static_cast<int>(m_actionable_controls.size());
-        bool nl_focused = is_control_focused(nl_idx);
         auto hero_sw_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(nl_focused ? 2 : 1, nl_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto nl_icon = TextViewBuilder::create()
@@ -4057,21 +3829,15 @@ void MillerView::rebuild_preview_column() {
 
         add_preview_card(hero_sw_card);
 
-        register_actionable_control(PreviewControlType::Switch, [nl_switch]() {
-            if (nl_switch) nl_switch->toggle();
-        });
-
         // 2. If enabled, adjust warmth card
         if (is_nl_on) {
-            int w_idx = static_cast<int>(m_actionable_controls.size());
-            bool warmth_focused = is_control_focused(w_idx);
             auto warmth_card = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->padding(16, 14)
                 ->spacing(10)
                 ->backgroundColor(config->colors.surface)
-                ->stroke(warmth_focused ? 2 : 1, warmth_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-                ->cornerRadius(12)
+                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->cornerRadius(get_card_radius(config))
                 ->build();
 
             auto w_header = LinearLayoutBuilder::create()
@@ -4139,17 +3905,6 @@ void MillerView::rebuild_preview_column() {
             warmth_card->add_view(w_slider, wsl_lp);
 
             add_preview_card(warmth_card);
-
-            register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this, item, w_slider, w_label, format_kelvin](float delta) {
-                float new_val = std::clamp(item->nightlight_cfg.warmth + delta, 0.0f, 1.0f);
-                item->nightlight_cfg.warmth = new_val;
-                if (w_slider) w_slider->set_value(new_val);
-                if (w_label) {
-                    w_label->set_text(format_kelvin(new_val));
-                    w_label->request_redraw();
-                }
-                notify_state_changed();
-            });
         }
 
         if (!item->telemetry.empty()) {
@@ -4170,7 +3925,7 @@ void MillerView::rebuild_preview_column() {
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto get_battery_icon = [item]() -> std::string {
@@ -4268,16 +4023,13 @@ void MillerView::rebuild_preview_column() {
         if (!item->battery_cfg) return;
 
         // 1. Operating Profile Card with Spinner
-        int p_idx = static_cast<int>(m_actionable_controls.size());
-        bool prof_focused = is_control_focused(p_idx);
-
         auto prof_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
-            ->stroke(prof_focused ? 2 : 1, prof_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto prof_title = TextViewBuilder::create()
@@ -4322,7 +4074,7 @@ void MillerView::rebuild_preview_column() {
             ->selectedIndex(prof_sel_idx)
             ->fontSize(config->metrics.font_size)
             ->padding(12, 6)
-            ->cornerRadius(8)
+            ->cornerRadius(get_inner_radius(config))
             ->onItemSelected([this, item, prof_desc, get_profile_desc](int idx, const std::string& val) {
                 (void)idx;
                 item->battery_cfg->power_profile = val;
@@ -4349,12 +4101,6 @@ void MillerView::rebuild_preview_column() {
         prof_card->add_view(prof_desc);
 
         add_preview_card(prof_card);
-
-        register_actionable_control(PreviewControlType::Spinner,
-            [prof_spinner]() { if (prof_spinner) prof_spinner->open_dropdown(); },
-            [prof_spinner]() { if (prof_spinner) prof_spinner->open_dropdown(); },
-            nullptr
-        );
 
         // 3. Power Management Specifications Telemetry Card
         std::string active_draw = item->battery_cfg->power_saver ? "5.2 W (Power Saver Active)" :
@@ -4386,7 +4132,7 @@ void MillerView::rebuild_preview_column() {
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto mon_icon = TextViewBuilder::create()
@@ -4437,7 +4183,7 @@ void MillerView::rebuild_preview_column() {
             auto pill_card = CardViewBuilder::create()
                 ->style(CardStyle::Filled)
                 ->backgroundColor(config->colors.primary_container.with_alpha(0.5f))
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->elevation(0)
                 ->addView(prim_badge)
                 ->build();
@@ -4448,9 +4194,6 @@ void MillerView::rebuild_preview_column() {
             pill_lp.gravity = Gravity::CenterVertical;
             mon_card->add_view(pill_card, pill_lp);
         } else {
-            int prim_idx = static_cast<int>(m_actionable_controls.size());
-            bool prim_focused = is_control_focused(prim_idx);
-
             auto on_make_primary = [this, item]() {
                 const auto& list = get_current_list();
                 for (auto& m : list) {
@@ -4467,20 +4210,15 @@ void MillerView::rebuild_preview_column() {
                 ->text("Make Primary")
                 ->primary(true)
                 ->padding(10, 4)
-                ->cornerRadius(6)
+                ->cornerRadius(get_btn_radius(config))
                 ->onClick(on_make_primary)
                 ->build();
-            make_prim_btn->set_border_width(prim_focused ? 2.0 : 0.0);
-            make_prim_btn->set_border_color(prim_focused ? config->colors.primary : Color::transparent());
-            make_prim_btn->set_selected(prim_focused);
 
             LayoutParams prim_lp;
             prim_lp.width = static_cast<int>(LayoutDimension::WrapContent);
             prim_lp.height = 28;
             prim_lp.gravity = Gravity::CenterVertical;
             mon_card->add_view(make_prim_btn, prim_lp);
-
-            register_actionable_control(PreviewControlType::Button, on_make_primary);
         }
 
         add_preview_card(mon_card);
@@ -4492,7 +4230,7 @@ void MillerView::rebuild_preview_column() {
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto cfg_title = TextViewBuilder::create()
@@ -4516,16 +4254,11 @@ void MillerView::rebuild_preview_column() {
                                       const std::vector<std::string>& options,
                                       const std::string& current_val,
                                       std::function<void(const std::string&)> on_select) {
-            int s_idx = static_cast<int>(m_actionable_controls.size());
-            bool focused = is_control_focused(s_idx);
-
             auto row = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
                 ->gravity(Gravity::CenterVertical)
                 ->padding(6, 4)
-                ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.25f) : Color::transparent())
-                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->build();
 
             auto lbl = TextViewBuilder::create()
@@ -4552,7 +4285,7 @@ void MillerView::rebuild_preview_column() {
                 ->selectedIndex(sel_idx)
                 ->fontSize(config->metrics.font_size)
                 ->padding(12, 6)
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->onItemSelected([options, on_select](int idx, const std::string& val) {
                     (void)val;
                     if (idx >= 0 && idx < static_cast<int>(options.size())) {
@@ -4564,12 +4297,6 @@ void MillerView::rebuild_preview_column() {
             LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
             sp_lp.gravity = Gravity::CenterVertical;
             row->add_view(spinner, sp_lp);
-
-            register_actionable_control(PreviewControlType::Spinner,
-                [spinner]() { if (spinner) spinner->open_dropdown(); },
-                [spinner]() { if (spinner) spinner->open_dropdown(); },
-                nullptr
-            );
 
             return row;
         };
@@ -4617,7 +4344,7 @@ void MillerView::rebuild_preview_column() {
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         // Row 1: App Icon and Labels (Title, Category on new line, Version)
@@ -4665,7 +4392,7 @@ void MillerView::rebuild_preview_column() {
 
             auto badge = LinearLayoutBuilder::create()
                 ->padding(6, 2)
-                ->cornerRadius(4)
+                ->cornerRadius(get_chip_radius(config))
                 ->backgroundColor(config->colors.primary.with_alpha(0.12f))
                 ->stroke(1, config->colors.primary.with_alpha(0.3f))
                 ->build();
@@ -4712,9 +4439,6 @@ void MillerView::rebuild_preview_column() {
             ->build();
 
         // 1. Open Button
-        int o_idx = static_cast<int>(m_actionable_controls.size());
-        bool o_focused = is_control_focused(o_idx);
-
         auto on_open = [this, item]() {
             item->app_info.is_running = true;
             if (item->app_info.pid <= 0) item->app_info.pid = 4920;
@@ -4727,12 +4451,9 @@ void MillerView::rebuild_preview_column() {
             ->text("Open")
             ->primary(true)
             ->padding(16, 5)
-            ->cornerRadius(6)
+            ->cornerRadius(get_btn_radius(config))
             ->onClick(on_open)
             ->build();
-        open_btn->set_border_width(o_focused ? 2.0 : 0.0);
-        open_btn->set_border_color(o_focused ? config->colors.on_primary : Color::transparent());
-        open_btn->set_selected(o_focused);
 
         LayoutParams open_lp;
         open_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -4740,12 +4461,8 @@ void MillerView::rebuild_preview_column() {
         open_lp.gravity = Gravity::CenterVertical;
         actions_box->add_view(open_btn, open_lp);
 
-        register_actionable_control(PreviewControlType::Button, on_open);
-
         // 2. Force Close Button
         bool is_running = item->app_info.is_running;
-        int fc_idx = static_cast<int>(m_actionable_controls.size());
-        bool fc_focused = is_control_focused(fc_idx);
 
         auto on_force_close = [this, item]() {
             if (item->app_info.is_running) {
@@ -4764,15 +4481,12 @@ void MillerView::rebuild_preview_column() {
             ->text("Force Close")
             ->style(ButtonStyle::Outlined)
             ->padding(14, 5)
-            ->cornerRadius(6)
+            ->cornerRadius(get_btn_radius(config))
             ->onClick(on_force_close)
             ->build();
         if (!is_running) {
             force_close_btn->set_text_color(config->colors.on_surface_variant.with_alpha(0.4f));
         }
-        force_close_btn->set_border_width(fc_focused ? 2.0 : 1.0);
-        force_close_btn->set_border_color(fc_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
-        force_close_btn->set_selected(fc_focused);
 
         LayoutParams fc_lp;
         fc_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -4780,12 +4494,7 @@ void MillerView::rebuild_preview_column() {
         fc_lp.gravity = Gravity::CenterVertical;
         actions_box->add_view(force_close_btn, fc_lp);
 
-        register_actionable_control(PreviewControlType::Button, on_force_close);
-
         // 3. Uninstall Button
-        int un_idx = static_cast<int>(m_actionable_controls.size());
-        bool un_focused = is_control_focused(un_idx);
-
         auto on_uninstall = [this, item]() {
             item->last_action_message = "Uninstall requested for " + item->app_info.app_name;
             rebuild_preview_column();
@@ -4796,20 +4505,15 @@ void MillerView::rebuild_preview_column() {
             ->text("Uninstall")
             ->style(ButtonStyle::Outlined)
             ->padding(14, 5)
-            ->cornerRadius(6)
+            ->cornerRadius(get_btn_radius(config))
             ->onClick(on_uninstall)
             ->build();
-        uninstall_btn->set_border_width(un_focused ? 2.0 : 1.0);
-        uninstall_btn->set_border_color(un_focused ? config->colors.primary : config->colors.outline.with_alpha(0.5f));
-        uninstall_btn->set_selected(un_focused);
 
         LayoutParams un_lp;
         un_lp.width = static_cast<int>(LayoutDimension::WrapContent);
         un_lp.height = 30;
         un_lp.gravity = Gravity::CenterVertical;
         actions_box->add_view(uninstall_btn, un_lp);
-
-        register_actionable_control(PreviewControlType::Button, on_uninstall);
 
         if (!item->last_action_message.empty()) {
             auto feedback = TextViewBuilder::create()
@@ -4846,7 +4550,7 @@ void MillerView::rebuild_preview_column() {
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         // Top Row: Icon + Title & Status Subtitle
@@ -4906,15 +4610,12 @@ void MillerView::rebuild_preview_column() {
         if (item->app_info.network_policy == "Local Only") sel_idx = 1;
         else if (item->app_info.network_policy == "Block") sel_idx = 2;
 
-        int sp_idx = static_cast<int>(m_actionable_controls.size());
-        bool sp_focused = is_control_focused(sp_idx);
-
         auto net_spinner = SpinnerBuilder::create()
             ->items(spinner_items)
             ->selectedIndex(sel_idx)
             ->fontSize(config->metrics.font_size)
             ->padding(12, 6)
-            ->cornerRadius(8)
+            ->cornerRadius(get_inner_radius(config))
             ->onItemSelected([item, spinner_items, net_sub, config](int idx, const std::string& val) {
                 (void)val;
                 if (idx >= 0 && idx < static_cast<int>(spinner_items.size())) {
@@ -4935,20 +4636,8 @@ void MillerView::rebuild_preview_column() {
             })
             ->build();
 
-        auto sp_container = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->stroke(sp_focused ? 2 : 0, sp_focused ? config->colors.primary : Color::transparent())
-            ->cornerRadius(8)
-            ->build();
         LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
-        sp_container->add_view(net_spinner, sp_lp);
-        net_card->add_view(sp_container, sp_lp);
-
-        register_actionable_control(PreviewControlType::Spinner,
-            [net_spinner]() { if (net_spinner) net_spinner->open_dropdown(); },
-            [net_spinner]() { if (net_spinner) net_spinner->open_dropdown(); },
-            nullptr
-        );
+        net_card->add_view(net_spinner, sp_lp);
 
         add_preview_card(net_card);
 
@@ -4959,7 +4648,7 @@ void MillerView::rebuild_preview_column() {
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         // Header row with "Application & Storage Details" and "Clear Cache" button
@@ -4979,9 +4668,6 @@ void MillerView::rebuild_preview_column() {
         dt_lp.gravity = Gravity::CenterVertical;
         header_row->add_view(details_title, dt_lp);
 
-        int cc_idx = static_cast<int>(m_actionable_controls.size());
-        bool cc_focused = is_control_focused(cc_idx);
-
         auto on_clear_cache = [this, item]() {
             item->app_info.size_data = "0 KB";
             item->app_info.size_total = item->app_info.size_binary;
@@ -4997,12 +4683,9 @@ void MillerView::rebuild_preview_column() {
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.primary)
             ->padding(10, 4)
-            ->cornerRadius(6)
+            ->cornerRadius(get_btn_radius(config))
             ->onClick(on_clear_cache)
             ->build();
-        clear_cache_btn->set_border_width(cc_focused ? 2.0 : 0.0);
-        clear_cache_btn->set_border_color(cc_focused ? config->colors.primary : Color::transparent());
-        clear_cache_btn->set_selected(cc_focused);
 
         LayoutParams cc_lp;
         cc_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -5010,8 +4693,6 @@ void MillerView::rebuild_preview_column() {
         cc_lp.gravity = Gravity::CenterVertical;
         header_row->add_view(clear_cache_btn, cc_lp);
         details_card->add_view(header_row);
-
-        register_actionable_control(PreviewControlType::Button, on_clear_cache);
 
         if (!item->last_action_message.empty()) {
             auto feedback = TextViewBuilder::create()
@@ -5084,7 +4765,7 @@ void MillerView::rebuild_preview_column() {
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto role_icon = TextViewBuilder::create()
@@ -5144,7 +4825,7 @@ void MillerView::rebuild_preview_column() {
         auto pill_card = CardViewBuilder::create()
             ->style(CardStyle::Filled)
             ->backgroundColor(config->colors.primary_container.with_alpha(0.5f))
-            ->cornerRadius(6)
+            ->cornerRadius(get_btn_radius(config))
             ->elevation(0)
             ->addView(def_pill)
             ->build();
@@ -5164,7 +4845,7 @@ void MillerView::rebuild_preview_column() {
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto cand_title = TextViewBuilder::create()
@@ -5229,9 +4910,21 @@ void MillerView::rebuild_preview_column() {
             cbox_lp.gravity = Gravity::CenterVertical;
             row_content->add_view(c_box, cbox_lp);
 
+            auto on_select_candidate = [this, item, ci]() {
+                if (ci >= item->default_app_role.candidates.size()) return;
+                for (size_t k = 0; k < item->default_app_role.candidates.size(); ++k) {
+                    item->default_app_role.candidates[k].is_default = (k == ci);
+                }
+                item->subtitle = item->default_app_role.candidates[ci].name;
+                item->last_action_message = "Default updated to " + item->subtitle;
+                rebuild_current_column();
+                deferred_rebuild_preview();
+                notify_state_changed();
+            };
+
             if (is_def) {
                 auto check_view = TextViewBuilder::create()
-                    ->text("✓")
+                    ->text("✓ Default")
                     ->textSize(config->metrics.font_size)
                     ->textColor(config->colors.primary)
                     ->build();
@@ -5240,52 +4933,27 @@ void MillerView::rebuild_preview_column() {
                 chk_lp.gravity = Gravity::CenterVertical;
                 row_content->add_view(check_view, chk_lp);
             } else {
-                auto set_btn = ButtonBuilder::create()
+                auto select_label = TextViewBuilder::create()
                     ->text("Set Default")
-                    ->flat(true)
-                    ->textColor(config->colors.primary)
-                    ->padding(8, 2)
+                    ->caption(true)
+                    ->textColor(config->colors.primary.with_alpha(0.85f))
                     ->build();
                 LayoutParams set_lp;
                 set_lp.width = static_cast<int>(LayoutDimension::WrapContent);
                 set_lp.gravity = Gravity::CenterVertical;
-                row_content->add_view(set_btn, set_lp);
+                row_content->add_view(select_label, set_lp);
             }
-
-            int c_idx = register_actionable_control(PreviewControlType::Button, [this, item, ci]() {
-                if (ci >= item->default_app_role.candidates.size()) return;
-                for (size_t k = 0; k < item->default_app_role.candidates.size(); ++k) {
-                    item->default_app_role.candidates[k].is_default = (k == ci);
-                }
-                item->subtitle = item->default_app_role.candidates[ci].name;
-                item->last_action_message = "Default updated to " + item->subtitle;
-                rebuild_current_column();
-                deferred_rebuild_preview();
-                notify_state_changed();
-            });
-            bool c_focused = is_control_focused(c_idx);
 
             Color row_bg = is_def ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
             auto cand_row_card = CardViewBuilder::create()
                 ->style(CardStyle::Filled)
-                ->backgroundColor(c_focused ? config->colors.primary_container.with_alpha(0.5f) : row_bg)
-                ->stroke(c_focused ? 2 : 0, c_focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
+                ->backgroundColor(row_bg)
+                ->cornerRadius(get_inner_radius(config))
                 ->elevation(0)
                 ->addView(row_content)
                 ->build();
 
-            cand_row_card->set_on_click_listener([this, item, ci]() {
-                if (ci >= item->default_app_role.candidates.size()) return;
-                for (size_t k = 0; k < item->default_app_role.candidates.size(); ++k) {
-                    item->default_app_role.candidates[k].is_default = (k == ci);
-                }
-                item->subtitle = item->default_app_role.candidates[ci].name;
-                item->last_action_message = "Default updated to " + item->subtitle;
-                rebuild_current_column();
-                deferred_rebuild_preview();
-                notify_state_changed();
-            });
+            cand_row_card->set_on_click_listener(on_select_candidate);
 
             cand_card->add_view(cand_row_card);
         }
@@ -5307,7 +4975,7 @@ void MillerView::rebuild_preview_column() {
         ->padding(16, 14)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(12)
+        ->cornerRadius(get_card_radius(config))
         ->build();
 
     auto left_info = LinearLayoutBuilder::create()
@@ -5356,7 +5024,7 @@ void MillerView::rebuild_preview_column() {
         auto pill_card = CardViewBuilder::create()
             ->style(CardStyle::Filled)
             ->backgroundColor(badge_bg)
-            ->cornerRadius(14)
+            ->cornerRadius(get_inner_radius(config))
             ->elevation(0)
             ->addView(status_pill)
             ->build();
@@ -5371,20 +5039,13 @@ void MillerView::rebuild_preview_column() {
 
     // 2. Primary Toggle Card
     if (item->has_switch) {
-        int sw_idx = register_actionable_control(PreviewControlType::Switch, [this]() {
-            if (m_active_primary_switch) {
-                m_active_primary_switch->toggle();
-            }
-        });
-        bool focused = is_control_focused(sw_idx);
-
         auto primary_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
-            ->stroke(focused ? 2 : 1, focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         auto lbl_box = LinearLayoutBuilder::create()
@@ -5440,24 +5101,15 @@ void MillerView::rebuild_preview_column() {
             ->spacing(14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
+            ->cornerRadius(get_card_radius(config))
             ->build();
 
         // Secondary Switch
         if (item->has_secondary_switch) {
-            int sec_idx = register_actionable_control(PreviewControlType::Switch, [this]() {
-                if (m_active_secondary_switch) {
-                    m_active_secondary_switch->toggle();
-                }
-            });
-            bool focused = is_control_focused(sec_idx);
-
             auto sec_row = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
                 ->padding(10, 8)
-                ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.2f) : Color::transparent())
-                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->build();
 
             auto sec_lbl = TextViewBuilder::create()
@@ -5493,30 +5145,12 @@ void MillerView::rebuild_preview_column() {
         // Slider Control
         if (item->has_slider) {
             bool is_read_only = item->slider_read_only;
-            int ctrl_idx = -1;
-            if (!is_read_only) {
-                ctrl_idx = register_actionable_control(PreviewControlType::Slider, nullptr, nullptr, [this, item](float delta) {
-                    item->slider_val = std::clamp(item->slider_val + delta, 0.0f, 1.0f);
-                    if (m_active_slider) {
-                        m_active_slider->set_value(item->slider_val);
-                    }
-                    if (m_active_slider_label) {
-                        int pct = static_cast<int>(item->slider_val * 100);
-                        m_active_slider_label->set_text(std::to_string(pct) + " " + item->slider_unit);
-                    }
-                    rebuild_current_column();
-                    notify_state_changed();
-                });
-            }
-            bool focused = (ctrl_idx != -1) && is_control_focused(ctrl_idx);
 
             auto slider_box = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->spacing(6)
                 ->padding(10, 8)
-                ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.2f) : Color::transparent())
-                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->build();
 
             auto s_row = LinearLayoutBuilder::create()
@@ -5565,18 +5199,11 @@ void MillerView::rebuild_preview_column() {
 
         // Action Button
         if (item->has_action) {
-            int act_idx = register_actionable_control(PreviewControlType::Button, [this]() {
-                trigger_active_action();
-            });
-            bool focused = is_control_focused(act_idx);
-
             auto action_row = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
                 ->spacing(12)
                 ->padding(10, 8)
-                ->backgroundColor(focused ? config->colors.primary_container.with_alpha(0.2f) : Color::transparent())
-                ->stroke(focused ? 2 : 0, focused ? config->colors.primary : Color::transparent())
-                ->cornerRadius(8)
+                ->cornerRadius(get_inner_radius(config))
                 ->build();
 
             m_active_action_btn = ButtonBuilder::create()
@@ -5633,19 +5260,10 @@ void MillerView::rebuild_preview_column() {
         }
         add_preview_card(create_telemetry_card(item->telemetry, config, telem_title));
     }
-
-    if (m_actionable_controls.empty()) {
-        m_preview_control_index = 0;
-    } else if (m_preview_control_index >= static_cast<int>(m_actionable_controls.size())) {
-        m_preview_control_index = static_cast<int>(m_actionable_controls.size()) - 1;
-    }
 }
 
 bool MillerView::navigate_up() {
     cancel_pending_sibling_click();
-    if (m_preview_focused) {
-        return focus_prev_control();
-    }
     const auto& list = get_current_list();
     if (list.empty()) return false;
 
@@ -5660,9 +5278,6 @@ bool MillerView::navigate_up() {
 
 bool MillerView::navigate_down() {
     cancel_pending_sibling_click();
-    if (m_preview_focused) {
-        return focus_next_control();
-    }
     const auto& list = get_current_list();
     if (list.empty()) return false;
 
@@ -5689,12 +5304,18 @@ bool MillerView::navigate_enter() {
         notify_state_changed();
         return true;
     } else {
-        // Entering dead-end: focus into preview controls
-        m_preview_focused = true;
-        m_preview_control_index = 0;
-        rebuild_preview_column();
-        notify_state_changed();
-        return true;
+        // Entering leaf setting: transfer keyboard focus to the first focusable widget in the preview column
+        if (m_preview_layout) {
+            std::vector<View*> focusables;
+            m_preview_layout->collect_focusable_views(focusables);
+            if (!focusables.empty()) {
+                m_preview_focused = true;
+                focusables.front()->request_focus();
+                notify_state_changed();
+                return true;
+            }
+        }
+        return false;
     }
 }
 
@@ -5738,6 +5359,9 @@ void MillerView::set_search_query(const std::string& query) {
 
 bool MillerView::navigate_back() {
     cancel_pending_sibling_click();
+    if (m_window) {
+        m_window->clear_focus();
+    }
     if (!m_search_query.empty()) {
         m_search_query.clear();
         m_search_results.clear();
@@ -5750,7 +5374,6 @@ bool MillerView::navigate_back() {
 
     if (m_preview_focused) {
         m_preview_focused = false;
-        rebuild_preview_column();
         notify_state_changed();
         return true;
     }
@@ -5772,38 +5395,7 @@ bool MillerView::navigate_back() {
     return false;
 }
 
-bool MillerView::activate_focused_control() {
-    if (!m_preview_focused || m_actionable_controls.empty()) return false;
-    if (m_preview_control_index >= 0 && m_preview_control_index < static_cast<int>(m_actionable_controls.size())) {
-        const auto& ctrl = m_actionable_controls[m_preview_control_index];
-        if (ctrl.on_activate) {
-            ctrl.on_activate();
-            return true;
-        } else if (ctrl.type == PreviewControlType::Spinner && ctrl.on_open_dropdown) {
-            ctrl.on_open_dropdown();
-            return true;
-        }
-    }
-    return false;
-}
-
-bool MillerView::open_focused_spinner() {
-    if (!m_preview_focused || m_actionable_controls.empty()) return false;
-    if (m_preview_control_index >= 0 && m_preview_control_index < static_cast<int>(m_actionable_controls.size())) {
-        const auto& ctrl = m_actionable_controls[m_preview_control_index];
-        if (ctrl.on_open_dropdown) {
-            ctrl.on_open_dropdown();
-            return true;
-        }
-    }
-    return false;
-}
-
 bool MillerView::toggle_active() {
-    if (m_preview_focused) {
-        return activate_focused_control();
-    }
-
     auto item = get_current_selected_item();
     if (item && !item->is_category && item->has_switch) {
         item->switch_val = !item->switch_val;
@@ -5815,16 +5407,6 @@ bool MillerView::toggle_active() {
 }
 
 bool MillerView::adjust_active_slider(float delta) {
-    if (m_preview_focused && !m_actionable_controls.empty()) {
-        if (m_preview_control_index >= 0 && m_preview_control_index < static_cast<int>(m_actionable_controls.size())) {
-            const auto& ctrl = m_actionable_controls[m_preview_control_index];
-            if (ctrl.type == PreviewControlType::Slider && ctrl.on_adjust) {
-                ctrl.on_adjust(delta);
-                return true;
-            }
-        }
-    }
-
     auto item = get_current_selected_item();
     if (item && !item->is_category && item->has_slider && !item->slider_read_only) {
         item->slider_val = std::clamp(item->slider_val + delta, 0.0f, 1.0f);
@@ -5837,23 +5419,6 @@ bool MillerView::adjust_active_slider(float delta) {
         return true;
     }
     return false;
-}
-
-bool MillerView::focus_next_control() {
-    if (m_actionable_controls.empty()) return false;
-    m_preview_control_index = (m_preview_control_index + 1) % static_cast<int>(m_actionable_controls.size());
-    rebuild_preview_column();
-    notify_state_changed();
-    return true;
-}
-
-bool MillerView::focus_prev_control() {
-    if (m_actionable_controls.empty()) return false;
-    int count = static_cast<int>(m_actionable_controls.size());
-    m_preview_control_index = (m_preview_control_index + count - 1) % count;
-    rebuild_preview_column();
-    notify_state_changed();
-    return true;
 }
 
 bool MillerView::trigger_active_action() {
@@ -5892,7 +5457,8 @@ std::string MillerView::get_breadcrumb_path() const {
 
 std::string MillerView::get_status_text() const {
     const auto& list = get_current_list();
-    std::string mode = m_preview_focused ? "[PREVIEW CONTROLS FOCUSED]" : "[LIST NAVIGATION]";
+    bool in_preview = m_preview_focused || (m_window && m_window->get_focused_view() != nullptr);
+    std::string mode = in_preview ? "[PREVIEW CONTROLS FOCUSED]" : "[LIST NAVIGATION]";
     std::string index_info = "Item " + std::to_string(m_current_index + 1) + "/" + std::to_string(list.size());
     std::string depth_info = "Level " + std::to_string(m_path.size() + 1);
     return mode + "  •  " + depth_info + "  •  " + index_info;

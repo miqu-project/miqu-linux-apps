@@ -26,11 +26,7 @@ public:
     bool navigate_back();
     bool toggle_active();
     bool adjust_active_slider(float delta);
-    bool focus_next_control();
-    bool focus_prev_control();
     bool trigger_active_action();
-    bool open_focused_spinner();
-    bool activate_focused_control();
 
     // State Inspection
     bool can_navigate_back() const { return !m_search_query.empty() || m_preview_focused || !m_path.empty(); }
@@ -98,23 +94,6 @@ private:
 
     // Focus state: whether user has entered into the preview column controls
     bool m_preview_focused = false;
-    int m_preview_control_index = 0;
-
-    enum class PreviewControlType { Switch, Button, Spinner, Slider };
-    struct ActionableControl {
-        PreviewControlType type = PreviewControlType::Button;
-        std::function<void()> on_activate;       // Space or Return
-        std::function<void()> on_open_dropdown;  // Shift+Down
-        std::function<void(float)> on_adjust;    // Slider adjustment
-    };
-    int register_actionable_control(PreviewControlType type,
-                                    std::function<void()> on_activate = nullptr,
-                                    std::function<void()> on_open_dropdown = nullptr,
-                                    std::function<void(float)> on_adjust = nullptr);
-    bool is_control_focused(int index) const {
-        return m_preview_focused && (m_preview_control_index == index);
-    }
-    std::vector<ActionableControl> m_actionable_controls;
 
     std::function<void()> m_on_state_changed;
 

@@ -91,7 +91,6 @@ void TestApp::setup_ui() {
     m_back_btn = CardViewBuilder::create()
         ->style(CardStyle::Filled)
         ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
-        ->cornerRadius(6)
         ->elevation(0)
         ->addView(back_content)
         ->build();
@@ -130,14 +129,13 @@ void TestApp::setup_ui() {
 
     // Search bar integrated into the ribbon header
     m_search_view = SearchViewBuilder::create()
-        ->hint("🔍  Search settings... (/)")
+        ->hint("Search")
         ->focused(false)
-        ->focusBorder(true)
-        ->cornerRadius(8)
+        ->focusBorder(false)
         ->padding(10, 2)
         ->elevation(0)
         ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
-        ->stroke(1, config->colors.outline.with_alpha(0.25f))
+        ->stroke(0, Color::transparent())
         ->onQueryTextListener(
             [this](const std::string& query) {
                 if (m_miller_view) {
@@ -198,7 +196,7 @@ void TestApp::sync_theme() {
     }
     if (m_search_view) {
         m_search_view->set_background_color(config->colors.surface_variant.with_alpha(0.35f));
-        m_search_view->set_stroke(1, config->colors.outline.with_alpha(0.25f));
+        m_search_view->set_stroke(0, Color::transparent());
     }
 
     if (m_miller_view) {
@@ -231,6 +229,16 @@ void TestApp::update_header() {
 void TestApp::handle_key_press(const KeyPressEvent& event) {
     if (!event.pressed || !m_miller_view) return;
 
+    // Ctrl+F from anywhere instantly focuses the search bar
+    if (event.has_ctrl() && (event.keysym == XKB_KEY_f || event.keysym == XKB_KEY_F)) {
+        if (m_search_view) {
+            if (m_window) m_window->set_focused_view(m_search_view.get());
+            m_search_view->set_focused(true);
+            if (m_window) m_window->schedule_redraw();
+            return;
+        }
+    }
+
     if (m_window && m_window->get_focused_view() && m_window->get_focused_view()->has_focus()) {
         if (event.keysym == XKB_KEY_Escape) {
             m_window->clear_focus();
@@ -245,29 +253,30 @@ void TestApp::handle_key_press(const KeyPressEvent& event) {
             return;
         }
 
-        if (event.keysym == XKB_KEY_Up) {
-            m_miller_view->navigate_up();
-            return;
-        }
-        if (event.keysym == XKB_KEY_Down) {
-            m_miller_view->navigate_down();
-            return;
-        }
-        if (event.keysym == XKB_KEY_Return || event.keysym == XKB_KEY_KP_Enter) {
-            m_miller_view->navigate_enter();
-            return;
+        bool is_search_focused = (m_search_view && m_search_view->has_focus());
+        if (is_search_focused) {
+            if (event.keysym == XKB_KEY_Up) {
+                m_miller_view->navigate_up();
+                return;
+            }
+            if (event.keysym == XKB_KEY_Down) {
+                m_miller_view->navigate_down();
+                return;
+            }
+            if (event.keysym == XKB_KEY_Return || event.keysym == XKB_KEY_KP_Enter) {
+                m_miller_view->navigate_enter();
+                return;
+            }
+        } else {
+            if (!event.has_shift() && (event.keysym == XKB_KEY_Left || event.keysym == XKB_KEY_h)) {
+                m_miller_view->navigate_back();
+                return;
+            }
         }
         return;
     }
 
     switch (event.keysym) {
-        case XKB_KEY_slash:
-            if (m_search_view) {
-                m_search_view->set_focused(true);
-                if (m_window) m_window->schedule_redraw();
-                return;
-            }
-            break;
         case XKB_KEY_k:
         case XKB_KEY_Up:
             m_miller_view->navigate_up();
@@ -275,32 +284,22 @@ void TestApp::handle_key_press(const KeyPressEvent& event) {
 
         case XKB_KEY_j:
         case XKB_KEY_Down:
-            if (event.has_shift() && m_miller_view->is_preview_focused()) {
-                if (m_miller_view->open_focused_spinner()) {
-                    break;
-                }
-            }
             m_miller_view->navigate_down();
             break;
 
         case XKB_KEY_l:
         case XKB_KEY_Right:
-            m_miller_view->navigate_enter();
-            break;
-
         case XKB_KEY_Return:
         case XKB_KEY_KP_Enter:
-            if (m_miller_view->is_preview_focused()) {
-                m_miller_view->activate_focused_control();
-            } else {
-                m_miller_view->navigate_enter();
-            }
+            m_miller_view->navigate_enter();
             break;
 
         case XKB_KEY_h:
         case XKB_KEY_Left:
         case XKB_KEY_BackSpace:
-            m_miller_view->navigate_back();
+            if (!event.has_shift()) {
+                m_miller_view->navigate_back();
+            }
             break;
 
         case XKB_KEY_space:
@@ -317,14 +316,6 @@ void TestApp::handle_key_press(const KeyPressEvent& event) {
         case XKB_KEY_equal:
         case XKB_KEY_bracketright:
             m_miller_view->adjust_active_slider(+0.05f);
-            break;
-
-        case XKB_KEY_Tab:
-            if (event.has_shift()) {
-                m_miller_view->focus_prev_control();
-            } else {
-                m_miller_view->focus_next_control();
-            }
             break;
 
         case XKB_KEY_q:
