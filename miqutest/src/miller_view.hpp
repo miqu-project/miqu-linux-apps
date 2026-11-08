@@ -45,6 +45,7 @@ private:
     void rebuild_parent_column();
     void rebuild_current_column();
     void rebuild_preview_column();
+    void add_preview_card(std::shared_ptr<View> card);
 
     std::shared_ptr<SettingItem> get_current_selected_item() const;
     const std::vector<std::shared_ptr<SettingItem>>& get_current_list() const;

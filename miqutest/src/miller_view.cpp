@@ -57,6 +57,10 @@ std::shared_ptr<View> create_telemetry_card(const std::vector<TelemetryEntry>& t
 
         telem_card->add_view(row);
     }
+    LayoutParams card_lp;
+    card_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    card_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    telem_card->set_layout_params(card_lp);
     return telem_card;
 }
 } // namespace
@@ -400,6 +404,16 @@ void MillerView::rebuild_current_column() {
     }
 }
 
+void MillerView::add_preview_card(std::shared_ptr<View> card) {
+    if (!card) return;
+    LayoutParams lp = card->get_layout_params();
+    lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    if (lp.height <= 0 && lp.height != static_cast<int>(LayoutDimension::MatchParent)) {
+        lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    }
+    m_preview_layout->add_view(std::move(card), lp);
+}
+
 void MillerView::rebuild_preview_column() {
     m_preview_layout->clear_views();
     m_active_primary_switch = nullptr;
@@ -418,7 +432,7 @@ void MillerView::rebuild_preview_column() {
             ->center(true)
             ->textColor(config->colors.on_surface_variant)
             ->build();
-        m_preview_layout->add_view(placeholder);
+        add_preview_card(placeholder);
         return;
     }
 
@@ -513,7 +527,7 @@ void MillerView::rebuild_preview_column() {
                 notify_state_changed();
             });
 
-            m_preview_layout->add_view(row_card);
+            add_preview_card(row_card);
         }
         return;
     }
@@ -577,7 +591,7 @@ void MillerView::rebuild_preview_column() {
         slider_lp.width = static_cast<int>(LayoutDimension::MatchParent);
         slider_lp.height = 24;
         seekbar_card->add_view(m_active_slider, slider_lp);
-        m_preview_layout->add_view(seekbar_card);
+        add_preview_card(seekbar_card);
 
         // 2. Mute Card (Toggle Switch)
         bool mute_focused = m_preview_focused && (m_preview_control_index == 1);
@@ -632,11 +646,11 @@ void MillerView::rebuild_preview_column() {
         sw_lp.height = 24;
         sw_lp.gravity = Gravity::CenterVertical;
         mute_card->add_view(m_active_primary_switch, sw_lp);
-        m_preview_layout->add_view(mute_card);
+        add_preview_card(mute_card);
 
         // 3. Audio Device Specifications
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "Audio device specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "Audio device specifications"));
         }
 
         return;
@@ -707,7 +721,7 @@ void MillerView::rebuild_preview_column() {
         sw_lp.height = 24;
         sw_lp.gravity = Gravity::CenterVertical;
         wifi_card->add_view(m_active_primary_switch, sw_lp);
-        m_preview_layout->add_view(wifi_card);
+        add_preview_card(wifi_card);
 
         // 2. Networks Section (Visible when Wi-Fi is enabled)
         if (item->switch_val) {
@@ -865,12 +879,12 @@ void MillerView::rebuild_preview_column() {
                 net_card->add_view(net_row_card);
             }
 
-            m_preview_layout->add_view(net_card);
+            add_preview_card(net_card);
         }
 
         // 3. Interface Specifications
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "Wireless interface specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "Wireless interface specifications"));
         }
 
         return;
@@ -957,7 +971,7 @@ void MillerView::rebuild_preview_column() {
         sw_lp.height = 24;
         sw_lp.gravity = Gravity::CenterVertical;
         bt_card->add_view(m_active_primary_switch, sw_lp);
-        m_preview_layout->add_view(bt_card);
+        add_preview_card(bt_card);
 
         // 2. Devices Section (Visible when Bluetooth is enabled)
         if (item->switch_val) {
@@ -1142,12 +1156,12 @@ void MillerView::rebuild_preview_column() {
                 dev_card->add_view(dev_row_card);
             }
 
-            m_preview_layout->add_view(dev_card);
+            add_preview_card(dev_card);
         }
 
         // 3. Controller Specifications
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "Bluetooth controller specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "Bluetooth controller specifications"));
         }
 
         return;
@@ -1231,7 +1245,7 @@ void MillerView::rebuild_preview_column() {
         pill_lp.gravity = Gravity::CenterVertical;
         eth_card->add_view(pill_card, pill_lp);
 
-        m_preview_layout->add_view(eth_card);
+        add_preview_card(eth_card);
 
         // 2. Active Wired Connection Profile & IP Parameters (Visible when connected)
         if (is_conn) {
@@ -1387,12 +1401,12 @@ void MillerView::rebuild_preview_column() {
                 profile_card->add_view(row);
             }
 
-            m_preview_layout->add_view(profile_card);
+            add_preview_card(profile_card);
         }
 
         // 3. Hardware & Link Telemetry
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "Hardware & link specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "Hardware & link specifications"));
         }
 
         return;
@@ -1463,7 +1477,7 @@ void MillerView::rebuild_preview_column() {
         sw_lp.height = 24;
         sw_lp.gravity = Gravity::CenterVertical;
         airplane_card->add_view(m_active_primary_switch, sw_lp);
-        m_preview_layout->add_view(airplane_card);
+        add_preview_card(airplane_card);
 
         // 2. Bottom Info Card: What things are going to be disabled
         auto info_card = LinearLayoutBuilder::create()
@@ -1576,7 +1590,7 @@ void MillerView::rebuild_preview_column() {
             info_card->add_view(row_card);
         }
 
-        m_preview_layout->add_view(info_card);
+        add_preview_card(info_card);
         return;
     }
 
@@ -1670,7 +1684,7 @@ void MillerView::rebuild_preview_column() {
         badge_lp.gravity = Gravity::CenterVertical;
         dns_card->add_view(badge_card, badge_lp);
 
-        m_preview_layout->add_view(dns_card);
+        add_preview_card(dns_card);
 
         // 2. Configuration Card (Single Spinner on new line, Hostname EditText on new line)
         auto cfg_card = LinearLayoutBuilder::create()
@@ -1835,7 +1849,7 @@ void MillerView::rebuild_preview_column() {
         edit_lp.height = 38;
         cfg_card->add_view(custom_edit, edit_lp);
 
-        m_preview_layout->add_view(cfg_card);
+        add_preview_card(cfg_card);
 
         // 3. Active Endpoint & Verification Card
         auto ep_card = LinearLayoutBuilder::create()
@@ -1934,11 +1948,11 @@ void MillerView::rebuild_preview_column() {
         ip_box->add_view(ip_val);
         ep_card->add_view(ip_box);
 
-        m_preview_layout->add_view(ep_card);
+        add_preview_card(ep_card);
 
         // 4. DNS & Encryption Specifications Telemetry
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "DNS & encryption specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "DNS & encryption specifications"));
         }
 
         return;
@@ -2009,7 +2023,7 @@ void MillerView::rebuild_preview_column() {
         sw_lp.gravity = Gravity::CenterVertical;
         fw_card->add_view(m_active_primary_switch, sw_lp);
 
-        m_preview_layout->add_view(fw_card);
+        add_preview_card(fw_card);
 
         if (item->firewall_cfg.enabled) {
             // 2. Policy Card: Incoming Spinner, Outgoing Spinner
@@ -2091,7 +2105,7 @@ void MillerView::rebuild_preview_column() {
             LayoutParams out_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
             policy_card->add_view(out_spinner, out_sp_lp);
 
-            m_preview_layout->add_view(policy_card);
+            add_preview_card(policy_card);
 
             // 3. Preset Card: Home, Work, Cellular, Public
             auto preset_card = LinearLayoutBuilder::create()
@@ -2156,7 +2170,7 @@ void MillerView::rebuild_preview_column() {
             preset_card->add_view(preset_spinner, preset_sp_lp);
             preset_card->add_view(preset_desc);
 
-            m_preview_layout->add_view(preset_card);
+            add_preview_card(preset_card);
 
             // 4. Custom Rules Card: switches for common services + Add Rule popup button on header
             auto rules_card = LinearLayoutBuilder::create()
@@ -2381,7 +2395,7 @@ void MillerView::rebuild_preview_column() {
                              crule.enabled, [&crule](bool c) { crule.enabled = c; });
             }
 
-            m_preview_layout->add_view(rules_card);
+            add_preview_card(rules_card);
 
             // 5. Monitor Card: Can be disabled with switch
             auto monitor_card = LinearLayoutBuilder::create()
@@ -2488,7 +2502,7 @@ void MillerView::rebuild_preview_column() {
                 }
             }
 
-            m_preview_layout->add_view(monitor_card);
+            add_preview_card(monitor_card);
         }
 
         return;
@@ -2541,7 +2555,7 @@ void MillerView::rebuild_preview_column() {
         box_lp.gravity = Gravity::CenterVertical;
         card->add_view(box, box_lp);
 
-        m_preview_layout->add_view(card);
+        add_preview_card(card);
         return;
     }
 
@@ -2631,7 +2645,7 @@ void MillerView::rebuild_preview_column() {
         lbl_lp.gravity = Gravity::CenterVertical;
         hero_card->add_view(lbl_box, lbl_lp);
 
-        m_preview_layout->add_view(hero_card);
+        add_preview_card(hero_card);
 
         // 2. Battery Health Card (On a new line)
         auto health_card = LinearLayoutBuilder::create()
@@ -2701,7 +2715,7 @@ void MillerView::rebuild_preview_column() {
         badge_lp.gravity = Gravity::CenterVertical;
         health_card->add_view(badge_card, badge_lp);
 
-        m_preview_layout->add_view(health_card);
+        add_preview_card(health_card);
 
         // 3. Battery Specifications Telemetry Card
         std::string active_draw = item->battery_cfg->power_saver ? "5.2 W (Power Saver Active)" :
@@ -2715,7 +2729,7 @@ void MillerView::rebuild_preview_column() {
             {"Cell Temperature", "31.4 °C"},
             {"Technology", "Lithium-Polymer (LiPo)"}
         };
-        m_preview_layout->add_view(create_telemetry_card(bat_telemetry, config, "Battery specifications"));
+        add_preview_card(create_telemetry_card(bat_telemetry, config, "Battery specifications"));
         return;
     }
 
@@ -2800,7 +2814,7 @@ void MillerView::rebuild_preview_column() {
         badge_lp.gravity = Gravity::CenterVertical;
         hero_card->add_view(badge_card, badge_lp);
 
-        m_preview_layout->add_view(hero_card);
+        add_preview_card(hero_card);
 
         // 2. Operating Profile Card with Spinner
         auto prof_card = LinearLayoutBuilder::create()
@@ -2870,7 +2884,7 @@ void MillerView::rebuild_preview_column() {
             ->build();
         prof_card->add_view(prof_desc);
 
-        m_preview_layout->add_view(prof_card);
+        add_preview_card(prof_card);
 
         // 3. Power Management Specifications Telemetry Card
         std::string active_draw = item->battery_cfg->power_saver ? "5.2 W (Power Saver Active)" :
@@ -2889,7 +2903,7 @@ void MillerView::rebuild_preview_column() {
             {"Active Power Draw", active_draw},
             {"Package Temp", "42.5 °C"}
         };
-        m_preview_layout->add_view(create_telemetry_card(power_telemetry, config, "Power management specifications"));
+        add_preview_card(create_telemetry_card(power_telemetry, config, "Power management specifications"));
         return;
     }
 
@@ -2989,7 +3003,7 @@ void MillerView::rebuild_preview_column() {
             mon_card->add_view(make_prim_btn, prim_lp);
         }
 
-        m_preview_layout->add_view(mon_card);
+        add_preview_card(mon_card);
 
         // 2. Interactive Display Settings Card (Resolution, Refresh Rate, Scale, Orientation as Spinners)
         auto cfg_card = LinearLayoutBuilder::create()
@@ -3092,11 +3106,11 @@ void MillerView::rebuild_preview_column() {
             rebuild_current_column();
         }));
 
-        m_preview_layout->add_view(cfg_card);
+        add_preview_card(cfg_card);
 
         // 3. Hardware & Panel Telemetry
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "Display panel specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "Display panel specifications"));
         }
 
         return;
@@ -3298,7 +3312,7 @@ void MillerView::rebuild_preview_column() {
             app_card->add_view(desc_view, desc_lp);
         }
 
-        m_preview_layout->add_view(app_card);
+        add_preview_card(app_card);
 
         // 2. Network Access Card (Simple & Concise)
         auto net_card = LinearLayoutBuilder::create()
@@ -3396,7 +3410,7 @@ void MillerView::rebuild_preview_column() {
         LayoutParams sp_lp(140, 36);
         net_card->add_view(net_spinner, sp_lp);
 
-        m_preview_layout->add_view(net_card);
+        add_preview_card(net_card);
 
         // 3. Application & Storage Details Card
         auto details_card = LinearLayoutBuilder::create()
@@ -3500,11 +3514,11 @@ void MillerView::rebuild_preview_column() {
             details_card->add_view(row);
         }
 
-        m_preview_layout->add_view(details_card);
+        add_preview_card(details_card);
 
         // 3. Telemetry Card
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "Package & runtime specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "Package & runtime specifications"));
         }
 
         return;
@@ -3590,7 +3604,7 @@ void MillerView::rebuild_preview_column() {
         pill_lp.gravity = Gravity::CenterVertical;
         role_card->add_view(pill_card, pill_lp);
 
-        m_preview_layout->add_view(role_card);
+        add_preview_card(role_card);
 
         // 2. Candidates Selector Card
         auto cand_card = LinearLayoutBuilder::create()
@@ -3710,11 +3724,11 @@ void MillerView::rebuild_preview_column() {
             cand_card->add_view(cand_row_card);
         }
 
-        m_preview_layout->add_view(cand_card);
+        add_preview_card(cand_card);
 
         // 3. MIME Telemetry Card
         if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "MIME handler specifications"));
+            add_preview_card(create_telemetry_card(item->telemetry, config, "MIME handler specifications"));
         }
 
         return;
@@ -3787,7 +3801,7 @@ void MillerView::rebuild_preview_column() {
         pill_lp.gravity = Gravity::CenterVertical;
         banner->add_view(pill_card, pill_lp);
     }
-    m_preview_layout->add_view(banner);
+    add_preview_card(banner);
 
     // 2. Primary Toggle Card
     if (item->has_switch) {
@@ -3844,7 +3858,7 @@ void MillerView::rebuild_preview_column() {
         sw_lp.gravity = Gravity::CenterVertical;
         primary_row->add_view(m_active_primary_switch, sw_lp);
 
-        m_preview_layout->add_view(primary_row);
+        add_preview_card(primary_row);
     }
 
     // 3. Secondary Controls Card (Secondary switch, Slider, Action Button)
@@ -3992,7 +4006,7 @@ void MillerView::rebuild_preview_column() {
             sub_box->add_view(action_row);
         }
 
-        m_preview_layout->add_view(sub_box);
+        add_preview_card(sub_box);
     }
 
     // 4. Telemetry / Diagnostics Card
@@ -4017,7 +4031,7 @@ void MillerView::rebuild_preview_column() {
         } else if (item->id.rfind("diag_", 0) == 0) {
             telem_title = "System specifications";
         }
-        m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, telem_title));
+        add_preview_card(create_telemetry_card(item->telemetry, config, telem_title));
     }
 }
 
