@@ -583,30 +583,9 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Live Reload", "miqutheme (Dynamic inotify sync)"}
         };
 
-        auto ws_borders = SettingItem::create_leaf("ws_borders", "Window Borders", "", "󰃟");
-        ws_borders->has_switch = true;
-        ws_borders->switch_val = true;
-        ws_borders->switch_label = "Active Border Gradient";
-        ws_borders->has_secondary_switch = true;
-        ws_borders->secondary_switch_val = true;
-        ws_borders->secondary_switch_label = "Window Border Shading";
-        ws_borders->has_slider = true;
-        ws_borders->slider_val = 0.40f;
-        ws_borders->slider_label = "Border Width (2 px)";
-        ws_borders->slider_unit = "%";
-        ws_borders->has_action = true;
-        ws_borders->action_label = "Reset Border Defaults";
-        ws_borders->telemetry_title = "Border specifications";
-        ws_borders->telemetry = {
-            {"Border Width", "2 px"},
-            {"Corner Radius", "12 px"},
-            {"Gradient Stops", "3 color stops"},
-            {"Inactive Border", "1 px solid (#45475a)"}
-        };
-
         root.push_back(SettingItem::create_category(
             "cat_wallpaper_style", "Wallpaper & Style", "󰸉",
-            {ws_wallpaper, ws_colors, ws_borders}
+            {ws_wallpaper, ws_colors}
         ));
     }
 
