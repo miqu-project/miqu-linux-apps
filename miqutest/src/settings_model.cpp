@@ -142,7 +142,75 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     }
 
     // ==============================================================================
-    // 2. Monitors & Displays (Depth 1)
+    // 2. Tiling Layout (Depth 1)
+    // ==============================================================================
+    {
+        auto tile_mode = SettingItem::create_leaf("tile_mode", "Layout Mode", "", "󰕰");
+        tile_mode->has_switch = true;
+        tile_mode->switch_val = true;
+        tile_mode->switch_label = "Auto-Split Windows (Dwindle)";
+        tile_mode->has_secondary_switch = true;
+        tile_mode->secondary_switch_val = false;
+        tile_mode->secondary_switch_label = "Preserve Split Aspect Ratio (Fibonacci)";
+        tile_mode->has_slider = true;
+        tile_mode->slider_val = 0.50f;
+        tile_mode->slider_label = "Master Split Ratio (50 / 50)";
+        tile_mode->slider_unit = "%";
+        tile_mode->has_action = true;
+        tile_mode->action_label = "Cycle Active Layout Mode";
+        tile_mode->telemetry_title = "Layout engine specifications";
+        tile_mode->telemetry = {
+            {"Active Layout Engine", "Dwindle (Binary Space Partition)"},
+            {"Secondary Layout", "Master-Stack (Tall column)"},
+            {"Floating Rules", "Dialogs, Popups, Modals auto-float"},
+            {"Special Workspaces", "1 Scratchpad overlay available"}
+        };
+
+        auto tile_gaps = SettingItem::create_leaf("tile_gaps", "Window Gaps", "", "󰃟");
+        tile_gaps->has_switch = true;
+        tile_gaps->switch_val = true;
+        tile_gaps->switch_label = "Smart Gaps (Disable when single window)";
+        tile_gaps->has_secondary_switch = true;
+        tile_gaps->secondary_switch_val = true;
+        tile_gaps->secondary_switch_label = "Outer Screen Edge Gaps";
+        tile_gaps->has_slider = true;
+        tile_gaps->slider_val = 0.40f;
+        tile_gaps->slider_label = "Inner Window Gaps (8 px)";
+        tile_gaps->slider_unit = "%";
+        tile_gaps->has_action = true;
+        tile_gaps->action_label = "Reset Default Gaps";
+        tile_gaps->telemetry_title = "Geometry specifications";
+        tile_gaps->telemetry = {
+            {"Inner Window Gaps", "8 px"},
+            {"Outer Screen Gaps", "14 px"},
+            {"Reserved Struts", "miqubar (top: 36px)"},
+            {"Layout Boundary", "Clamped to output usable area"}
+        };
+
+        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus & Mouse Behavior", "", "󰍽");
+        tile_focus->has_switch = true;
+        tile_focus->switch_val = true;
+        tile_focus->switch_label = "Focus Follows Mouse";
+        tile_focus->has_secondary_switch = true;
+        tile_focus->secondary_switch_val = true;
+        tile_focus->secondary_switch_label = "Warp Cursor to Focused Window";
+        tile_focus->has_slider = false;
+        tile_focus->has_action = false;
+        tile_focus->telemetry_title = "Focus management specifications";
+        tile_focus->telemetry = {
+            {"Focus Mode", "Sloppy (Follows cursor motion)"},
+            {"Window Raise on Click", "Enabled"},
+            {"Multi-Monitor Focus", "Active monitor follows mouse"}
+        };
+
+        root.push_back(SettingItem::create_category(
+            "cat_tiling", "Tiling Layout", "󰕰",
+            {tile_mode, tile_gaps, tile_focus}
+        ));
+    }
+
+    // ==============================================================================
+    // 3. Monitors & Displays (Depth 1)
     // ==============================================================================
     {
         // 2.1 Monitor 1 (Primary 4K 144Hz)
@@ -438,144 +506,172 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     }
 
     // ==============================================================================
-    // 4. Personalization & UI (Depth 1)
+    // 5. Display (Depth 1)
     // ==============================================================================
     {
-        // 2.1 Appearance Subcategory (Depth 2)
-        auto theme_scheme = SettingItem::create_leaf("theme_scheme", "Color Theme", "Material 3 & dynamic Matugen schemes", "󰔎");
-        theme_scheme->has_switch = true;
-        theme_scheme->switch_val = true;
-        theme_scheme->switch_label = "Dark Appearance";
-        theme_scheme->has_secondary_switch = true;
-        theme_scheme->secondary_switch_val = false;
-        theme_scheme->secondary_switch_label = "High Contrast Mode";
-        theme_scheme->has_slider = true;
-        theme_scheme->slider_val = 0.35f;
-        theme_scheme->slider_label = "Theme Palette Warmth";
-        theme_scheme->slider_unit = "%";
-        theme_scheme->has_action = true;
-        theme_scheme->action_label = "Regenerate Palette (Matugen)";
-        theme_scheme->telemetry = {
-            {"Active Scheme", "Miqu Dark Material 3"},
-            {"Primary Accent", "#3584e4 (Blue Sapphire)"},
-            {"Surface Tint", "#1e1e2e (Catppuccin Mocha)"}
+        // 5.1 Brightness
+        auto disp_bright = SettingItem::create_leaf("disp_bright", "Brightness", "", "󰃠");
+        disp_bright->has_slider = true;
+        disp_bright->slider_val = 0.85f;
+        disp_bright->slider_label = "Display Brightness";
+        disp_bright->slider_unit = "%";
+        disp_bright->has_switch = true;
+        disp_bright->switch_val = false;
+        disp_bright->switch_label = "Automatic Brightness Adjustment";
+        disp_bright->has_secondary_switch = false;
+        disp_bright->has_action = true;
+        disp_bright->action_label = "Calibrate Ambient Sensor";
+        disp_bright->telemetry_title = "Backlight & panel specifications";
+        disp_bright->telemetry = {
+            {"Backlight Interface", "intel_backlight (/sys/class/backlight)"},
+            {"Current Level", "217 / 255 steps (85%)"},
+            {"Minimum Brightness", "1% (Prevents full blackout)"},
+            {"PWM Frequency", "20000 Hz (Flicker-Free)"}
         };
 
-        auto theme_borders = SettingItem::create_leaf("theme_borders", "Gradients & Borders", "Multi-stop borders & titlebar shading", "󰃟");
-        theme_borders->has_switch = true;
-        theme_borders->switch_val = true;
-        theme_borders->switch_label = "Window Border Shading";
-        theme_borders->has_secondary_switch = true;
-        theme_borders->secondary_switch_val = true;
-        theme_borders->secondary_switch_label = "Rainbow Gradient Color Stops";
-        theme_borders->has_slider = true;
-        theme_borders->slider_val = 0.40f;
-        theme_borders->slider_label = "Border Width (2px)";
-        theme_borders->slider_unit = "%";
-        theme_borders->has_action = true;
-        theme_borders->action_label = "Reset Default Borders";
-        theme_borders->telemetry = {
-            {"Corner Radius", "16 px"},
-            {"Gradient Stops", "3 color stops"},
-            {"Angle", "45.0 degrees"}
+        // 5.2 Screen Timeout
+        auto disp_timeout = SettingItem::create_leaf("disp_timeout", "Screen Timeout", "", "󰒲");
+        disp_timeout->has_switch = true;
+        disp_timeout->switch_val = true;
+        disp_timeout->switch_label = "Idle Screen Dimming";
+        disp_timeout->has_secondary_switch = true;
+        disp_timeout->secondary_switch_val = true;
+        disp_timeout->secondary_switch_label = "Prevent Sleep While Audio/Video is Playing";
+        disp_timeout->has_slider = true;
+        disp_timeout->slider_val = 0.50f;
+        disp_timeout->slider_label = "Turn Off Screen After (10 min)";
+        disp_timeout->slider_unit = "%";
+        disp_timeout->has_action = true;
+        disp_timeout->action_label = "Test Screen Blanking Now";
+        disp_timeout->telemetry_title = "Idle management specifications";
+        disp_timeout->telemetry = {
+            {"Idle Daemon", "miquidle (ext-idle-notify-v1)"},
+            {"DPMS Protocol", "wlr-output-power-management-v1"},
+            {"AC Idle Timeout", "10 minutes"},
+            {"Battery Idle Timeout", "5 minutes"},
+            {"Active Idle State", "Active (0s idle)"}
         };
 
-        auto appear_cat = SettingItem::create_category(
-            "appear_cat", "Appearance & Colors", "󰔎",
-            {theme_scheme, theme_borders}
-        );
-
-        // 2.2 Compositor Effects Subcategory (Depth 2)
-        auto fx_blur = SettingItem::create_leaf("fx_blur", "Kawase Blur & Shadows", "Hardware GPU blur passes & dropshadows", "󰍹");
-        fx_blur->has_switch = true;
-        fx_blur->switch_val = true;
-        fx_blur->switch_label = "Dual-Kawase Background Blur";
-        fx_blur->has_secondary_switch = true;
-        fx_blur->secondary_switch_val = true;
-        fx_blur->secondary_switch_label = "Ambient Drop Shadows";
-        fx_blur->has_slider = true;
-        fx_blur->slider_val = 0.70f;
-        fx_blur->slider_label = "Blur Radius (8 passes)";
-        fx_blur->slider_unit = "%";
-        fx_blur->has_action = true;
-        fx_blur->action_label = "Benchmark GPU Frame Time";
-        fx_blur->telemetry = {
-            {"Compositor Engine", "miquland (wlroots)"},
-            {"VSync Refresh", "144 Hz (FreeSync Active)"},
-            {"Frame Latency", "6.94 ms (Stable)"}
+        // 5.3 Night Light
+        auto disp_nightlight = SettingItem::create_leaf("disp_nightlight", "Night Light", "", "󰃟");
+        disp_nightlight->has_switch = true;
+        disp_nightlight->switch_val = true;
+        disp_nightlight->switch_label = "Night Light Filter";
+        disp_nightlight->has_secondary_switch = true;
+        disp_nightlight->secondary_switch_val = true;
+        disp_nightlight->secondary_switch_label = "Automatic Sunset to Sunrise Schedule";
+        disp_nightlight->has_slider = true;
+        disp_nightlight->slider_val = 0.65f;
+        disp_nightlight->slider_label = "Color Warmth (3400 K)";
+        disp_nightlight->slider_unit = "%";
+        disp_nightlight->has_action = true;
+        disp_nightlight->action_label = "Preview Warmth Calibration";
+        disp_nightlight->telemetry_title = "Gamma & color specifications";
+        disp_nightlight->telemetry = {
+            {"Gamma Protocol", "wlr-gamma-control-v1"},
+            {"Night Temperature", "3400 K (Warm Amber)"},
+            {"Day Temperature", "6500 K (Standard D65)"},
+            {"Sunset Schedule", "Sunset 18:15 • Sunrise 06:20"}
         };
 
-        auto fx_anim = SettingItem::create_leaf("fx_anim", "Window Animations", "Easing curves & spring physics", "󰑮");
-        fx_anim->has_switch = true;
-        fx_anim->switch_val = true;
-        fx_anim->switch_label = "Smooth Window Animations";
-        fx_anim->has_secondary_switch = true;
-        fx_anim->secondary_switch_val = true;
-        fx_anim->secondary_switch_label = "Spring Physics Simulation";
-        fx_anim->has_slider = true;
-        fx_anim->slider_val = 0.80f;
-        fx_anim->slider_label = "Animation Velocity (1.0x)";
-        fx_anim->slider_unit = "%";
-        fx_anim->has_action = true;
-        fx_anim->action_label = "Preview Workspace Transition";
-        fx_anim->telemetry = {
-            {"Easing Curve", "cubic-bezier(0.16, 1, 0.3, 1)"},
-            {"Spring Damping", "0.85"},
-            {"Spring Stiffness", "240"}
+        // 5.4 Lockscreen
+        auto disp_lockscreen = SettingItem::create_leaf("disp_lockscreen", "Lockscreen", "", "󰌾");
+        disp_lockscreen->has_switch = true;
+        disp_lockscreen->switch_val = true;
+        disp_lockscreen->switch_label = "Lock Screen When Display Turns Off";
+        disp_lockscreen->has_secondary_switch = true;
+        disp_lockscreen->secondary_switch_val = true;
+        disp_lockscreen->secondary_switch_label = "Require Password Immediately After Sleep";
+        disp_lockscreen->has_slider = true;
+        disp_lockscreen->slider_val = 0.0f;
+        disp_lockscreen->slider_label = "Lock Grace Period (0 s)";
+        disp_lockscreen->slider_unit = "%";
+        disp_lockscreen->has_action = true;
+        disp_lockscreen->action_label = "Lock Session Now (Super+L)";
+        disp_lockscreen->telemetry_title = "Session security specifications";
+        disp_lockscreen->telemetry = {
+            {"Locker Daemon", "miqulock (ext-session-lock-v1)"},
+            {"Authentication Provider", "PAM (system-auth)"},
+            {"Session Manager", "systemd-logind (seat0)"},
+            {"Grace Period Timer", "0 s (Instant Lock)"}
         };
-
-        auto fx_cat = SettingItem::create_category(
-            "fx_cat", "Compositor Effects", "󰍹",
-            {fx_blur, fx_anim}
-        );
-
-        // 2.3 Night Light & Displays Subcategory (Depth 2)
-        auto nl_temp = SettingItem::create_leaf("nl_temp", "Color Temperature", "Blue light reduction & night comfort", "󰃟");
-        nl_temp->has_switch = true;
-        nl_temp->switch_val = true;
-        nl_temp->switch_label = "Night Light Filter";
-        nl_temp->has_secondary_switch = true;
-        nl_temp->secondary_switch_val = true;
-        nl_temp->secondary_switch_label = "Automatic Sunset to Sunrise";
-        nl_temp->has_slider = true;
-        nl_temp->slider_val = 0.65f;
-        nl_temp->slider_label = "Color Warmth (3400 K)";
-        nl_temp->slider_unit = "%";
-        nl_temp->has_action = true;
-        nl_temp->action_label = "Preview Warmth Calibration";
-        nl_temp->telemetry = {
-            {"Current Temp", "3400 K"},
-            {"Coordinates", "23.8° N, 90.4° E"},
-            {"Status", "Active (Night)"}
-        };
-
-        auto disp_scale = SettingItem::create_leaf("disp_scale", "Display Scaling & DPI", "HiDPI fractional scaling & font sizing", "󰹑");
-        disp_scale->has_switch = true;
-        disp_scale->switch_val = true;
-        disp_scale->switch_label = "HiDPI Fractional Scaling";
-        disp_scale->has_secondary_switch = true;
-        disp_scale->secondary_switch_val = true;
-        disp_scale->secondary_switch_label = "Sync Font DPI with Display Scale";
-        disp_scale->has_slider = true;
-        disp_scale->slider_val = 0.50f;
-        disp_scale->slider_label = "Scale Factor (125%)";
-        disp_scale->slider_unit = "%";
-        disp_scale->has_action = true;
-        disp_scale->action_label = "Apply Output Resolution";
-        disp_scale->telemetry = {
-            {"Native Resolution", "2560 x 1440 (16:9)"},
-            {"Applied Scale", "1.25x"},
-            {"Active Output", "DP-1 (DisplayPort)"}
-        };
-
-        auto disp_cat = SettingItem::create_category(
-            "disp_cat", "Night Light & Displays", "󰃟",
-            {nl_temp, disp_scale}
-        );
 
         root.push_back(SettingItem::create_category(
-            "cat_personalization", "Personalization & UI", "󰔎",
-            {appear_cat, fx_cat, disp_cat}
+            "cat_display", "Display", "󰍹",
+            {disp_bright, disp_timeout, disp_nightlight, disp_lockscreen}
+        ));
+    }
+
+    // ==============================================================================
+    // 6. Wallpaper & Style (Depth 1)
+    // ==============================================================================
+    {
+        auto ws_wallpaper = SettingItem::create_leaf("ws_wallpaper", "Wallpaper", "", "󰸉");
+        ws_wallpaper->has_switch = true;
+        ws_wallpaper->switch_val = true;
+        ws_wallpaper->switch_label = "Dynamic Transitions";
+        ws_wallpaper->has_secondary_switch = true;
+        ws_wallpaper->secondary_switch_val = false;
+        ws_wallpaper->secondary_switch_label = "Randomized Daily Wallpaper";
+        ws_wallpaper->has_slider = true;
+        ws_wallpaper->slider_val = 0.30f;
+        ws_wallpaper->slider_label = "Transition Duration (1.2 s)";
+        ws_wallpaper->slider_unit = "%";
+        ws_wallpaper->has_action = true;
+        ws_wallpaper->action_label = "Browse Wallpaper Directory...";
+        ws_wallpaper->telemetry_title = "Wallpaper daemon specifications";
+        ws_wallpaper->telemetry = {
+            {"Active Wallpaper", "~/Pictures/Wallpapers/aurora_minimal.png"},
+            {"Wallpaper Daemon", "miqubg (Layer Shell / wl_surface)"},
+            {"Scaling Mode", "Aspect Fill (Lanczos3 filtered)"},
+            {"Multi-Monitor", "Independent per output"}
+        };
+
+        auto ws_colors = SettingItem::create_leaf("ws_colors", "Color Theme & Palette", "", "󰔎");
+        ws_colors->has_switch = true;
+        ws_colors->switch_val = true;
+        ws_colors->switch_label = "Dark Appearance";
+        ws_colors->has_secondary_switch = true;
+        ws_colors->secondary_switch_val = true;
+        ws_colors->secondary_switch_label = "Extract Dynamic Matugen Palette";
+        ws_colors->has_slider = true;
+        ws_colors->slider_val = 0.45f;
+        ws_colors->slider_label = "Palette Warmth Tint (45%)";
+        ws_colors->slider_unit = "%";
+        ws_colors->has_action = true;
+        ws_colors->action_label = "Regenerate Palette (Matugen)";
+        ws_colors->telemetry_title = "Color palette specifications";
+        ws_colors->telemetry = {
+            {"Active Theme", "Miqu Dark Material 3"},
+            {"Primary Accent", "#3584e4 (Blue Sapphire)"},
+            {"Surface Tint", "#1e1e2e (Catppuccin Mocha)"},
+            {"Live Reload", "miqutheme (Dynamic inotify sync)"}
+        };
+
+        auto ws_borders = SettingItem::create_leaf("ws_borders", "Window Borders", "", "󰃟");
+        ws_borders->has_switch = true;
+        ws_borders->switch_val = true;
+        ws_borders->switch_label = "Active Border Gradient";
+        ws_borders->has_secondary_switch = true;
+        ws_borders->secondary_switch_val = true;
+        ws_borders->secondary_switch_label = "Window Border Shading";
+        ws_borders->has_slider = true;
+        ws_borders->slider_val = 0.40f;
+        ws_borders->slider_label = "Border Width (2 px)";
+        ws_borders->slider_unit = "%";
+        ws_borders->has_action = true;
+        ws_borders->action_label = "Reset Border Defaults";
+        ws_borders->telemetry_title = "Border specifications";
+        ws_borders->telemetry = {
+            {"Border Width", "2 px"},
+            {"Corner Radius", "12 px"},
+            {"Gradient Stops", "3 color stops"},
+            {"Inactive Border", "1 px solid (#45475a)"}
+        };
+
+        root.push_back(SettingItem::create_category(
+            "cat_wallpaper_style", "Wallpaper & Style", "󰸉",
+            {ws_wallpaper, ws_colors, ws_borders}
         ));
     }
 
@@ -622,6 +718,60 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         root.push_back(SettingItem::create_category(
             "cat_audio", "Sound", "󰕾",
             {speaker, mic}
+        ));
+    }
+
+    // ==============================================================================
+    // 8. Storage (Depth 1)
+    // ==============================================================================
+    {
+        auto stor_root = SettingItem::create_leaf("stor_root", "Root Filesystem (/)", "", "󰋊");
+        stor_root->has_slider = true;
+        stor_root->slider_val = 0.42f;
+        stor_root->slider_label = "Storage Used (42% • 420.5 GB of 1.0 TB)";
+        stor_root->slider_unit = "%";
+        stor_root->has_switch = true;
+        stor_root->switch_val = true;
+        stor_root->switch_label = "Periodic SSD TRIM (fstrim.timer)";
+        stor_root->has_secondary_switch = true;
+        stor_root->secondary_switch_val = true;
+        stor_root->secondary_switch_label = "ZSTD Transparent Compression";
+        stor_root->has_action = true;
+        stor_root->action_label = "Run Drive Health Diagnostic (SMART)";
+        stor_root->telemetry_title = "Block device & filesystem specifications";
+        stor_root->telemetry = {
+            {"Filesystem Type", "Btrfs (rw, noatime, compress=zstd:3)"},
+            {"Drive Model", "Samsung SSD 990 PRO 1TB NVMe"},
+            {"Total Capacity", "1,000.2 GB (931.5 GiB)"},
+            {"Used Space", "420.5 GB (42%)"},
+            {"Available Space", "579.7 GB (58%)"},
+            {"SMART Health Status", "PASSED (100% remaining lifetime)"}
+        };
+
+        auto stor_home = SettingItem::create_leaf("stor_home", "User Data (~/)", "", "󰉋");
+        stor_home->has_slider = true;
+        stor_home->slider_val = 0.28f;
+        stor_home->slider_label = "User Directory Space (280.4 GB)";
+        stor_home->slider_unit = "%";
+        stor_home->has_switch = true;
+        stor_home->switch_val = true;
+        stor_home->switch_label = "Automatic Cache Cleaner";
+        stor_home->has_secondary_switch = false;
+        stor_home->has_action = true;
+        stor_home->action_label = "Clean Package & App Cache";
+        stor_home->telemetry_title = "Directory usage specifications";
+        stor_home->telemetry = {
+            {"Mount Point", "/home/anisur"},
+            {"Documents & Code", "54.2 GB"},
+            {"Pictures & Videos", "112.8 GB"},
+            {"Downloads", "24.6 GB"},
+            {"Application Cache (~/.cache)", "18.4 GB"},
+            {"Snapshots / Backups", "70.4 GB"}
+        };
+
+        root.push_back(SettingItem::create_category(
+            "cat_storage", "Storage", "󰋊",
+            {stor_root, stor_home}
         ));
     }
 
@@ -673,14 +823,15 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     }
 
     // ==============================================================================
-    // 8. About System (Depth 1)
+    // 10. System (Depth 1)
     // ==============================================================================
     {
-        auto diag_about = SettingItem::create_leaf("diag_about", "About System", "", "󰋽");
-        diag_about->has_action = true;
-        diag_about->action_label = "Check for Ecosystem Updates";
-        diag_about->telemetry_title = "System specifications";
-        diag_about->telemetry = {
+        // 10.1 About (Leaf)
+        auto sys_about = SettingItem::create_leaf("sys_about", "About", "", "󰋽");
+        sys_about->has_action = true;
+        sys_about->action_label = "Check for Ecosystem Updates";
+        sys_about->telemetry_title = "System specifications";
+        sys_about->telemetry = {
             {"Distribution", "Arch Linux (Rolling Release)"},
             {"Linux Kernel", "6.11.7-arch1-1"},
             {"Desktop Compositor", "miquland (C++20)"},
@@ -690,23 +841,32 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Firmware / UEFI", "UEFI v2.8 (Secure Boot: Active)"}
         };
 
-        auto diag_dev = SettingItem::create_leaf("diag_dev", "Developer Diagnostics", "", "󰒍");
-        diag_dev->has_switch = true;
-        diag_dev->switch_val = false;
-        diag_dev->switch_label = "Developer Diagnostic Mode";
-        diag_dev->has_secondary_switch = true;
-        diag_dev->secondary_switch_val = false;
-        diag_dev->secondary_switch_label = "Send Anonymous Performance Metrics";
-        diag_dev->telemetry_title = "Diagnostic status";
-        diag_dev->telemetry = {
-            {"Log Level", "info (systemd journald)"},
-            {"Crash Reporting", "coredumpctl active"},
-            {"Wayland Socket", "wayland-0 (miquland)"}
+        // 10.2 Input (Leaf)
+        auto sys_input = SettingItem::create_leaf("sys_input", "Input", "", "󰌌");
+        sys_input->has_switch = true;
+        sys_input->switch_val = true;
+        sys_input->switch_label = "Natural Scrolling";
+        sys_input->has_secondary_switch = true;
+        sys_input->secondary_switch_val = true;
+        sys_input->secondary_switch_label = "Tap-to-Click on Touchpad";
+        sys_input->has_slider = true;
+        sys_input->slider_val = 0.60f;
+        sys_input->slider_label = "Pointer Speed (60%)";
+        sys_input->slider_unit = "%";
+        sys_input->has_action = true;
+        sys_input->action_label = "Calibrate Touchpad Gestures";
+        sys_input->telemetry_title = "Input hardware specifications";
+        sys_input->telemetry = {
+            {"Keyboard Layout", "English (US) / ANSI standard"},
+            {"Active Keyboard", "Keychron K2 Pro (QMK/VIA)"},
+            {"Pointing Device", "Logitech MX Master 3S (1000 Hz)"},
+            {"Touchpad Protocol", "libinput (Precision Touchpad)"},
+            {"Multi-Touch Gestures", "3-finger workspace swipe, 4-finger overview"}
         };
 
         root.push_back(SettingItem::create_category(
-            "cat_about", "About System", "󰋽",
-            {diag_about, diag_dev}
+            "cat_system", "System", "󰒓",
+            {sys_about, sys_input}
         ));
     }
 
