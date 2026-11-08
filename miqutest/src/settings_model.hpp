@@ -254,6 +254,14 @@ struct TilingConfig {
     bool auto_float_fixed_size = true; // Auto-float non-resizable dialogs/popups
 };
 
+struct WallpaperConfig {
+    std::string current_wallpaper = "aurora_minimal.png";
+    std::string wallpaper_path = "~/Pictures/Wallpapers/aurora_minimal.png";
+    std::string fit_mode = "Aspect Fill";
+    std::vector<std::string> fit_modes = {"Aspect Fill", "Fit", "Stretch", "Center", "Tile"};
+    std::string display_aspect = "16:9";
+};
+
 class SettingItem {
 public:
     std::string id;
@@ -318,6 +326,9 @@ public:
 
     bool is_tiling_config = false;
     std::shared_ptr<TilingConfig> tiling_cfg = std::make_shared<TilingConfig>();
+
+    bool is_wallpaper = false;
+    std::shared_ptr<WallpaperConfig> wallpaper_cfg = std::make_shared<WallpaperConfig>();
 
     static std::shared_ptr<SettingItem> create_category(
         std::string id, std::string title, std::string icon,

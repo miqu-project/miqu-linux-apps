@@ -542,25 +542,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // ==============================================================================
     {
         auto ws_wallpaper = SettingItem::create_leaf("ws_wallpaper", "Wallpaper", "", "󰸉");
-        ws_wallpaper->has_switch = true;
-        ws_wallpaper->switch_val = true;
-        ws_wallpaper->switch_label = "Dynamic Transitions";
-        ws_wallpaper->has_secondary_switch = true;
-        ws_wallpaper->secondary_switch_val = false;
-        ws_wallpaper->secondary_switch_label = "Randomized Daily Wallpaper";
-        ws_wallpaper->has_slider = true;
-        ws_wallpaper->slider_val = 0.30f;
-        ws_wallpaper->slider_label = "Transition Duration (1.2 s)";
-        ws_wallpaper->slider_unit = "%";
-        ws_wallpaper->has_action = true;
-        ws_wallpaper->action_label = "Browse Wallpaper Directory...";
-        ws_wallpaper->telemetry_title = "Wallpaper daemon specifications";
-        ws_wallpaper->telemetry = {
-            {"Active Wallpaper", "~/Pictures/Wallpapers/aurora_minimal.png"},
-            {"Wallpaper Daemon", "miqubg (Layer Shell / wl_surface)"},
-            {"Scaling Mode", "Aspect Fill (Lanczos3 filtered)"},
-            {"Multi-Monitor", "Independent per output"}
-        };
+        ws_wallpaper->is_wallpaper = true;
 
         auto ws_colors = SettingItem::create_leaf("ws_colors", "Color Theme & Palette", "", "󰔎");
         ws_colors->has_switch = true;

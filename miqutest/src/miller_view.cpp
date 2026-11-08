@@ -2507,7 +2507,7 @@ void MillerView::rebuild_preview_column() {
         return;
     }
 
-    // Dedicated Interactive UI for Tiling Layout & Window Management
+    // Dedicated Interactive UI for Compositor Settings (Tiling, Windows, Split & Focus)
     if (item->is_tiling_config) {
         bool show_layout = (item->id == "tile_mode");
         bool show_windows = (item->id == "tile_windows");
@@ -2984,6 +2984,128 @@ void MillerView::rebuild_preview_column() {
             );
         }
 
+        add_preview_card(main_card);
+        return;
+    }
+
+    // Dedicated Interactive UI for Wallpaper
+    if (item->is_wallpaper || item->id == "ws_wallpaper") {
+        auto main_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->padding(16, 16)
+            ->spacing(16)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        // 1. Display Aspect Ratio Rectangle (16:9 Ratio - 320x180 px)
+        auto display_rect = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->gravity(Gravity::Center)
+            ->backgroundColor(config->colors.surface_variant.with_alpha(0.45f))
+            ->stroke(1, config->colors.outline.with_alpha(0.35f))
+            ->cornerRadius(10)
+            ->spacing(4)
+            ->build();
+
+        auto wp_icon = TextViewBuilder::create()
+            ->text("󰸉")
+            ->textSize(static_cast<int>(config->metrics.font_size * 2))
+            ->textColor(config->colors.primary.with_alpha(0.85f))
+            ->build();
+        display_rect->add_view(wp_icon);
+
+        auto wp_name = TextViewBuilder::create()
+            ->text(item->wallpaper_cfg->current_wallpaper)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        display_rect->add_view(wp_name);
+
+        auto wp_tag = TextViewBuilder::create()
+            ->text("16:9 Display Preview")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+            ->build();
+        display_rect->add_view(wp_tag);
+
+        LayoutParams d_lp;
+        d_lp.width = 320;
+        d_lp.height = 180;
+        d_lp.gravity = Gravity::CenterHorizontal;
+        main_card->add_view(display_rect, d_lp);
+
+        // 2. Bottom Row: Browse Button, Fit Mode Spinner, Apply Button
+        auto bottom_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->spacing(10)
+            ->build();
+
+        auto browse_btn = ButtonBuilder::create()
+            ->text("Browse")
+            ->style(ButtonStyle::Outlined)
+            ->padding(14, 6)
+            ->cornerRadius(8)
+            ->onClick([this, item]() {
+                static const std::vector<std::string> mock_wallpapers = {
+                    "aurora_minimal.png",
+                    "cyber_neon.png",
+                    "mountain_twilight.png",
+                    "forest_mist.png",
+                    "abstract_waves.png"
+                };
+                static size_t wp_idx = 0;
+                wp_idx = (wp_idx + 1) % mock_wallpapers.size();
+                item->wallpaper_cfg->current_wallpaper = mock_wallpapers[wp_idx];
+                item->wallpaper_cfg->wallpaper_path = "~/Pictures/Wallpapers/" + mock_wallpapers[wp_idx];
+                rebuild_preview_column();
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams b_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        b_lp.gravity = Gravity::CenterVertical;
+        bottom_row->add_view(browse_btn, b_lp);
+
+        int cur_fit_idx = 0;
+        for (size_t i = 0; i < item->wallpaper_cfg->fit_modes.size(); ++i) {
+            if (item->wallpaper_cfg->fit_modes[i] == item->wallpaper_cfg->fit_mode) {
+                cur_fit_idx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        auto fit_spinner = SpinnerBuilder::create()
+            ->items(item->wallpaper_cfg->fit_modes)
+            ->selectedIndex(cur_fit_idx)
+            ->fontSize(config->metrics.font_size)
+            ->padding(12, 6)
+            ->cornerRadius(8)
+            ->onItemSelected([item](int idx, const std::string& val) {
+                (void)idx;
+                item->wallpaper_cfg->fit_mode = val;
+            })
+            ->build();
+        LayoutParams s_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        s_lp.gravity = Gravity::CenterVertical;
+        bottom_row->add_view(fit_spinner, s_lp);
+
+        auto apply_btn = ButtonBuilder::create()
+            ->text("Apply")
+            ->primary(true)
+            ->padding(16, 6)
+            ->cornerRadius(8)
+            ->onClick([this, item]() {
+                item->last_action_message = "Wallpaper applied: " + item->wallpaper_cfg->current_wallpaper;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams a_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
+        a_lp.gravity = Gravity::CenterVertical;
+        bottom_row->add_view(apply_btn, a_lp);
+
+        main_card->add_view(bottom_row);
         add_preview_card(main_card);
         return;
     }
