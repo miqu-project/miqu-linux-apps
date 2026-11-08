@@ -2702,22 +2702,6 @@ void MillerView::rebuild_preview_column() {
             dbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
             dbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
             main_card->add_view(desc_box, dbox_lp);
-
-            // Default Split Ratio (20% to 80%)
-            float initial_ratio_norm = (item->tiling_cfg->default_split_ratio - 0.20f) / 0.60f;
-            int r_pct = static_cast<int>(std::round(item->tiling_cfg->default_split_ratio * 100.0f));
-            add_slider_row(
-                "Initial split ratio",
-                "Screen division ratio when a new window partitions the active workspace",
-                initial_ratio_norm,
-                std::to_string(r_pct) + "% / " + std::to_string(100 - r_pct) + "%",
-                [item](float val) -> std::string {
-                    float ratio = 0.20f + val * 0.60f;
-                    item->tiling_cfg->default_split_ratio = ratio;
-                    int pct = static_cast<int>(std::round(ratio * 100.0f));
-                    return std::to_string(pct) + "% / " + std::to_string(100 - pct) + "%";
-                }
-            );
         }
 
         // -------------------------------------------------------------
@@ -2875,6 +2859,16 @@ void MillerView::rebuild_preview_column() {
                 }
             );
 
+            // Auto-Float Fixed-Size Windows
+            add_toggle_row(
+                "Auto-float fixed-size dialogs",
+                "Automatically floats splash screens and dialogs declaring fixed min/max size constraints",
+                item->tiling_cfg->auto_float_fixed_size,
+                [item](bool val) {
+                    item->tiling_cfg->auto_float_fixed_size = val;
+                }
+            );
+
             // Live Interactive Mini Window Geometry Preview
             int p_outer = std::max(4, item->tiling_cfg->outer_gap / 2);
             int p_inner = std::max(4, item->tiling_cfg->inner_gap / 2);
@@ -2944,15 +2938,47 @@ void MillerView::rebuild_preview_column() {
         }
 
         // -------------------------------------------------------------
-        // 3. Split Behaviour
+        // 3. Dwindle (BSP) Tuning
         // -------------------------------------------------------------
         if (show_split) {
             auto s3_title = TextViewBuilder::create()
-                ->text("Split Behaviour")
+                ->text("Dwindle (BSP) Tuning")
                 ->caption(true)
                 ->textColor(config->colors.primary)
                 ->build();
             main_card->add_view(s3_title);
+
+            bool is_dwindle_active = (item->tiling_cfg->layout_mode.find("Dwindle") != std::string::npos);
+            auto banner = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->padding(12, 10)
+                ->spacing(4)
+                ->backgroundColor(is_dwindle_active ? config->colors.primary_container.with_alpha(0.35f) : config->colors.surface_variant.with_alpha(0.35f))
+                ->stroke(1, is_dwindle_active ? config->colors.primary.with_alpha(0.4f) : config->colors.outline.with_alpha(0.25f))
+                ->cornerRadius(8)
+                ->build();
+
+            auto banner_title = TextViewBuilder::create()
+                ->text(is_dwindle_active ? "󰋼  Active Layout Engine" : "󰅚  Inactive for Current Layout")
+                ->caption(true)
+                ->textColor(is_dwindle_active ? config->colors.primary : config->colors.on_surface_variant)
+                ->build();
+            banner->add_view(banner_title);
+
+            std::string banner_msg = is_dwindle_active 
+                ? "These binary space partition options directly govern window division rules in the active Dwindle layout."
+                : "Active layout is '" + item->tiling_cfg->layout_mode + "'. These options configure the 'dwindle' block in miquland.conf and apply when switching to Dwindle.";
+            auto banner_text = TextViewBuilder::create()
+                ->text(banner_msg)
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            banner->add_view(banner_text);
+
+            LayoutParams b_lp;
+            b_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            b_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            main_card->add_view(banner, b_lp);
 
             // Default Split Ratio (20% to 80%)
             float initial_ratio_norm = (item->tiling_cfg->default_split_ratio - 0.20f) / 0.60f;
@@ -3070,16 +3096,6 @@ void MillerView::rebuild_preview_column() {
                     item->tiling_cfg->focus_on_workspace_switch = val;
                 }
             );
-
-            // Auto-Float Fixed-Size Windows
-            add_toggle_row(
-                "Auto-float fixed-size dialogs",
-                "Automatically floats splash screens and dialogs declaring fixed min/max size constraints",
-                item->tiling_cfg->auto_float_fixed_size,
-                [item](bool val) {
-                    item->tiling_cfg->auto_float_fixed_size = val;
-                }
-            );
         }
 
         add_preview_card(main_card);
@@ -3121,7 +3137,8 @@ void MillerView::rebuild_preview_column() {
                 {"general.border.active", item->tiling_cfg->active_border_value},
                 {"general.border.inactive", item->tiling_cfg->inactive_border_value},
                 {"general.border.shading", item->tiling_cfg->border_shading ? "true" : "false"},
-                {"general.resize_on_border", item->tiling_cfg->resize_on_border ? "true" : "false"}
+                {"general.resize_on_border", item->tiling_cfg->resize_on_border ? "true" : "false"},
+                {"general.auto_float_fixed_size", item->tiling_cfg->auto_float_fixed_size ? "true" : "false"}
             };
         } else if (show_split) {
             telem_title = "Dwindle & split directives (miquland.conf)";
@@ -3138,7 +3155,6 @@ void MillerView::rebuild_preview_column() {
                 {"input.follow_mouse", item->tiling_cfg->focus_follows_mouse ? "true (hover focus)" : "false (click focus)"},
                 {"input.click_to_focus", item->tiling_cfg->click_to_focus ? "true" : "false"},
                 {"input.warp_cursor", item->tiling_cfg->warp_cursor_on_focus ? "true" : "false"},
-                {"general.auto_float_fixed_size", item->tiling_cfg->auto_float_fixed_size ? "true" : "false"},
                 {"general.focus_on_workspace_switch", item->tiling_cfg->focus_on_workspace_switch ? "true" : "false"}
             };
         }

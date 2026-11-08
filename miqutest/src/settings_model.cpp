@@ -153,17 +153,17 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         tile_mode->tiling_cfg = shared_tiling;
 
         // 2.2 Windows
-        auto tile_windows = SettingItem::create_leaf("tile_windows", "Windows", "Window gaps, border width, corner radius & styling", "󰃟");
+        auto tile_windows = SettingItem::create_leaf("tile_windows", "Windows", "Gaps, border width, corner radius, styling & auto-float", "󰃟");
         tile_windows->is_tiling_config = true;
         tile_windows->tiling_cfg = shared_tiling;
 
-        // 2.3 Split Behaviour
-        auto tile_split = SettingItem::create_leaf("tile_split", "Split Behaviour", "Smart cursor split, focus window division & aspect multipliers", "󰤻");
+        // 2.3 Dwindle (BSP) Tuning
+        auto tile_split = SettingItem::create_leaf("tile_split", "Dwindle (BSP) Tuning", "Smart cursor split, focus division & aspect ratio for Dwindle", "󰤻");
         tile_split->is_tiling_config = true;
         tile_split->tiling_cfg = shared_tiling;
 
         // 2.4 Focus Behaviour
-        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus Behaviour", "Cursor hover focus, window raise, warp & dialog rules", "󰍽");
+        auto tile_focus = SettingItem::create_leaf("tile_focus", "Focus Behaviour", "Cursor hover focus, window raise, warp & workspace focus", "󰍽");
         tile_focus->is_tiling_config = true;
         tile_focus->tiling_cfg = shared_tiling;
 
