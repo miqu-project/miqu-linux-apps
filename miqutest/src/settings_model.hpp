@@ -128,13 +128,34 @@ struct BatteryConfig {
     float temp_c = 31.4f;
 };
 
+struct FirewallCustomRule {
+    std::string name;
+    std::string port_proto;
+    bool enabled = true;
+};
+
 struct FirewallConfig {
     bool enabled = true;
-    bool stateful_inspection = true;
-    bool stealth_mode = true;
-    std::string backend = "nftables";
-    int active_rules = 54;
-    int blocked_probes_today = 1842;
+    std::string backend = "UFW";
+    std::string incoming_policy = "Drop (Deny)";
+    std::string outgoing_policy = "Allow";
+    std::string selected_preset = "Home";
+
+    // Common predefined service switches
+    bool allow_kdeconnect = true;
+    bool allow_ssh = false;
+    bool allow_samba = false;
+    bool allow_cups = true;
+
+    // User-added custom rules
+    std::vector<FirewallCustomRule> custom_rules;
+
+    // Monitor card
+    bool monitor_enabled = true;
+    int blocked_today = 1842;
+    int active_connections = 28;
+    std::string monitored_interfaces = "wlan0, eth0";
+    std::string last_blocked_probe = "203.0.113.45:445 (SMB Probe) -> DROP";
 };
 
 class SettingItem {

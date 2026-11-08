@@ -1,4 +1,5 @@
 #include "miller_view.hpp"
+#include <miqutoolkit/view/popup_window.hpp>
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
@@ -1947,6 +1948,7 @@ void MillerView::rebuild_preview_column() {
 
     // Dedicated Interactive UI for Firewall
     if (item->is_firewall) {
+        // 1. Top Card: Simple Bluetooth-like On/Off Switch with Subtitle "Powered by UFW"
         bool switch_focused = m_preview_focused && (m_preview_control_index == 0);
         auto fw_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
@@ -1980,9 +1982,9 @@ void MillerView::rebuild_preview_column() {
         fw_lbl_box->add_view(fw_title);
 
         auto fw_hint = TextViewBuilder::create()
-            ->text(item->firewall_cfg.enabled ? "Active • Stateful packet inspection (nftables)" : "Disabled • All network traffic unfiltered")
+            ->text("Powered by UFW")
             ->caption(true)
-            ->textColor(item->firewall_cfg.enabled ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
         fw_lbl_box->add_view(fw_hint);
 
@@ -1992,28 +1994,6 @@ void MillerView::rebuild_preview_column() {
         fwlbl_lp.weight = 1.0f;
         fwlbl_lp.gravity = Gravity::CenterVertical;
         fw_card->add_view(fw_lbl_box, fwlbl_lp);
-
-        // Status Badge Pill
-        auto badge_text = TextViewBuilder::create()
-            ->text(item->firewall_cfg.enabled ? "Active ✓" : "Off")
-            ->caption(true)
-            ->textColor(item->firewall_cfg.enabled ? config->colors.primary : config->colors.on_surface_variant)
-            ->padding(8, 4)
-            ->build();
-
-        auto badge_card = CardViewBuilder::create()
-            ->style(CardStyle::Filled)
-            ->backgroundColor(item->firewall_cfg.enabled ? config->colors.primary_container.with_alpha(0.4f) : config->colors.surface_variant)
-            ->cornerRadius(6)
-            ->elevation(0)
-            ->addView(badge_text)
-            ->build();
-
-        LayoutParams badge_lp;
-        badge_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        badge_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        badge_lp.gravity = Gravity::CenterVertical;
-        fw_card->add_view(badge_card, badge_lp);
 
         m_active_primary_switch = SwitchBuilder::create()
             ->checked(item->firewall_cfg.enabled)
@@ -2033,9 +2013,161 @@ void MillerView::rebuild_preview_column() {
 
         m_preview_layout->add_view(fw_card);
 
-        // Security & protection options
         if (item->firewall_cfg.enabled) {
-            auto sec_card = LinearLayoutBuilder::create()
+            // 2. Policy Card: Incoming Spinner, Outgoing Spinner
+            auto policy_card = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(10)
+                ->padding(16, 14)
+                ->backgroundColor(config->colors.surface)
+                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->cornerRadius(12)
+                ->build();
+
+            auto policy_title = TextViewBuilder::create()
+                ->text("Default Policies")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            policy_card->add_view(policy_title);
+
+            // Incoming traffic
+            auto in_lbl = TextViewBuilder::create()
+                ->text("Incoming traffic")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            policy_card->add_view(in_lbl);
+
+            std::vector<std::string> in_policies = {"Drop (Deny)", "Reject", "Allow"};
+            int in_sel = 0;
+            for (size_t i = 0; i < in_policies.size(); ++i) {
+                if (in_policies[i] == item->firewall_cfg.incoming_policy) {
+                    in_sel = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            auto in_spinner = SpinnerBuilder::create()
+                ->items(in_policies)
+                ->selectedIndex(in_sel)
+                ->fontSize(config->metrics.font_size)
+                ->padding(12, 6)
+                ->cornerRadius(8)
+                ->onItemSelected([item, in_policies](int idx, const std::string& val) {
+                    (void)idx;
+                    item->firewall_cfg.incoming_policy = val;
+                })
+                ->build();
+            LayoutParams in_sp_lp;
+            in_sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            in_sp_lp.height = 36;
+            policy_card->add_view(in_spinner, in_sp_lp);
+
+            // Outgoing traffic
+            auto out_lbl = TextViewBuilder::create()
+                ->text("Outgoing traffic")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            policy_card->add_view(out_lbl);
+
+            std::vector<std::string> out_policies = {"Allow", "Drop (Deny)", "Reject"};
+            int out_sel = 0;
+            for (size_t i = 0; i < out_policies.size(); ++i) {
+                if (out_policies[i] == item->firewall_cfg.outgoing_policy) {
+                    out_sel = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            auto out_spinner = SpinnerBuilder::create()
+                ->items(out_policies)
+                ->selectedIndex(out_sel)
+                ->fontSize(config->metrics.font_size)
+                ->padding(12, 6)
+                ->cornerRadius(8)
+                ->onItemSelected([item, out_policies](int idx, const std::string& val) {
+                    (void)idx;
+                    item->firewall_cfg.outgoing_policy = val;
+                })
+                ->build();
+            LayoutParams out_sp_lp;
+            out_sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            out_sp_lp.height = 36;
+            policy_card->add_view(out_spinner, out_sp_lp);
+
+            m_preview_layout->add_view(policy_card);
+
+            // 3. Preset Card: Home, Work, Cellular, Public
+            auto preset_card = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(10)
+                ->padding(16, 14)
+                ->backgroundColor(config->colors.surface)
+                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->cornerRadius(12)
+                ->build();
+
+            auto preset_title = TextViewBuilder::create()
+                ->text("Security Preset")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            preset_card->add_view(preset_title);
+
+            auto preset_lbl = TextViewBuilder::create()
+                ->text("Profile / Location")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            preset_card->add_view(preset_lbl);
+
+            auto get_preset_desc = [](const std::string& p) -> std::string {
+                if (p == "Work") return "Restricts inbound traffic to corporate VPN and office intranet; enables managed remote access.";
+                if (p == "Cellular") return "Minimizes background traffic and blocks non-essential inbound sockets to preserve metered data.";
+                if (p == "Public") return "Strict stealth isolation. Silently drops all unsolicited probes and disables local discovery.";
+                return "Permits local network device discovery, KDE Connect, and home media streaming while blocking external WAN probes.";
+            };
+
+            auto preset_desc = TextViewBuilder::create()
+                ->text(get_preset_desc(item->firewall_cfg.selected_preset))
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+
+            std::vector<std::string> presets = {"Home", "Work", "Cellular", "Public"};
+            int preset_sel = 0;
+            for (size_t i = 0; i < presets.size(); ++i) {
+                if (presets[i] == item->firewall_cfg.selected_preset) {
+                    preset_sel = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            auto preset_spinner = SpinnerBuilder::create()
+                ->items(presets)
+                ->selectedIndex(preset_sel)
+                ->fontSize(config->metrics.font_size)
+                ->padding(12, 6)
+                ->cornerRadius(8)
+                ->onItemSelected([item, preset_desc, get_preset_desc](int idx, const std::string& val) {
+                    (void)idx;
+                    item->firewall_cfg.selected_preset = val;
+                    preset_desc->set_text(get_preset_desc(val));
+                    preset_desc->request_redraw();
+                })
+                ->build();
+            LayoutParams preset_sp_lp;
+            preset_sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            preset_sp_lp.height = 36;
+            preset_card->add_view(preset_spinner, preset_sp_lp);
+            preset_card->add_view(preset_desc);
+
+            m_preview_layout->add_view(preset_card);
+
+            // 4. Custom Rules Card: switches for common services + Add Rule popup button on header
+            auto rules_card = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->spacing(12)
                 ->padding(16, 14)
@@ -2044,109 +2176,327 @@ void MillerView::rebuild_preview_column() {
                 ->cornerRadius(12)
                 ->build();
 
-            auto sec_title = TextViewBuilder::create()
-                ->text("Security & filtering options")
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            // Card Header Row: Title on Left, Add Rule Button on Right
+            auto rules_hdr = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->gravity(Gravity::CenterVertical)
                 ->build();
-            sec_card->add_view(sec_title);
 
-            // Stateful packet inspection row
-            auto r1 = LinearLayoutBuilder::create()
+            auto rules_title = TextViewBuilder::create()
+                ->text("Custom Rules")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            LayoutParams rtitle_lp;
+            rtitle_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            rtitle_lp.weight = 1.0f;
+            rtitle_lp.gravity = Gravity::CenterVertical;
+            rules_hdr->add_view(rules_title, rtitle_lp);
+
+            auto add_btn = ButtonBuilder::create()
+                ->text("+ Add Rule")
+                ->style(ButtonStyle::Outlined)
+                ->padding(12, 4)
+                ->cornerRadius(6)
+                ->build();
+
+            // When Add Rule button is clicked, show Popup
+            add_btn->set_on_click_listener([this, item, config, add_btn]() {
+                if (m_active_popup) {
+                    m_active_popup->dismiss();
+                    m_active_popup = nullptr;
+                }
+
+                auto popup_col = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Vertical)
+                    ->padding(16, 14)
+                    ->spacing(10)
+                    ->backgroundColor(config->colors.surface)
+                    ->stroke(1, config->colors.outline.with_alpha(0.4f))
+                    ->cornerRadius(12)
+                    ->build();
+
+                auto pop_title = TextViewBuilder::create()
+                    ->text("Add Firewall Rule")
+                    ->textSize(config->metrics.font_size)
+                    ->textColor(config->colors.on_surface)
+                    ->build();
+                popup_col->add_view(pop_title);
+
+                auto name_lbl = TextViewBuilder::create()
+                    ->text("Rule Name / Service")
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.8f))
+                    ->build();
+                popup_col->add_view(name_lbl);
+
+                auto name_edit = EditTextBuilder::create()
+                    ->text("")
+                    ->hint("e.g. Plex, Syncthing, Deluge")
+                    ->editable(true)
+                    ->padding(12, 6)
+                    ->build();
+                LayoutParams n_lp;
+                n_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+                n_lp.height = 36;
+                popup_col->add_view(name_edit, n_lp);
+
+                auto port_lbl = TextViewBuilder::create()
+                    ->text("Port / Protocol")
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.8f))
+                    ->build();
+                popup_col->add_view(port_lbl);
+
+                auto port_edit = EditTextBuilder::create()
+                    ->text("")
+                    ->hint("e.g. 8080/tcp, 22000/udp")
+                    ->editable(true)
+                    ->padding(12, 6)
+                    ->build();
+                LayoutParams p_lp;
+                p_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+                p_lp.height = 36;
+                popup_col->add_view(port_edit, p_lp);
+
+                // Action buttons
+                auto btn_box = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Horizontal)
+                    ->spacing(8)
+                    ->gravity(Gravity::End)
+                    ->build();
+
+                auto cancel_btn = ButtonBuilder::create()
+                    ->text("Cancel")
+                    ->style(ButtonStyle::Outlined)
+                    ->padding(12, 4)
+                    ->cornerRadius(6)
+                    ->onClick([this]() {
+                        if (m_active_popup) {
+                            m_active_popup->dismiss();
+                            m_active_popup = nullptr;
+                        }
+                    })
+                    ->build();
+                btn_box->add_view(cancel_btn);
+
+                auto submit_btn = ButtonBuilder::create()
+                    ->text("Add")
+                    ->primary(true)
+                    ->padding(14, 4)
+                    ->cornerRadius(6)
+                    ->onClick([this, item, name_edit, port_edit]() {
+                        std::string r_name = name_edit->get_text();
+                        std::string r_port = port_edit->get_text();
+                        if (r_name.empty()) r_name = "Custom Port";
+                        if (r_port.empty()) r_port = "8080/tcp";
+                        item->firewall_cfg.custom_rules.push_back({r_name, r_port, true});
+                        if (m_active_popup) {
+                            m_active_popup->dismiss();
+                            m_active_popup = nullptr;
+                        }
+                        rebuild_preview_column();
+                        notify_state_changed();
+                    })
+                    ->build();
+                btn_box->add_view(submit_btn);
+
+                popup_col->add_view(btn_box);
+
+                m_active_popup = PopupWindowBuilder::create()
+                    ->content(popup_col)
+                    ->width(280)
+                    ->elevation(6)
+                    ->cornerRadius(12)
+                    ->dismissOnOutsideClick(true)
+                    ->dismissOnEscape(true)
+                    ->build();
+
+                m_active_popup->show_as_dropdown(add_btn, PopupGravity::BottomEnd);
+            });
+
+            LayoutParams add_btn_lp;
+            add_btn_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            add_btn_lp.height = 28;
+            add_btn_lp.gravity = Gravity::CenterVertical;
+            rules_hdr->add_view(add_btn, add_btn_lp);
+
+            rules_card->add_view(rules_hdr);
+
+            // Vertically stacked switches helper
+            auto add_rule_row = [&](const std::string& name, const std::string& desc, bool is_checked, std::function<void(bool)> on_toggle) {
+                auto row = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Horizontal)
+                    ->spacing(12)
+                    ->gravity(Gravity::CenterVertical)
+                    ->build();
+
+                auto box = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Vertical)
+                    ->spacing(2)
+                    ->build();
+
+                auto lbl = TextViewBuilder::create()
+                    ->text(name)
+                    ->textSize(config->metrics.font_size)
+                    ->textColor(config->colors.on_surface)
+                    ->build();
+                box->add_view(lbl);
+
+                auto sub = TextViewBuilder::create()
+                    ->text(desc)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                    ->build();
+                box->add_view(sub);
+
+                LayoutParams box_lp;
+                box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+                box_lp.weight = 1.0f;
+                box_lp.gravity = Gravity::CenterVertical;
+                row->add_view(box, box_lp);
+
+                auto sw = SwitchBuilder::create()
+                    ->checked(is_checked)
+                    ->onCheckedChanged(std::move(on_toggle))
+                    ->build();
+                LayoutParams sw_lp;
+                sw_lp.width = 44;
+                sw_lp.height = 24;
+                sw_lp.gravity = Gravity::CenterVertical;
+                row->add_view(sw, sw_lp);
+
+                rules_card->add_view(row);
+            };
+
+            // Predefined common rules
+            add_rule_row("KDE Connect", "Allow local device pairing & clipboard sync (UDP/TCP 1714–1764)",
+                         item->firewall_cfg.allow_kdeconnect, [item](bool c) { item->firewall_cfg.allow_kdeconnect = c; });
+
+            add_rule_row("SSH Server", "Allow secure shell remote access (TCP 22)",
+                         item->firewall_cfg.allow_ssh, [item](bool c) { item->firewall_cfg.allow_ssh = c; });
+
+            add_rule_row("Samba File Sharing", "Allow local network folder sharing (TCP 445 / UDP 137–138)",
+                         item->firewall_cfg.allow_samba, [item](bool c) { item->firewall_cfg.allow_samba = c; });
+
+            add_rule_row("Network Printing (CUPS)", "Allow local IPP printer discovery (UDP/TCP 631)",
+                         item->firewall_cfg.allow_cups, [item](bool c) { item->firewall_cfg.allow_cups = c; });
+
+            // User-added custom rules
+            for (size_t i = 0; i < item->firewall_cfg.custom_rules.size(); ++i) {
+                auto& crule = item->firewall_cfg.custom_rules[i];
+                add_rule_row(crule.name, "Custom port rule (" + crule.port_proto + ")",
+                             crule.enabled, [&crule](bool c) { crule.enabled = c; });
+            }
+
+            m_preview_layout->add_view(rules_card);
+
+            // 5. Monitor Card: Can be disabled with switch
+            auto monitor_card = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(10)
+                ->padding(16, 14)
+                ->backgroundColor(config->colors.surface)
+                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->cornerRadius(12)
+                ->build();
+
+            auto mon_hdr = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
                 ->spacing(12)
                 ->gravity(Gravity::CenterVertical)
                 ->build();
 
-            auto r1_box = LinearLayoutBuilder::create()
+            auto mon_icon = TextViewBuilder::create()
+                ->text("󰒍")
+                ->textSize(config->metrics.font_size + 2)
+                ->textColor(item->firewall_cfg.monitor_enabled ? config->colors.primary : config->colors.on_surface_variant)
+                ->build();
+            LayoutParams mico_lp;
+            mico_lp.width = 24;
+            mico_lp.gravity = Gravity::CenterVertical;
+            mon_hdr->add_view(mon_icon, mico_lp);
+
+            auto mon_lbl_box = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->spacing(2)
                 ->build();
 
-            auto r1_title = TextViewBuilder::create()
-                ->text("Stateful packet inspection")
+            auto mon_title = TextViewBuilder::create()
+                ->text("Monitor")
                 ->textSize(config->metrics.font_size)
                 ->textColor(config->colors.on_surface)
                 ->build();
-            r1_box->add_view(r1_title);
+            mon_lbl_box->add_view(mon_title);
 
-            auto r1_sub = TextViewBuilder::create()
-                ->text("Track established connections and reject unsolicited packets")
+            auto mon_sub = TextViewBuilder::create()
+                ->text(item->firewall_cfg.monitor_enabled ? "Active • Real-time socket & probe auditing" : "Disabled • Logging and packet inspection inactive")
                 ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->textColor(item->firewall_cfg.monitor_enabled ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
                 ->build();
-            r1_box->add_view(r1_sub);
+            mon_lbl_box->add_view(mon_sub);
 
-            LayoutParams r1_box_lp;
-            r1_box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            r1_box_lp.weight = 1.0f;
-            r1_box_lp.gravity = Gravity::CenterVertical;
-            r1->add_view(r1_box, r1_box_lp);
+            LayoutParams mlbl_lp;
+            mlbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            mlbl_lp.weight = 1.0f;
+            mlbl_lp.gravity = Gravity::CenterVertical;
+            mon_hdr->add_view(mon_lbl_box, mlbl_lp);
 
-            auto r1_sw = SwitchBuilder::create()
-                ->checked(item->firewall_cfg.stateful_inspection)
-                ->onCheckedChanged([item](bool checked) {
-                    item->firewall_cfg.stateful_inspection = checked;
+            auto mon_sw = SwitchBuilder::create()
+                ->checked(item->firewall_cfg.monitor_enabled)
+                ->onCheckedChanged([this, item](bool checked) {
+                    item->firewall_cfg.monitor_enabled = checked;
+                    rebuild_preview_column();
+                    notify_state_changed();
                 })
                 ->build();
-            LayoutParams r1_sw_lp;
-            r1_sw_lp.width = 44;
-            r1_sw_lp.height = 24;
-            r1_sw_lp.gravity = Gravity::CenterVertical;
-            r1->add_view(r1_sw, r1_sw_lp);
-            sec_card->add_view(r1);
+            LayoutParams mon_sw_lp;
+            mon_sw_lp.width = 44;
+            mon_sw_lp.height = 24;
+            mon_sw_lp.gravity = Gravity::CenterVertical;
+            mon_hdr->add_view(mon_sw, mon_sw_lp);
 
-            // Stealth mode row
-            auto r2 = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Horizontal)
-                ->spacing(12)
-                ->gravity(Gravity::CenterVertical)
-                ->build();
+            monitor_card->add_view(mon_hdr);
 
-            auto r2_box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->spacing(2)
-                ->build();
+            if (item->firewall_cfg.monitor_enabled) {
+                std::vector<TelemetryEntry> mon_telemetry = {
+                    {"Backend Engine", "UFW (iptables / netfilter)"},
+                    {"Blocked Probes Today", std::to_string(item->firewall_cfg.blocked_today) + " unauthorized requests"},
+                    {"Active Connections", std::to_string(item->firewall_cfg.active_connections) + " running sockets"},
+                    {"Monitored Interfaces", item->firewall_cfg.monitored_interfaces},
+                    {"Last Blocked Event", item->firewall_cfg.last_blocked_probe}
+                };
 
-            auto r2_title = TextViewBuilder::create()
-                ->text("Stealth mode (Drop ICMP Echo)")
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            r2_box->add_view(r2_title);
+                for (const auto& entry : mon_telemetry) {
+                    auto mrow = LinearLayoutBuilder::create()
+                        ->orientation(Orientation::Horizontal)
+                        ->padding(2, 2)
+                        ->build();
 
-            auto r2_sub = TextViewBuilder::create()
-                ->text("Silently drop unsolicited ping requests and port scans")
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                ->build();
-            r2_box->add_view(r2_sub);
+                    auto mk = TextViewBuilder::create()
+                        ->text(entry.key)
+                        ->caption(true)
+                        ->textColor(config->colors.on_surface_variant)
+                        ->build();
+                    LayoutParams mk_lp;
+                    mk_lp.width = 150;
+                    mrow->add_view(mk, mk_lp);
 
-            LayoutParams r2_box_lp;
-            r2_box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            r2_box_lp.weight = 1.0f;
-            r2_box_lp.gravity = Gravity::CenterVertical;
-            r2->add_view(r2_box, r2_box_lp);
+                    auto mv = TextViewBuilder::create()
+                        ->text(entry.value)
+                        ->caption(true)
+                        ->textColor(config->colors.on_surface)
+                        ->build();
+                    LayoutParams mv_lp;
+                    mv_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+                    mv_lp.weight = 1.0f;
+                    mrow->add_view(mv, mv_lp);
 
-            auto r2_sw = SwitchBuilder::create()
-                ->checked(item->firewall_cfg.stealth_mode)
-                ->onCheckedChanged([item](bool checked) {
-                    item->firewall_cfg.stealth_mode = checked;
-                })
-                ->build();
-            LayoutParams r2_sw_lp;
-            r2_sw_lp.width = 44;
-            r2_sw_lp.height = 24;
-            r2_sw_lp.gravity = Gravity::CenterVertical;
-            r2->add_view(r2_sw, r2_sw_lp);
-            sec_card->add_view(r2);
+                    monitor_card->add_view(mrow);
+                }
+            }
 
-            m_preview_layout->add_view(sec_card);
-        }
-
-        // 3. Technical specifications telemetry
-        if (!item->telemetry.empty()) {
-            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, item->telemetry_title));
+            m_preview_layout->add_view(monitor_card);
         }
 
         return;

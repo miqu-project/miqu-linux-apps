@@ -86,6 +86,7 @@ private:
     std::shared_ptr<TextView> m_active_slider_label;
     std::shared_ptr<Button> m_active_action_btn;
     std::shared_ptr<TextView> m_active_action_feedback;
+    std::shared_ptr<PopupWindow> m_active_popup;
 };
 
 } // namespace miqu

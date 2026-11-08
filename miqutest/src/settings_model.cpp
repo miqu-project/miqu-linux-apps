@@ -122,17 +122,14 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         auto firewall = SettingItem::create_leaf("net_firewall", "Firewall", "", "󰒃");
         firewall->is_firewall = true;
         firewall->firewall_cfg.enabled = true;
-        firewall->firewall_cfg.stateful_inspection = true;
-        firewall->firewall_cfg.stealth_mode = true;
-        firewall->telemetry_title = "Firewall specifications";
-        firewall->telemetry = {
-            {"Backend Engine", "nftables v1.0.9 (Linux Netfilter)"},
-            {"Default Inbound Policy", "DROP (Strict stealth mode)"},
-            {"Default Outbound Policy", "ACCEPT (Stateful track)"},
-            {"Active Rule Count", "54 rulesets"},
-            {"Blocked Probes Today", "1,842 unauthorized requests"},
-            {"SYN Flood Protection", "Enabled (syncookies)"}
-        };
+        firewall->firewall_cfg.incoming_policy = "Drop (Deny)";
+        firewall->firewall_cfg.outgoing_policy = "Allow";
+        firewall->firewall_cfg.selected_preset = "Home";
+        firewall->firewall_cfg.allow_kdeconnect = true;
+        firewall->firewall_cfg.allow_ssh = false;
+        firewall->firewall_cfg.allow_samba = false;
+        firewall->firewall_cfg.allow_cups = true;
+        firewall->firewall_cfg.monitor_enabled = true;
 
         // 1.7 Per App Network Access (Leaf)
         auto per_app_net = SettingItem::create_leaf("net_per_app", "Per App Network Access", "", "󰀻");
