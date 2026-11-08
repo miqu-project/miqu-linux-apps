@@ -1813,9 +1813,7 @@ void MillerView::rebuild_preview_column() {
             })
             ->build();
 
-        LayoutParams sp_lp;
-        sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        sp_lp.height = 36;
+        LayoutParams sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
         cfg_card->add_view(dns_spinner, sp_lp);
 
         // Hostname Label
@@ -2059,9 +2057,7 @@ void MillerView::rebuild_preview_column() {
                     item->firewall_cfg.incoming_policy = val;
                 })
                 ->build();
-            LayoutParams in_sp_lp;
-            in_sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            in_sp_lp.height = 36;
+            LayoutParams in_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
             policy_card->add_view(in_spinner, in_sp_lp);
 
             // Outgoing traffic
@@ -2092,9 +2088,7 @@ void MillerView::rebuild_preview_column() {
                     item->firewall_cfg.outgoing_policy = val;
                 })
                 ->build();
-            LayoutParams out_sp_lp;
-            out_sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            out_sp_lp.height = 36;
+            LayoutParams out_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
             policy_card->add_view(out_spinner, out_sp_lp);
 
             m_preview_layout->add_view(policy_card);
@@ -2158,9 +2152,7 @@ void MillerView::rebuild_preview_column() {
                     preset_desc->request_redraw();
                 })
                 ->build();
-            LayoutParams preset_sp_lp;
-            preset_sp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            preset_sp_lp.height = 36;
+            LayoutParams preset_sp_lp(static_cast<int>(LayoutDimension::WrapContent), 36);
             preset_card->add_view(preset_spinner, preset_sp_lp);
             preset_card->add_view(preset_desc);
 
