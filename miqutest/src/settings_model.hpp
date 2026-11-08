@@ -181,8 +181,9 @@ public:
     bool is_private_dns = false;
     PrivateDnsConfig private_dns_cfg;
 
-    bool is_battery = false;
-    BatteryConfig battery_cfg;
+    bool is_battery_info = false;
+    bool is_power_mode = false;
+    std::shared_ptr<BatteryConfig> battery_cfg = std::make_shared<BatteryConfig>();
 
     bool is_firewall = false;
     FirewallConfig firewall_cfg;

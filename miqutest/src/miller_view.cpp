@@ -2203,9 +2203,11 @@ void MillerView::rebuild_preview_column() {
         return;
     }
 
-    // Dedicated Interactive UI for Battery & Power Management
-    if (item->is_battery) {
-        // 1. Battery Master Status Card
+    // Dedicated Interactive UI for Battery Info
+    if (item->is_battery_info) {
+        if (!item->battery_cfg) return;
+
+        // 1. Battery Master Status Card (Percentage, State, Remaining Time)
         auto hero_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
@@ -2216,9 +2218,9 @@ void MillerView::rebuild_preview_column() {
             ->build();
 
         auto get_battery_icon = [item]() -> std::string {
-            if (item->battery_cfg.is_charging) return "󰂄";
-            if (item->battery_cfg.power_saver) return "󰂃";
-            int p = item->battery_cfg.percentage;
+            if (item->battery_cfg->is_charging) return "󰂄";
+            if (item->battery_cfg->power_saver) return "󰂃";
+            int p = item->battery_cfg->percentage;
             if (p >= 90) return "󰁹";
             if (p >= 70) return "󰂀";
             if (p >= 50) return "󰁾";
@@ -2243,24 +2245,24 @@ void MillerView::rebuild_preview_column() {
             ->build();
 
         auto get_title_str = [item]() -> std::string {
-            std::string pct = std::to_string(item->battery_cfg.percentage) + "%";
-            if (item->battery_cfg.is_charging) {
+            std::string pct = std::to_string(item->battery_cfg->percentage) + "%";
+            if (item->battery_cfg->is_charging) {
                 return pct + " • Plugged in, Charging";
             }
-            if (item->battery_cfg.power_saver) {
+            if (item->battery_cfg->power_saver) {
                 return pct + " • Power Saver Active";
             }
             return pct + " • Discharging";
         };
 
         auto get_subtitle_str = [item]() -> std::string {
-            if (item->battery_cfg.is_charging) {
+            if (item->battery_cfg->is_charging) {
                 return "1 hour 12 minutes until fully charged (65W USB-PD)";
             }
-            if (item->battery_cfg.power_saver) {
+            if (item->battery_cfg->power_saver) {
                 return "Approximately 9 hours 30 minutes remaining (+2h 45m extended)";
             }
-            if (item->battery_cfg.power_profile == "Performance") {
+            if (item->battery_cfg->power_profile == "Performance") {
                 return "Approximately 4 hours 15 minutes remaining (Turbo mode active)";
             }
             return "Approximately 6 hours 45 minutes remaining";
@@ -2276,7 +2278,7 @@ void MillerView::rebuild_preview_column() {
         auto bat_hint = TextViewBuilder::create()
             ->text(get_subtitle_str())
             ->caption(true)
-            ->textColor(item->battery_cfg.power_saver ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+            ->textColor(item->battery_cfg->power_saver ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
         lbl_box->add_view(bat_hint);
 
@@ -2359,7 +2361,106 @@ void MillerView::rebuild_preview_column() {
 
         m_preview_layout->add_view(health_card);
 
-        // 2. Operating Profile Card (Single Spinner on new line)
+        // 3. Battery Specifications Telemetry Card
+        std::string active_draw = item->battery_cfg->power_saver ? "5.2 W (Power Saver Active)" :
+                                 (item->battery_cfg->power_profile == "Performance" ? "14.2 W (Turbo Mode)" : "7.8 W (Estimated)");
+        std::vector<TelemetryEntry> bat_telemetry = {
+            {"Battery Health", "98.4% of design capacity"},
+            {"Cycle Count", "142 cycles"},
+            {"Full Charge Capacity", "59.0 Wh (Design: 60.0 Wh)"},
+            {"Power Source", item->battery_cfg->is_charging ? "AC Adapter (65W USB-PD)" : "Battery (Discharging)"},
+            {"Discharge Rate", active_draw},
+            {"Cell Temperature", "31.4 °C"},
+            {"Technology", "Lithium-Polymer (LiPo)"}
+        };
+        m_preview_layout->add_view(create_telemetry_card(bat_telemetry, config, "Battery specifications"));
+        return;
+    }
+
+    // Dedicated Interactive UI for Power & Performance Mode
+    if (item->is_power_mode) {
+        if (!item->battery_cfg) return;
+
+        // 1. Master Status Card
+        auto hero_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->padding(16, 14)
+            ->spacing(12)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto icon = TextViewBuilder::create()
+            ->text("󰌪")
+            ->textSize(config->metrics.font_size + 4)
+            ->textColor(config->colors.primary)
+            ->build();
+        LayoutParams icon_lp;
+        icon_lp.width = 30;
+        icon_lp.gravity = Gravity::CenterVertical;
+        hero_card->add_view(icon, icon_lp);
+
+        auto lbl_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto title = TextViewBuilder::create()
+            ->text("Power & Performance Mode")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        lbl_box->add_view(title);
+
+        auto get_mode_subtitle = [item]() -> std::string {
+            if (item->battery_cfg->power_profile == "Power Saver") {
+                return "Power Saver • Lowers clock speeds and extends battery life";
+            } else if (item->battery_cfg->power_profile == "Performance") {
+                return "Performance • Unlocks maximum CPU and GPU clock speeds";
+            }
+            return "Balanced • Dynamic power scaling for everyday workloads";
+        };
+
+        auto hint = TextViewBuilder::create()
+            ->text(get_mode_subtitle())
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        lbl_box->add_view(hint);
+
+        LayoutParams lbl_lp;
+        lbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        lbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        lbl_lp.weight = 1.0f;
+        lbl_lp.gravity = Gravity::CenterVertical;
+        hero_card->add_view(lbl_box, lbl_lp);
+
+        // Active Profile Badge Pill
+        auto badge_text = TextViewBuilder::create()
+            ->text(item->battery_cfg->power_profile)
+            ->caption(true)
+            ->textColor(config->colors.primary)
+            ->padding(8, 4)
+            ->build();
+
+        auto badge_card = CardViewBuilder::create()
+            ->style(CardStyle::Filled)
+            ->backgroundColor(config->colors.primary_container.with_alpha(0.4f))
+            ->cornerRadius(6)
+            ->elevation(0)
+            ->addView(badge_text)
+            ->build();
+
+        LayoutParams badge_lp;
+        badge_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        badge_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        badge_lp.gravity = Gravity::CenterVertical;
+        hero_card->add_view(badge_card, badge_lp);
+
+        m_preview_layout->add_view(hero_card);
+
+        // 2. Operating Profile Card with Spinner
         auto prof_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
@@ -2370,37 +2471,37 @@ void MillerView::rebuild_preview_column() {
             ->build();
 
         auto prof_title = TextViewBuilder::create()
-            ->text("Power & performance mode")
+            ->text("Operating profile")
             ->caption(true)
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
         prof_card->add_view(prof_title);
 
         auto prof_lbl = TextViewBuilder::create()
-            ->text("Operating Profile")
+            ->text("Mode / Profile")
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.on_surface)
             ->build();
         prof_card->add_view(prof_lbl);
 
         int prof_sel_idx = 1; // Default "Balanced"
-        for (size_t i = 0; i < item->battery_cfg.available_profiles.size(); ++i) {
-            if (item->battery_cfg.available_profiles[i] == item->battery_cfg.power_profile) {
+        for (size_t i = 0; i < item->battery_cfg->available_profiles.size(); ++i) {
+            if (item->battery_cfg->available_profiles[i] == item->battery_cfg->power_profile) {
                 prof_sel_idx = static_cast<int>(i);
                 break;
             }
         }
 
         auto prof_spinner = SpinnerBuilder::create()
-            ->items(item->battery_cfg.available_profiles)
+            ->items(item->battery_cfg->available_profiles)
             ->selectedIndex(prof_sel_idx)
             ->fontSize(config->metrics.font_size)
             ->padding(12, 6)
             ->cornerRadius(8)
             ->onItemSelected([this, item](int idx, const std::string& val) {
                 (void)idx;
-                item->battery_cfg.power_profile = val;
-                item->battery_cfg.power_saver = (val == "Power Saver");
+                item->battery_cfg->power_profile = val;
+                item->battery_cfg->power_saver = (val == "Power Saver");
                 rebuild_preview_column();
                 notify_state_changed();
             })
@@ -2412,9 +2513,9 @@ void MillerView::rebuild_preview_column() {
         prof_card->add_view(prof_spinner, psp_lp);
 
         auto get_profile_desc = [item]() -> std::string {
-            if (item->battery_cfg.power_profile == "Power Saver") {
+            if (item->battery_cfg->power_profile == "Power Saver") {
                 return "Limits CPU frequency to base clock, pauses background indexing, and forces 60 Hz display refresh.";
-            } else if (item->battery_cfg.power_profile == "Performance") {
+            } else if (item->battery_cfg->power_profile == "Performance") {
                 return "Unlocks full CPU turbo frequencies and max GPU performance; increases power consumption.";
             }
             return "Standard dynamic CPU scaling balancing responsive performance with optimal battery endurance.";
@@ -2429,84 +2530,24 @@ void MillerView::rebuild_preview_column() {
 
         m_preview_layout->add_view(prof_card);
 
-        // 3. Charging Protection Card
-        auto prot_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->padding(16, 14)
-            ->spacing(12)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
+        // 3. Power Management Specifications Telemetry Card
+        std::string active_draw = item->battery_cfg->power_saver ? "5.2 W (Power Saver Active)" :
+                                 (item->battery_cfg->power_profile == "Performance" ? "14.2 W (Turbo Mode)" : "7.8 W (Estimated)");
+        std::string gov = item->battery_cfg->power_saver ? "powersave (amd-pstate-epp)" :
+                         (item->battery_cfg->power_profile == "Performance" ? "performance (amd-pstate-epp)" : "powersave (amd-pstate-epp)");
+        std::string epp = item->battery_cfg->power_saver ? "power" :
+                         (item->battery_cfg->power_profile == "Performance" ? "performance" : "balance_power");
+        std::string platform_prof = item->battery_cfg->power_saver ? "low-power (ACPI platform profile)" :
+                                   (item->battery_cfg->power_profile == "Performance" ? "performance (ACPI platform profile)" : "balanced (ACPI platform profile)");
 
-        auto prot_icon = TextViewBuilder::create()
-            ->text("󰂑")
-            ->textSize(config->metrics.font_size + 4)
-            ->textColor(item->battery_cfg.charge_limit_enabled ? config->colors.primary : config->colors.on_surface_variant)
-            ->build();
-        LayoutParams picon_lp;
-        picon_lp.width = 30;
-        picon_lp.gravity = Gravity::CenterVertical;
-        prot_card->add_view(prot_icon, picon_lp);
-
-        auto prot_lbl_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto prot_title = TextViewBuilder::create()
-            ->text("Charging Protection (80% Limit)")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        prot_lbl_box->add_view(prot_title);
-
-        std::string prot_hint_str = item->battery_cfg.charge_limit_enabled ?
-            "Conservation mode active • Charging halts at 80% to preserve chemical lifespan" :
-            "Standard charging • Battery charges to full 100% capacity";
-        auto prot_hint = TextViewBuilder::create()
-            ->text(prot_hint_str)
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        prot_lbl_box->add_view(prot_hint);
-
-        LayoutParams prlbl_lp;
-        prlbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        prlbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        prlbl_lp.weight = 1.0f;
-        prlbl_lp.gravity = Gravity::CenterVertical;
-        prot_card->add_view(prot_lbl_box, prlbl_lp);
-
-        m_active_primary_switch = SwitchBuilder::create()
-            ->checked(item->battery_cfg.charge_limit_enabled)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->battery_cfg.charge_limit_enabled = checked;
-                rebuild_preview_column();
-                notify_state_changed();
-            })
-            ->build();
-
-        LayoutParams sw2_lp;
-        sw2_lp.width = 44;
-        sw2_lp.height = 24;
-        sw2_lp.gravity = Gravity::CenterVertical;
-        prot_card->add_view(m_active_secondary_switch, sw2_lp);
-        m_preview_layout->add_view(prot_card);
-
-        // 5. Battery & Power Specifications Telemetry Card
-        std::string active_draw = item->battery_cfg.power_saver ? "5.2 W (Power Saver Active)" :
-                                 (item->battery_cfg.power_profile == "Performance" ? "14.2 W (Turbo Mode)" : "7.8 W (Estimated)");
-        std::vector<TelemetryEntry> bat_telemetry = {
-            {"Battery Health", "98.4% of design capacity"},
-            {"Cycle Count", "142 cycles"},
-            {"Full Charge Capacity", "59.0 Wh (Design: 60.0 Wh)"},
-            {"Power Source", item->battery_cfg.is_charging ? "AC Adapter (65W USB-PD)" : "Battery (Discharging)"},
-            {"Discharge Rate", active_draw},
-            {"Cell Temperature", "31.4 °C"},
-            {"Technology", "Lithium-Polymer (LiPo)"}
+        std::vector<TelemetryEntry> power_telemetry = {
+            {"Current Governor", gov},
+            {"Energy Performance Preference", epp},
+            {"Platform Profile", platform_prof},
+            {"Active Power Draw", active_draw},
+            {"Package Temp", "42.5 °C"}
         };
-        m_preview_layout->add_view(create_telemetry_card(bat_telemetry, config, "Battery & power specifications"));
+        m_preview_layout->add_view(create_telemetry_card(power_telemetry, config, "Power management specifications"));
         return;
     }
 
@@ -3723,7 +3764,7 @@ bool MillerView::navigate_back() {
 
 bool MillerView::toggle_active() {
     auto item = get_current_selected_item();
-    if (m_preview_focused && item && (item->id == "sound_speaker" || item->id == "sound_mic" || item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_battery || item->is_firewall)) {
+    if (m_preview_focused && item && (item->id == "sound_speaker" || item->id == "sound_mic" || item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_firewall)) {
         if (m_active_primary_switch) {
             m_active_primary_switch->toggle();
             return true;

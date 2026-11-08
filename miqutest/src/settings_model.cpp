@@ -730,15 +730,19 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // 7. Battery (Depth 1)
     // ==============================================================================
     {
-        auto battery_leaf = SettingItem::create_leaf("sys_battery", "Battery", "", "󰁹");
-        battery_leaf->is_battery = true;
-        battery_leaf->battery_cfg.percentage = 88;
-        battery_leaf->battery_cfg.is_charging = false;
-        battery_leaf->battery_cfg.power_saver = false;
-        battery_leaf->battery_cfg.power_profile = "Balanced";
-        battery_leaf->battery_cfg.charge_limit_enabled = true;
-        battery_leaf->telemetry_title = "Battery & power specifications";
-        battery_leaf->telemetry = {
+        auto shared_battery_cfg = std::make_shared<BatteryConfig>();
+        shared_battery_cfg->percentage = 88;
+        shared_battery_cfg->is_charging = false;
+        shared_battery_cfg->power_saver = false;
+        shared_battery_cfg->power_profile = "Balanced";
+        shared_battery_cfg->charge_limit_enabled = true;
+
+        // 7.1 Battery Info (Leaf)
+        auto battery_info = SettingItem::create_leaf("bat_info", "Battery Info", "", "󰁹");
+        battery_info->is_battery_info = true;
+        battery_info->battery_cfg = shared_battery_cfg;
+        battery_info->telemetry_title = "Battery specifications";
+        battery_info->telemetry = {
             {"Battery Health", "98.4% of design capacity"},
             {"Cycle Count", "142 cycles"},
             {"Full Charge Capacity", "59.0 Wh (Design: 60.0 Wh)"},
@@ -748,28 +752,22 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Technology", "Lithium-Polymer (LiPo)"}
         };
 
-        auto energy_profiles = SettingItem::create_leaf("power_profiles", "Energy Profiles", "", "󰌪");
-        energy_profiles->has_switch = true;
-        energy_profiles->switch_val = false;
-        energy_profiles->switch_label = "Auto-Energy Saver on Low Battery (20%)";
-        energy_profiles->has_secondary_switch = true;
-        energy_profiles->secondary_switch_val = true;
-        energy_profiles->secondary_switch_label = "Dim Display When Inactive";
-        energy_profiles->has_slider = true;
-        energy_profiles->slider_val = 0.20f;
-        energy_profiles->slider_label = "Display Sleep Timeout (4 min)";
-        energy_profiles->slider_unit = "m";
-        energy_profiles->telemetry_title = "Power management specifications";
-        energy_profiles->telemetry = {
+        // 7.2 Power & Performance Mode (Leaf)
+        auto power_mode = SettingItem::create_leaf("bat_power_mode", "Power & Performance Mode", "", "󰌪");
+        power_mode->is_power_mode = true;
+        power_mode->battery_cfg = shared_battery_cfg;
+        power_mode->telemetry_title = "Power management specifications";
+        power_mode->telemetry = {
             {"Current Governor", "powersave (amd-pstate-epp)"},
             {"Energy Performance Preference", "balance_power"},
             {"Platform Profile", "balanced (ACPI platform profile)"},
+            {"Active Power Draw", "7.8 W (Estimated)"},
             {"Package Temp", "42.5 °C"}
         };
 
         root.push_back(SettingItem::create_category(
             "cat_battery", "Battery", "󰁹",
-            {battery_leaf, energy_profiles}
+            {battery_info, power_mode}
         ));
     }
 
