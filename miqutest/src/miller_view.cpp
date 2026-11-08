@@ -1945,6 +1945,264 @@ void MillerView::rebuild_preview_column() {
         return;
     }
 
+    // Dedicated Interactive UI for Firewall
+    if (item->is_firewall) {
+        bool switch_focused = m_preview_focused && (m_preview_control_index == 0);
+        auto fw_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->padding(16, 14)
+            ->spacing(12)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(switch_focused ? 2 : 1, switch_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto fw_icon = TextViewBuilder::create()
+            ->text("󰒃")
+            ->textSize(config->metrics.font_size + 4)
+            ->textColor(item->firewall_cfg.enabled ? config->colors.primary : config->colors.on_surface_variant)
+            ->build();
+        LayoutParams fwicon_lp;
+        fwicon_lp.width = 30;
+        fwicon_lp.gravity = Gravity::CenterVertical;
+        fw_card->add_view(fw_icon, fwicon_lp);
+
+        auto fw_lbl_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto fw_title = TextViewBuilder::create()
+            ->text("Firewall")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        fw_lbl_box->add_view(fw_title);
+
+        auto fw_hint = TextViewBuilder::create()
+            ->text(item->firewall_cfg.enabled ? "Active • Stateful packet inspection (nftables)" : "Disabled • All network traffic unfiltered")
+            ->caption(true)
+            ->textColor(item->firewall_cfg.enabled ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        fw_lbl_box->add_view(fw_hint);
+
+        LayoutParams fwlbl_lp;
+        fwlbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        fwlbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        fwlbl_lp.weight = 1.0f;
+        fwlbl_lp.gravity = Gravity::CenterVertical;
+        fw_card->add_view(fw_lbl_box, fwlbl_lp);
+
+        // Status Badge Pill
+        auto badge_text = TextViewBuilder::create()
+            ->text(item->firewall_cfg.enabled ? "Active ✓" : "Off")
+            ->caption(true)
+            ->textColor(item->firewall_cfg.enabled ? config->colors.primary : config->colors.on_surface_variant)
+            ->padding(8, 4)
+            ->build();
+
+        auto badge_card = CardViewBuilder::create()
+            ->style(CardStyle::Filled)
+            ->backgroundColor(item->firewall_cfg.enabled ? config->colors.primary_container.with_alpha(0.4f) : config->colors.surface_variant)
+            ->cornerRadius(6)
+            ->elevation(0)
+            ->addView(badge_text)
+            ->build();
+
+        LayoutParams badge_lp;
+        badge_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        badge_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        badge_lp.gravity = Gravity::CenterVertical;
+        fw_card->add_view(badge_card, badge_lp);
+
+        m_active_primary_switch = SwitchBuilder::create()
+            ->checked(item->firewall_cfg.enabled)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->firewall_cfg.enabled = checked;
+                rebuild_current_column();
+                rebuild_preview_column();
+                notify_state_changed();
+            })
+            ->build();
+
+        LayoutParams sw_lp;
+        sw_lp.width = 44;
+        sw_lp.height = 24;
+        sw_lp.gravity = Gravity::CenterVertical;
+        fw_card->add_view(m_active_primary_switch, sw_lp);
+
+        m_preview_layout->add_view(fw_card);
+
+        // Security & protection options
+        if (item->firewall_cfg.enabled) {
+            auto sec_card = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(12)
+                ->padding(16, 14)
+                ->backgroundColor(config->colors.surface)
+                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->cornerRadius(12)
+                ->build();
+
+            auto sec_title = TextViewBuilder::create()
+                ->text("Security & filtering options")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            sec_card->add_view(sec_title);
+
+            // Stateful packet inspection row
+            auto r1 = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->spacing(12)
+                ->gravity(Gravity::CenterVertical)
+                ->build();
+
+            auto r1_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto r1_title = TextViewBuilder::create()
+                ->text("Stateful packet inspection")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            r1_box->add_view(r1_title);
+
+            auto r1_sub = TextViewBuilder::create()
+                ->text("Track established connections and reject unsolicited packets")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            r1_box->add_view(r1_sub);
+
+            LayoutParams r1_box_lp;
+            r1_box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            r1_box_lp.weight = 1.0f;
+            r1_box_lp.gravity = Gravity::CenterVertical;
+            r1->add_view(r1_box, r1_box_lp);
+
+            auto r1_sw = SwitchBuilder::create()
+                ->checked(item->firewall_cfg.stateful_inspection)
+                ->onCheckedChanged([item](bool checked) {
+                    item->firewall_cfg.stateful_inspection = checked;
+                })
+                ->build();
+            LayoutParams r1_sw_lp;
+            r1_sw_lp.width = 44;
+            r1_sw_lp.height = 24;
+            r1_sw_lp.gravity = Gravity::CenterVertical;
+            r1->add_view(r1_sw, r1_sw_lp);
+            sec_card->add_view(r1);
+
+            // Stealth mode row
+            auto r2 = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->spacing(12)
+                ->gravity(Gravity::CenterVertical)
+                ->build();
+
+            auto r2_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto r2_title = TextViewBuilder::create()
+                ->text("Stealth mode (Drop ICMP Echo)")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            r2_box->add_view(r2_title);
+
+            auto r2_sub = TextViewBuilder::create()
+                ->text("Silently drop unsolicited ping requests and port scans")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            r2_box->add_view(r2_sub);
+
+            LayoutParams r2_box_lp;
+            r2_box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            r2_box_lp.weight = 1.0f;
+            r2_box_lp.gravity = Gravity::CenterVertical;
+            r2->add_view(r2_box, r2_box_lp);
+
+            auto r2_sw = SwitchBuilder::create()
+                ->checked(item->firewall_cfg.stealth_mode)
+                ->onCheckedChanged([item](bool checked) {
+                    item->firewall_cfg.stealth_mode = checked;
+                })
+                ->build();
+            LayoutParams r2_sw_lp;
+            r2_sw_lp.width = 44;
+            r2_sw_lp.height = 24;
+            r2_sw_lp.gravity = Gravity::CenterVertical;
+            r2->add_view(r2_sw, r2_sw_lp);
+            sec_card->add_view(r2);
+
+            m_preview_layout->add_view(sec_card);
+        }
+
+        // 3. Technical specifications telemetry
+        if (!item->telemetry.empty()) {
+            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, item->telemetry_title));
+        }
+
+        return;
+    }
+
+    // Dedicated Interactive UI for Per App Network Access
+    if (item->is_per_app_network) {
+        auto card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->padding(16, 14)
+            ->spacing(12)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto icon = TextViewBuilder::create()
+            ->text("󰀻")
+            ->textSize(config->metrics.font_size + 4)
+            ->textColor(config->colors.primary)
+            ->build();
+        LayoutParams icon_lp;
+        icon_lp.width = 30;
+        icon_lp.gravity = Gravity::CenterVertical;
+        card->add_view(icon, icon_lp);
+
+        auto box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto title = TextViewBuilder::create()
+            ->text("Per App Network Access")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        box->add_view(title);
+
+        auto hint = TextViewBuilder::create()
+            ->text("Please go to Applications->Installed App->App Info->Network Access.")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.85f))
+            ->build();
+        box->add_view(hint);
+
+        LayoutParams box_lp;
+        box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        box_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        box_lp.weight = 1.0f;
+        box_lp.gravity = Gravity::CenterVertical;
+        card->add_view(box, box_lp);
+
+        m_preview_layout->add_view(card);
+        return;
+    }
+
     // Dedicated Interactive UI for Battery & Power Management
     if (item->is_battery) {
         // 1. Battery Master Status Card
@@ -3465,7 +3723,7 @@ bool MillerView::navigate_back() {
 
 bool MillerView::toggle_active() {
     auto item = get_current_selected_item();
-    if (m_preview_focused && item && (item->id == "sound_speaker" || item->id == "sound_mic" || item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_battery)) {
+    if (m_preview_focused && item && (item->id == "sound_speaker" || item->id == "sound_mic" || item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_battery || item->is_firewall)) {
         if (m_active_primary_switch) {
             m_active_primary_switch->toggle();
             return true;
@@ -3510,7 +3768,7 @@ bool MillerView::adjust_active_slider(float delta) {
 
 bool MillerView::focus_next_control() {
     auto item = get_current_selected_item();
-    int max_c = (item && (item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane")) ? 1 : ((item && (item->id == "sound_speaker" || item->id == "sound_mic")) ? 2 : 4);
+    int max_c = (item && (item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_firewall)) ? 1 : ((item && (item->id == "sound_speaker" || item->id == "sound_mic")) ? 2 : 4);
     m_preview_control_index = (m_preview_control_index + 1) % max_c;
     rebuild_preview_column();
     notify_state_changed();
@@ -3519,7 +3777,7 @@ bool MillerView::focus_next_control() {
 
 bool MillerView::focus_prev_control() {
     auto item = get_current_selected_item();
-    int max_c = (item && (item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane")) ? 1 : ((item && (item->id == "sound_speaker" || item->id == "sound_mic")) ? 2 : 4);
+    int max_c = (item && (item->id == "net_wifi" || item->id == "net_bluetooth" || item->id == "net_airplane" || item->is_firewall)) ? 1 : ((item && (item->id == "sound_speaker" || item->id == "sound_mic")) ? 2 : 4);
     m_preview_control_index = (m_preview_control_index + max_c - 1) % max_c;
     rebuild_preview_column();
     notify_state_changed();

@@ -128,6 +128,15 @@ struct BatteryConfig {
     float temp_c = 31.4f;
 };
 
+struct FirewallConfig {
+    bool enabled = true;
+    bool stateful_inspection = true;
+    bool stealth_mode = true;
+    std::string backend = "nftables";
+    int active_rules = 54;
+    int blocked_probes_today = 1842;
+};
+
 class SettingItem {
 public:
     std::string id;
@@ -174,6 +183,11 @@ public:
 
     bool is_battery = false;
     BatteryConfig battery_cfg;
+
+    bool is_firewall = false;
+    FirewallConfig firewall_cfg;
+
+    bool is_per_app_network = false;
 
     static std::shared_ptr<SettingItem> create_category(
         std::string id, std::string title, std::string icon,

@@ -118,9 +118,29 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Resolution Latency", "4.2 ms (Cached / Encrypted)"}
         };
 
+        // 1.6 Firewall (Leaf)
+        auto firewall = SettingItem::create_leaf("net_firewall", "Firewall", "", "󰒃");
+        firewall->is_firewall = true;
+        firewall->firewall_cfg.enabled = true;
+        firewall->firewall_cfg.stateful_inspection = true;
+        firewall->firewall_cfg.stealth_mode = true;
+        firewall->telemetry_title = "Firewall specifications";
+        firewall->telemetry = {
+            {"Backend Engine", "nftables v1.0.9 (Linux Netfilter)"},
+            {"Default Inbound Policy", "DROP (Strict stealth mode)"},
+            {"Default Outbound Policy", "ACCEPT (Stateful track)"},
+            {"Active Rule Count", "54 rulesets"},
+            {"Blocked Probes Today", "1,842 unauthorized requests"},
+            {"SYN Flood Protection", "Enabled (syncookies)"}
+        };
+
+        // 1.7 Per App Network Access (Leaf)
+        auto per_app_net = SettingItem::create_leaf("net_per_app", "Per App Network Access", "", "󰀻");
+        per_app_net->is_per_app_network = true;
+
         root.push_back(SettingItem::create_category(
             "cat_connectivity", "Connectivity", "󰖩",
-            {wifi, bt, eth, airplane, private_dns}
+            {wifi, bt, eth, airplane, private_dns, firewall, per_app_net}
         ));
     }
 
