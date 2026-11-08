@@ -158,21 +158,19 @@ struct FirewallConfig {
     std::string last_blocked_probe = "203.0.113.45:445 (SMB Probe) -> DROP";
 };
 
-struct ScreenTimeoutConfig {
-    bool dim_screen = true;
-    bool prevent_sleep = true;
-    int timeout_minutes = 10;
+struct ScreenTimeoutLockConfig {
+    int lock_timeout_minutes = 1;     // Inactivity before locking (1, 2, 5, 10, 15, 30 min, 0 = Never)
+    int display_off_minutes = 5;      // Inactivity before display off (1, 2, 5, 10, 15, 30, 60 min, 0 = Never)
+    bool dim_screen = true;           // Dim screen before display turns off
+    bool prevent_sleep_media = true;  // Keep display awake during media playback
+    bool lock_on_lid_close = true;    // Lock when laptop lid is shut
+    bool require_password_immediately = true; // Demand password on wake
+    int grace_period_seconds = 0;     // Grace period window (0s = Instant, 15s, 30s, 1m, 2m, 5m)
 };
 
 struct NightLightConfig {
     bool enabled = true;
     float warmth = 0.65f;
-};
-
-struct LockscreenConfig {
-    bool lock_on_lid_close = true;
-    bool require_password_immediately = true;
-    int grace_period_seconds = 0;
 };
 
 class SettingItem {
@@ -231,14 +229,11 @@ public:
     bool is_display_brightness = false;
     float brightness_val = 0.85f;
 
-    bool is_display_timeout = false;
-    ScreenTimeoutConfig screen_timeout_cfg;
+    bool is_timeout_and_lock = false;
+    ScreenTimeoutLockConfig timeout_lock_cfg;
 
     bool is_display_nightlight = false;
     NightLightConfig nightlight_cfg;
-
-    bool is_display_lockscreen = false;
-    LockscreenConfig lockscreen_cfg;
 
     static std::shared_ptr<SettingItem> create_category(
         std::string id, std::string title, std::string icon,

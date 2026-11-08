@@ -521,19 +521,23 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"PWM Frequency", "20000 Hz (Flicker-Free)"}
         };
 
-        // 5.2 Screen Timeout
-        auto disp_timeout = SettingItem::create_leaf("disp_timeout", "Screen Timeout", "", "󰒲");
-        disp_timeout->is_display_timeout = true;
-        disp_timeout->screen_timeout_cfg.dim_screen = true;
-        disp_timeout->screen_timeout_cfg.prevent_sleep = true;
-        disp_timeout->screen_timeout_cfg.timeout_minutes = 10;
-        disp_timeout->telemetry_title = "Idle management specifications";
-        disp_timeout->telemetry = {
-            {"Idle Daemon", "miquidle (ext-idle-notify-v1)"},
-            {"DPMS Protocol", "wlr-output-power-management-v1"},
-            {"AC Idle Timeout", "10 minutes"},
-            {"Battery Idle Timeout", "5 minutes"},
-            {"Active Idle State", "Active (0s idle)"}
+        // 5.2 Screen Timeout & Lock (Unified Inactivity & Security)
+        auto disp_timeout_lock = SettingItem::create_leaf("disp_timeout_lock", "Screen Timeout & Lock", "", "󰌾");
+        disp_timeout_lock->is_timeout_and_lock = true;
+        disp_timeout_lock->timeout_lock_cfg.lock_timeout_minutes = 1;
+        disp_timeout_lock->timeout_lock_cfg.display_off_minutes = 5;
+        disp_timeout_lock->timeout_lock_cfg.dim_screen = true;
+        disp_timeout_lock->timeout_lock_cfg.prevent_sleep_media = true;
+        disp_timeout_lock->timeout_lock_cfg.lock_on_lid_close = true;
+        disp_timeout_lock->timeout_lock_cfg.require_password_immediately = true;
+        disp_timeout_lock->timeout_lock_cfg.grace_period_seconds = 0;
+        disp_timeout_lock->telemetry_title = "Inactivity & security specifications";
+        disp_timeout_lock->telemetry = {
+            {"Idle Timer Daemon", "miquidle (ext-idle-notify-v1)"},
+            {"Session Security", "miqulock (ext-session-lock-v1)"},
+            {"Display Hardware DPMS", "wlr-output-power-management-v1"},
+            {"Authentication Provider", "PAM (system-auth)"},
+            {"Lid Switch Manager", "systemd-logind (seat0)"}
         };
 
         // 5.3 Night Light
@@ -549,23 +553,9 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Sunset Schedule", "Sunset 18:15 • Sunrise 06:20"}
         };
 
-        // 5.4 Lockscreen
-        auto disp_lockscreen = SettingItem::create_leaf("disp_lockscreen", "Lockscreen", "", "󰌾");
-        disp_lockscreen->is_display_lockscreen = true;
-        disp_lockscreen->lockscreen_cfg.lock_on_lid_close = true;
-        disp_lockscreen->lockscreen_cfg.require_password_immediately = true;
-        disp_lockscreen->lockscreen_cfg.grace_period_seconds = 0;
-        disp_lockscreen->telemetry_title = "Session security specifications";
-        disp_lockscreen->telemetry = {
-            {"Locker Daemon", "miqulock (ext-session-lock-v1)"},
-            {"Authentication Provider", "PAM (system-auth)"},
-            {"Session Manager", "systemd-logind (seat0)"},
-            {"Grace Period Timer", "0 s (Instant Lock)"}
-        };
-
         root.push_back(SettingItem::create_category(
             "cat_display", "Display", "󰍹",
-            {disp_bright, disp_timeout, disp_nightlight, disp_lockscreen}
+            {disp_bright, disp_timeout_lock, disp_nightlight}
         ));
     }
 
