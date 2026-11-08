@@ -163,6 +163,7 @@ struct ScreenTimeoutLockConfig {
     int display_off_minutes = 5;      // Inactivity before display off (1, 2, 5, 10, 15, 30, 60 min, 0 = Never)
     bool dim_screen = true;           // Dim screen before display turns off
     bool prevent_sleep_media = true;  // Keep display awake during media playback
+    bool lock_on_display_off = true;  // Lock session when display turns off
     bool lock_on_lid_close = true;    // Lock when laptop lid is shut
     bool require_password_immediately = true; // Demand password on wake
     int grace_period_seconds = 0;     // Grace period window (0s = Instant, 15s, 30s, 1m, 2m, 5m)

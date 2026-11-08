@@ -2747,6 +2747,51 @@ void MillerView::rebuild_preview_column() {
             ->build();
         main_card->add_view(s3_title);
 
+        auto dispoff_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto dispoff_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto dispoff_title = TextViewBuilder::create()
+            ->text("Lock session when display turns off")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        dispoff_box->add_view(dispoff_title);
+
+        auto dispoff_hint = TextViewBuilder::create()
+            ->text("Secures session as soon as screen powers down or sleeps")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        dispoff_box->add_view(dispoff_hint);
+
+        LayoutParams dispoff_lp;
+        dispoff_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        dispoff_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        dispoff_lp.weight = 1.0f;
+        dispoff_lp.gravity = Gravity::CenterVertical;
+        dispoff_row->add_view(dispoff_box, dispoff_lp);
+
+        auto dispoff_switch = SwitchBuilder::create()
+            ->checked(item->timeout_lock_cfg.lock_on_display_off)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->timeout_lock_cfg.lock_on_display_off = checked;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams dispoffsw_lp;
+        dispoffsw_lp.width = 44;
+        dispoffsw_lp.height = 24;
+        dispoffsw_lp.gravity = Gravity::CenterVertical;
+        dispoff_row->add_view(dispoff_switch, dispoffsw_lp);
+        main_card->add_view(dispoff_row);
+
         auto lid_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->gravity(Gravity::CenterVertical)

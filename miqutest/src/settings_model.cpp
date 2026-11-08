@@ -528,6 +528,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         disp_timeout_lock->timeout_lock_cfg.display_off_minutes = 5;
         disp_timeout_lock->timeout_lock_cfg.dim_screen = true;
         disp_timeout_lock->timeout_lock_cfg.prevent_sleep_media = true;
+        disp_timeout_lock->timeout_lock_cfg.lock_on_display_off = true;
         disp_timeout_lock->timeout_lock_cfg.lock_on_lid_close = true;
         disp_timeout_lock->timeout_lock_cfg.require_password_immediately = true;
         disp_timeout_lock->timeout_lock_cfg.grace_period_seconds = 0;
