@@ -142,7 +142,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     }
 
     // ==============================================================================
-    // 2. Tiling Layout (Depth 1)
+    // 2. Window Management (Depth 1)
     // ==============================================================================
     {
         auto shared_tiling = std::make_shared<TilingConfig>();
@@ -168,7 +168,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         tile_focus->tiling_cfg = shared_tiling;
 
         root.push_back(SettingItem::create_category(
-            "cat_tiling", "Tiling Layout", "󰕰",
+            "cat_tiling", "Window Management", "󰕰",
             {tile_mode, tile_windows, tile_split, tile_focus}
         ));
     }
