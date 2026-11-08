@@ -2633,6 +2633,84 @@ void MillerView::rebuild_preview_column() {
         dsl_lp.height = 24;
         main_card->add_view(d_slider, dsl_lp);
 
+        // Timer 3: System Suspend Inactivity
+        std::vector<int> susp_steps = {5, 10, 15, 30, 60, 120, 0};
+        auto format_susp_mins = [](int mins) -> std::string {
+            if (mins == 0) return "Never";
+            if (mins == 60) return "1 hour";
+            if (mins > 60) return std::to_string(mins / 60) + " hours";
+            return std::to_string(mins) + " minutes";
+        };
+
+        auto susp_header = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto susp_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto susp_title = TextViewBuilder::create()
+            ->text("Suspend system after inactivity")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        susp_box->add_view(susp_title);
+
+        auto susp_hint = TextViewBuilder::create()
+            ->text("Enters deep low-power sleep to halt battery drain")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        susp_box->add_view(susp_hint);
+
+        LayoutParams suspbox_lp;
+        suspbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        suspbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        suspbox_lp.weight = 1.0f;
+        suspbox_lp.gravity = Gravity::CenterVertical;
+        susp_header->add_view(susp_box, suspbox_lp);
+
+        auto susp_val_label = TextViewBuilder::create()
+            ->text(format_susp_mins(item->timeout_lock_cfg.suspend_minutes))
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->build();
+        LayoutParams suspval_lp;
+        suspval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        suspval_lp.gravity = Gravity::CenterVertical;
+        susp_header->add_view(susp_val_label, suspval_lp);
+        main_card->add_view(susp_header);
+
+        int cur_susp_idx = 2; // 15 min default
+        for (size_t i = 0; i < susp_steps.size(); ++i) {
+            if (susp_steps[i] == item->timeout_lock_cfg.suspend_minutes) {
+                cur_susp_idx = static_cast<int>(i);
+                break;
+            }
+        }
+        float initial_susp_val = static_cast<float>(cur_susp_idx) / static_cast<float>(susp_steps.size() - 1);
+
+        auto susp_slider = SliderBuilder::create()
+            ->value(initial_susp_val)
+            ->onValueChanged([this, item, susp_val_label, susp_steps, format_susp_mins](float val, bool user) {
+                (void)user;
+                int idx = static_cast<int>(std::round(val * static_cast<float>(susp_steps.size() - 1)));
+                idx = std::clamp(idx, 0, static_cast<int>(susp_steps.size() - 1));
+                int mins = susp_steps[idx];
+                item->timeout_lock_cfg.suspend_minutes = mins;
+                susp_val_label->set_text(format_susp_mins(mins));
+                susp_val_label->request_redraw();
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams suspsl_lp;
+        suspsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        suspsl_lp.height = 24;
+        main_card->add_view(susp_slider, suspsl_lp);
+
         add_divider();
 
         // -------------------------------------------------------------
@@ -2735,6 +2813,51 @@ void MillerView::rebuild_preview_column() {
         prev_row->add_view(prev_switch, prevsw_lp);
         main_card->add_view(prev_row);
 
+        auto bat_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto bat_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto bat_title = TextViewBuilder::create()
+            ->text("Shorten timeouts on battery power")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        bat_box->add_view(bat_title);
+
+        auto bat_hint = TextViewBuilder::create()
+            ->text("Automatically reduces inactivity delays by 50% when running on battery")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        bat_box->add_view(bat_hint);
+
+        LayoutParams bat_lp;
+        bat_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        bat_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        bat_lp.weight = 1.0f;
+        bat_lp.gravity = Gravity::CenterVertical;
+        bat_row->add_view(bat_box, bat_lp);
+
+        auto bat_switch = SwitchBuilder::create()
+            ->checked(item->timeout_lock_cfg.energy_saver_battery)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->timeout_lock_cfg.energy_saver_battery = checked;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams batsw_lp;
+        batsw_lp.width = 44;
+        batsw_lp.height = 24;
+        batsw_lp.gravity = Gravity::CenterVertical;
+        bat_row->add_view(bat_switch, batsw_lp);
+        main_card->add_view(bat_row);
+
         add_divider();
 
         // -------------------------------------------------------------
@@ -2836,6 +2959,51 @@ void MillerView::rebuild_preview_column() {
         lidsw_lp.gravity = Gravity::CenterVertical;
         lid_row->add_view(lid_switch, lidsw_lp);
         main_card->add_view(lid_row);
+
+        auto clam_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto clam_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto clam_title = TextViewBuilder::create()
+            ->text("Stay awake when closed if external monitor is connected")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        clam_box->add_view(clam_title);
+
+        auto clam_hint = TextViewBuilder::create()
+            ->text("Clamshell docking • Continues display output to external monitor")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        clam_box->add_view(clam_hint);
+
+        LayoutParams clam_lp;
+        clam_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        clam_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        clam_lp.weight = 1.0f;
+        clam_lp.gravity = Gravity::CenterVertical;
+        clam_row->add_view(clam_box, clam_lp);
+
+        auto clam_switch = SwitchBuilder::create()
+            ->checked(item->timeout_lock_cfg.clamshell_mode)
+            ->onCheckedChanged([this, item](bool checked) {
+                item->timeout_lock_cfg.clamshell_mode = checked;
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams clamsw_lp;
+        clamsw_lp.width = 44;
+        clamsw_lp.height = 24;
+        clamsw_lp.gravity = Gravity::CenterVertical;
+        clam_row->add_view(clam_switch, clamsw_lp);
+        main_card->add_view(clam_row);
 
         auto pwd_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)

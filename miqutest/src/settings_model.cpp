@@ -526,10 +526,13 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         disp_timeout_lock->is_timeout_and_lock = true;
         disp_timeout_lock->timeout_lock_cfg.lock_timeout_minutes = 1;
         disp_timeout_lock->timeout_lock_cfg.display_off_minutes = 5;
+        disp_timeout_lock->timeout_lock_cfg.suspend_minutes = 15;
         disp_timeout_lock->timeout_lock_cfg.dim_screen = true;
         disp_timeout_lock->timeout_lock_cfg.prevent_sleep_media = true;
+        disp_timeout_lock->timeout_lock_cfg.energy_saver_battery = true;
         disp_timeout_lock->timeout_lock_cfg.lock_on_display_off = true;
         disp_timeout_lock->timeout_lock_cfg.lock_on_lid_close = true;
+        disp_timeout_lock->timeout_lock_cfg.clamshell_mode = true;
         disp_timeout_lock->timeout_lock_cfg.require_password_immediately = true;
         disp_timeout_lock->timeout_lock_cfg.grace_period_seconds = 0;
         disp_timeout_lock->telemetry_title = "Inactivity & security specifications";
@@ -537,8 +540,9 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Idle Timer Daemon", "miquidle (ext-idle-notify-v1)"},
             {"Session Security", "miqulock (ext-session-lock-v1)"},
             {"Display Hardware DPMS", "wlr-output-power-management-v1"},
-            {"Authentication Provider", "PAM (system-auth)"},
-            {"Lid Switch Manager", "systemd-logind (seat0)"}
+            {"Suspend Target", "systemd-logind (suspend-then-hibernate)"},
+            {"Clamshell Docking", "Monitored via seat0 & DRM connectors"},
+            {"Authentication Provider", "PAM (system-auth)"}
         };
 
         // 5.3 Night Light
