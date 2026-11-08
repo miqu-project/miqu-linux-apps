@@ -103,9 +103,25 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Cellular Radio", "Disabled"}
         };
 
+        // 1.5 Private DNS (Leaf)
+        auto private_dns = SettingItem::create_leaf("net_private_dns", "Private DNS", "", "󰒍");
+        private_dns->is_private_dns = true;
+        private_dns->private_dns_cfg.mode = "Strict (Private Provider)";
+        private_dns->private_dns_cfg.current_provider = "Cloudflare (1.1.1.1)";
+        private_dns->private_dns_cfg.custom_hostname = "one.one.one.one";
+        private_dns->telemetry_title = "DNS & encryption specifications";
+        private_dns->telemetry = {
+            {"Protocol Standard", "DNS-over-TLS (RFC 7858 / Port 853)"},
+            {"Active Resolver", "1.1.1.1#one.one.one.one"},
+            {"Transport Security", "TLSv1.3 (ChaCha20-Poly1305 / X25519)"},
+            {"System Resolver", "systemd-resolved.service"},
+            {"DNSSEC Validation", "Enabled (Strict verification)"},
+            {"Resolution Latency", "4.2 ms (Cached / Encrypted)"}
+        };
+
         root.push_back(SettingItem::create_category(
             "cat_connectivity", "Connectivity", "󰖩",
-            {wifi, bt, eth, airplane}
+            {wifi, bt, eth, airplane, private_dns}
         ));
     }
 

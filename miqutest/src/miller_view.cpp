@@ -1579,6 +1579,356 @@ void MillerView::rebuild_preview_column() {
         return;
     }
 
+    // Dedicated Interactive UI for Private DNS (DNS-over-TLS)
+    if (item->is_private_dns) {
+        // 1. Private DNS Master Status Card
+        auto dns_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->padding(16, 14)
+            ->spacing(12)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        bool is_encrypted = (item->private_dns_cfg.mode != "Off");
+        auto dns_icon = TextViewBuilder::create()
+            ->text("󰒍")
+            ->textSize(config->metrics.font_size + 4)
+            ->textColor(is_encrypted ? config->colors.primary : config->colors.on_surface_variant)
+            ->build();
+        LayoutParams dicon_lp;
+        dicon_lp.width = 30;
+        dicon_lp.gravity = Gravity::CenterVertical;
+        dns_card->add_view(dns_icon, dicon_lp);
+
+        auto dns_lbl_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+
+        auto dns_title = TextViewBuilder::create()
+            ->text("Private DNS")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        dns_lbl_box->add_view(dns_title);
+
+        auto get_status_str = [item]() -> std::string {
+            if (item->private_dns_cfg.mode == "Off") {
+                return "Unencrypted (Standard router / DHCP DNS)";
+            } else if (item->private_dns_cfg.mode == "Automatic (Opportunistic)") {
+                return "Opportunistic DoT (Automatic TLS upgrade)";
+            }
+            return "Encrypted DoT • " + item->private_dns_cfg.custom_hostname;
+        };
+
+        auto dns_hint = TextViewBuilder::create()
+            ->text(get_status_str())
+            ->caption(true)
+            ->textColor(is_encrypted ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        dns_lbl_box->add_view(dns_hint);
+
+        LayoutParams dlbl_lp;
+        dlbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        dlbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        dlbl_lp.weight = 1.0f;
+        dlbl_lp.gravity = Gravity::CenterVertical;
+        dns_card->add_view(dns_lbl_box, dlbl_lp);
+
+        // Status Badge Pill
+        auto badge_text = TextViewBuilder::create()
+            ->text(is_encrypted ? "Strict DoT ✓" : "Off")
+            ->caption(true)
+            ->textColor(is_encrypted ? config->colors.primary : config->colors.on_surface_variant)
+            ->padding(8, 4)
+            ->build();
+
+        auto badge_card = CardViewBuilder::create()
+            ->style(CardStyle::Filled)
+            ->backgroundColor(is_encrypted ? config->colors.primary_container.with_alpha(0.4f) : config->colors.surface_variant)
+            ->cornerRadius(6)
+            ->elevation(0)
+            ->addView(badge_text)
+            ->build();
+
+        LayoutParams badge_lp;
+        badge_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        badge_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        badge_lp.gravity = Gravity::CenterVertical;
+        dns_card->add_view(badge_card, badge_lp);
+
+        m_preview_layout->add_view(dns_card);
+
+        // 2. Configuration Card (Operating Mode & Provider Spinners)
+        auto cfg_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(10)
+            ->padding(16, 14)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto cfg_title = TextViewBuilder::create()
+            ->text("DNS-over-TLS configuration")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        cfg_card->add_view(cfg_title);
+
+        auto create_spinner_row = [&](const std::string& row_title,
+                                      const std::vector<std::string>& options,
+                                      const std::string& current_val,
+                                      int spinner_width,
+                                      std::function<void(const std::string&)> on_select) {
+            auto row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->gravity(Gravity::CenterVertical)
+                ->padding(0, 3)
+                ->build();
+
+            auto lbl = TextViewBuilder::create()
+                ->text(row_title)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            LayoutParams lbl_lp;
+            lbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            lbl_lp.weight = 1.0f;
+            lbl_lp.gravity = Gravity::CenterVertical;
+            row->add_view(lbl, lbl_lp);
+
+            int sel_idx = 0;
+            for (size_t i = 0; i < options.size(); ++i) {
+                if (options[i] == current_val) {
+                    sel_idx = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            auto spinner = SpinnerBuilder::create()
+                ->items(options)
+                ->selectedIndex(sel_idx)
+                ->fontSize(config->metrics.font_size)
+                ->padding(12, 6)
+                ->cornerRadius(8)
+                ->onItemSelected([options, on_select](int idx, const std::string& val) {
+                    (void)val;
+                    if (idx >= 0 && idx < static_cast<int>(options.size())) {
+                        on_select(options[idx]);
+                    }
+                })
+                ->build();
+
+            LayoutParams sp_lp(spinner_width, 36);
+            sp_lp.gravity = Gravity::CenterVertical;
+            row->add_view(spinner, sp_lp);
+
+            return row;
+        };
+
+        // Forward declare details views to update in-place without tearing down spinner
+        const auto& presets = item->private_dns_cfg.presets;
+        const PrivateDnsPreset* active_preset = &presets[0];
+        for (const auto& p : presets) {
+            if (p.name == item->private_dns_cfg.current_provider) {
+                active_preset = &p;
+                break;
+            }
+        }
+
+        auto host_val = TextViewBuilder::create()
+            ->text(active_preset->hostname)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->build();
+
+        auto desc_val = TextViewBuilder::create()
+            ->text(active_preset->description)
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+
+        auto ip_val = TextViewBuilder::create()
+            ->text(active_preset->endpoints)
+            ->caption(true)
+            ->textColor(config->colors.on_surface)
+            ->build();
+
+        auto sync_dns_ui = [this, item, config, dns_icon, dns_hint, badge_text, badge_card, host_val, desc_val, ip_val]() {
+            bool enc = (item->private_dns_cfg.mode != "Off");
+            dns_icon->set_text_color(enc ? config->colors.primary : config->colors.on_surface_variant);
+            dns_icon->request_redraw();
+
+            if (item->private_dns_cfg.mode == "Off") {
+                dns_hint->set_text("Unencrypted (Standard router / DHCP DNS)");
+                dns_hint->set_text_color(config->colors.on_surface_variant.with_alpha(0.7f));
+                badge_text->set_text("Off");
+                badge_text->set_text_color(config->colors.on_surface_variant);
+                badge_card->set_card_background_color(config->colors.surface_variant);
+            } else if (item->private_dns_cfg.mode == "Automatic (Opportunistic)") {
+                dns_hint->set_text("Opportunistic DoT (Automatic TLS upgrade)");
+                dns_hint->set_text_color(config->colors.primary);
+                badge_text->set_text("Auto DoT ✓");
+                badge_text->set_text_color(config->colors.primary);
+                badge_card->set_card_background_color(config->colors.primary_container.with_alpha(0.4f));
+            } else {
+                dns_hint->set_text("Encrypted DoT • " + item->private_dns_cfg.custom_hostname);
+                dns_hint->set_text_color(config->colors.primary);
+                badge_text->set_text("Strict DoT ✓");
+                badge_text->set_text_color(config->colors.primary);
+                badge_card->set_card_background_color(config->colors.primary_container.with_alpha(0.4f));
+            }
+            dns_hint->request_redraw();
+            badge_text->request_redraw();
+            badge_card->request_redraw();
+
+            for (const auto& p : item->private_dns_cfg.presets) {
+                if (p.name == item->private_dns_cfg.current_provider) {
+                    host_val->set_text(p.hostname);
+                    desc_val->set_text(p.description);
+                    ip_val->set_text(p.endpoints);
+                    host_val->request_redraw();
+                    desc_val->request_redraw();
+                    ip_val->request_redraw();
+                    break;
+                }
+            }
+        };
+
+        // 1. Operating Mode Spinner Row
+        cfg_card->add_view(create_spinner_row("Operating Mode", item->private_dns_cfg.available_modes, item->private_dns_cfg.mode, 200, [item, sync_dns_ui](const std::string& val) {
+            item->private_dns_cfg.mode = val;
+            sync_dns_ui();
+        }));
+
+        // 2. DNS Provider Preset Row
+        std::vector<std::string> provider_names;
+        for (const auto& p : item->private_dns_cfg.presets) {
+            provider_names.push_back(p.name);
+        }
+        cfg_card->add_view(create_spinner_row("DNS Provider", provider_names, item->private_dns_cfg.current_provider, 200, [item, sync_dns_ui](const std::string& val) {
+            item->private_dns_cfg.current_provider = val;
+            for (const auto& p : item->private_dns_cfg.presets) {
+                if (p.name == val) {
+                    item->private_dns_cfg.custom_hostname = p.hostname;
+                    break;
+                }
+            }
+            sync_dns_ui();
+        }));
+
+        m_preview_layout->add_view(cfg_card);
+
+        // 3. Active Endpoint & Verification Card
+        auto ep_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(10)
+            ->padding(16, 14)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto ep_header = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
+        auto ep_title = TextViewBuilder::create()
+            ->text("Active endpoint & features")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        LayoutParams ept_lp;
+        ept_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        ept_lp.weight = 1.0f;
+        ept_lp.gravity = Gravity::CenterVertical;
+        ep_header->add_view(ep_title, ept_lp);
+
+        auto test_btn = ButtonBuilder::create()
+            ->text("Test Resolution")
+            ->flat(true)
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->padding(10, 4)
+            ->cornerRadius(6)
+            ->onClick([this, item]() {
+                item->last_action_message = "DNS handshake verified • Latency: 3.8 ms";
+                rebuild_preview_column();
+                notify_state_changed();
+            })
+            ->build();
+        LayoutParams tb_lp;
+        tb_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        tb_lp.height = 28;
+        tb_lp.gravity = Gravity::CenterVertical;
+        ep_header->add_view(test_btn, tb_lp);
+        ep_card->add_view(ep_header);
+
+        if (!item->last_action_message.empty()) {
+            auto test_feedback = TextViewBuilder::create()
+                ->text(item->last_action_message)
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            ep_card->add_view(test_feedback);
+        }
+
+        // Hostname row
+        auto host_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+        auto host_caption = TextViewBuilder::create()
+            ->text("TLS Hostname")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        host_box->add_view(host_caption);
+        host_box->add_view(host_val);
+        ep_card->add_view(host_box);
+
+        // Description box
+        auto desc_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+        auto desc_caption = TextViewBuilder::create()
+            ->text("Protection Scope")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        desc_box->add_view(desc_caption);
+        desc_box->add_view(desc_val);
+        ep_card->add_view(desc_box);
+
+        // Endpoints box
+        auto ip_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
+        auto ip_caption = TextViewBuilder::create()
+            ->text("Upstream Anycast Resolvers")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        ip_box->add_view(ip_caption);
+        ip_box->add_view(ip_val);
+        ep_card->add_view(ip_box);
+
+        m_preview_layout->add_view(ep_card);
+
+        // 4. DNS & Encryption Specifications Telemetry
+        if (!item->telemetry.empty()) {
+            m_preview_layout->add_view(create_telemetry_card(item->telemetry, config, "DNS & encryption specifications"));
+        }
+
+        return;
+    }
+
     // Dedicated Interactive UI for Monitors & Displays
     if (item->is_monitor) {
         // 1. Monitor Banner & Primary Display Status Card
