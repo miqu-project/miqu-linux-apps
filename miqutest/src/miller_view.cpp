@@ -3099,67 +3099,6 @@ void MillerView::rebuild_preview_column() {
         }
 
         add_preview_card(main_card);
-
-        // Section 5: Authoritative miquland.conf Directives Telemetry Card
-        std::vector<TelemetryEntry> tiling_telemetry;
-        std::string telem_title = "Authoritative miquland.conf directives";
-
-        std::string mode_token = "dwindle";
-        if (item->tiling_cfg->layout_mode.find("Master") != std::string::npos) mode_token = "stack";
-        else if (item->tiling_cfg->layout_mode.find("Bottom") != std::string::npos) mode_token = "bstack";
-        else if (item->tiling_cfg->layout_mode.find("Centered") != std::string::npos) mode_token = "centeredmaster";
-        else if (item->tiling_cfg->layout_mode.find("Spiral") != std::string::npos) mode_token = "spiral";
-        else if (item->tiling_cfg->layout_mode.find("Columns") != std::string::npos) mode_token = "columns";
-        else if (item->tiling_cfg->layout_mode.find("Grid") != std::string::npos) mode_token = "grid";
-        else if (item->tiling_cfg->layout_mode.find("Monocle") != std::string::npos) mode_token = "monocle";
-
-        char ratio_buf[16];
-        std::snprintf(ratio_buf, sizeof(ratio_buf), "%.2f", item->tiling_cfg->default_split_ratio);
-        char mult_buf[16];
-        std::snprintf(mult_buf, sizeof(mult_buf), "%.1f", item->tiling_cfg->split_width_multiplier);
-
-        if (show_layout) {
-            telem_title = "Layout engine directives (miquland.conf)";
-            tiling_telemetry = {
-                {"general.layout", mode_token},
-                {"general.default_split_ratio", ratio_buf},
-                {"layout.display_name", item->tiling_cfg->layout_mode},
-                {"layout.workspace_rule", "inherit from output defaults"}
-            };
-        } else if (show_windows) {
-            telem_title = "Window geometry & border directives (miquland.conf)";
-            tiling_telemetry = {
-                {"general.gaps.inner", std::to_string(item->tiling_cfg->inner_gap) + " px"},
-                {"general.gaps.outer", std::to_string(item->tiling_cfg->outer_gap) + " px"},
-                {"general.smart_gaps", item->tiling_cfg->smart_gaps ? "true" : "false"},
-                {"general.border.width", std::to_string(item->tiling_cfg->border_width) + " px"},
-                {"general.border.radius", std::to_string(item->tiling_cfg->corner_radius) + " px"},
-                {"general.border.active", item->tiling_cfg->active_border_value},
-                {"general.border.inactive", item->tiling_cfg->inactive_border_value},
-                {"general.border.shading", item->tiling_cfg->border_shading ? "true" : "false"},
-                {"general.resize_on_border", item->tiling_cfg->resize_on_border ? "true" : "false"},
-                {"general.auto_float_fixed_size", item->tiling_cfg->auto_float_fixed_size ? "true" : "false"}
-            };
-        } else if (show_split) {
-            telem_title = "Dwindle & split directives (miquland.conf)";
-            tiling_telemetry = {
-                {"general.default_split_ratio", ratio_buf},
-                {"general.dwindle.smart_split", item->tiling_cfg->smart_split ? "true" : "false"},
-                {"general.dwindle.split_focus", item->tiling_cfg->split_focus ? "true" : "false"},
-                {"general.dwindle.preserve_split", item->tiling_cfg->preserve_split ? "true" : "false"},
-                {"general.dwindle.split_width_mult", mult_buf}
-            };
-        } else if (show_focus) {
-            telem_title = "Input & focus directives (miquland.conf)";
-            tiling_telemetry = {
-                {"input.follow_mouse", item->tiling_cfg->focus_follows_mouse ? "true (hover focus)" : "false (click focus)"},
-                {"input.click_to_focus", item->tiling_cfg->click_to_focus ? "true" : "false"},
-                {"input.warp_cursor", item->tiling_cfg->warp_cursor_on_focus ? "true" : "false"},
-                {"general.focus_on_workspace_switch", item->tiling_cfg->focus_on_workspace_switch ? "true" : "false"}
-            };
-        }
-
-        add_preview_card(create_telemetry_card(tiling_telemetry, config, telem_title));
         return;
     }
 
