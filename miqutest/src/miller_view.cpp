@@ -1947,20 +1947,14 @@ void MillerView::rebuild_preview_column() {
 
     // Dedicated Interactive UI for Battery & Power Management
     if (item->is_battery) {
-        // 1. Battery Hero Status Card
+        // 1. Battery Master Status Card
         auto hero_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
+            ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
             ->spacing(12)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
             ->cornerRadius(12)
-            ->build();
-
-        auto header_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->spacing(12)
             ->build();
 
         auto get_battery_icon = [item]() -> std::string {
@@ -1977,13 +1971,13 @@ void MillerView::rebuild_preview_column() {
 
         auto bat_icon = TextViewBuilder::create()
             ->text(get_battery_icon())
-            ->textSize(config->metrics.font_size + 8)
+            ->textSize(config->metrics.font_size + 4)
             ->textColor(config->colors.primary)
             ->build();
         LayoutParams bicon_lp;
-        bicon_lp.width = 34;
+        bicon_lp.width = 30;
         bicon_lp.gravity = Gravity::CenterVertical;
-        header_row->add_view(bat_icon, bicon_lp);
+        hero_card->add_view(bat_icon, bicon_lp);
 
         auto lbl_box = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
@@ -2016,7 +2010,7 @@ void MillerView::rebuild_preview_column() {
 
         auto bat_title = TextViewBuilder::create()
             ->text(get_title_str())
-            ->textSize(config->metrics.font_size + 2)
+            ->textSize(config->metrics.font_size)
             ->textColor(config->colors.on_surface)
             ->build();
         lbl_box->add_view(bat_title);
@@ -2033,7 +2027,7 @@ void MillerView::rebuild_preview_column() {
         lbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
         lbl_lp.weight = 1.0f;
         lbl_lp.gravity = Gravity::CenterVertical;
-        header_row->add_view(lbl_box, lbl_lp);
+        hero_card->add_view(lbl_box, lbl_lp);
 
         // Health Badge Pill
         auto badge_text = TextViewBuilder::create()
@@ -2055,95 +2049,11 @@ void MillerView::rebuild_preview_column() {
         badge_lp.width = static_cast<int>(LayoutDimension::WrapContent);
         badge_lp.height = static_cast<int>(LayoutDimension::WrapContent);
         badge_lp.gravity = Gravity::CenterVertical;
-        header_row->add_view(badge_card, badge_lp);
-
-        hero_card->add_view(header_row);
-
-        // Visual Battery Gauge / Level Bar
-        auto level_bar = ProgressBarBuilder::create()
-            ->progress(item->battery_cfg.percentage / 100.0f)
-            ->trackHeight(8)
-            ->cornerRadius(4)
-            ->trackColor(config->colors.surface_variant)
-            ->progressColor(config->colors.primary)
-            ->build();
-
-        LayoutParams pbar_lp;
-        pbar_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        pbar_lp.height = 10;
-        hero_card->add_view(level_bar, pbar_lp);
+        hero_card->add_view(badge_card, badge_lp);
 
         m_preview_layout->add_view(hero_card);
 
-        // 2. Power Saver Toggle Card (like Wi-Fi power card / Speaker mute card)
-        bool ps_focused = m_preview_focused && (m_preview_control_index == 0);
-        auto saver_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->padding(16, 14)
-            ->spacing(12)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(ps_focused ? 2 : 1, ps_focused ? config->colors.primary : config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
-
-        auto saver_icon = TextViewBuilder::create()
-            ->text("󰌪")
-            ->textSize(config->metrics.font_size + 4)
-            ->textColor(item->battery_cfg.power_saver ? config->colors.primary : config->colors.on_surface_variant)
-            ->build();
-        LayoutParams sicon_lp;
-        sicon_lp.width = 30;
-        sicon_lp.gravity = Gravity::CenterVertical;
-        saver_card->add_view(saver_icon, sicon_lp);
-
-        auto saver_lbl_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto saver_title = TextViewBuilder::create()
-            ->text("Power Saver")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        saver_lbl_box->add_view(saver_title);
-
-        auto saver_hint = TextViewBuilder::create()
-            ->text("Limits background processing, lowers display refresh rate & dims brightness to extend battery")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        saver_lbl_box->add_view(saver_hint);
-
-        LayoutParams slbl_lp;
-        slbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        slbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        slbl_lp.weight = 1.0f;
-        slbl_lp.gravity = Gravity::CenterVertical;
-        saver_card->add_view(saver_lbl_box, slbl_lp);
-
-        m_active_primary_switch = SwitchBuilder::create()
-            ->checked(item->battery_cfg.power_saver)
-            ->onCheckedChanged([this, item](bool checked) {
-                item->battery_cfg.power_saver = checked;
-                if (checked) {
-                    item->battery_cfg.power_profile = "Power Saver";
-                } else if (item->battery_cfg.power_profile == "Power Saver") {
-                    item->battery_cfg.power_profile = "Balanced";
-                }
-                rebuild_preview_column();
-                notify_state_changed();
-            })
-            ->build();
-
-        LayoutParams sw_lp;
-        sw_lp.width = 44;
-        sw_lp.height = 24;
-        sw_lp.gravity = Gravity::CenterVertical;
-        saver_card->add_view(m_active_primary_switch, sw_lp);
-        m_preview_layout->add_view(saver_card);
-
-        // 3. Operating Profile Card (Single Spinner on new line)
+        // 2. Operating Profile Card (Single Spinner on new line)
         auto prof_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
@@ -2213,7 +2123,7 @@ void MillerView::rebuild_preview_column() {
 
         m_preview_layout->add_view(prof_card);
 
-        // 4. Charging Protection Card
+        // 3. Charging Protection Card
         auto prot_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(16, 14)
@@ -2262,7 +2172,7 @@ void MillerView::rebuild_preview_column() {
         prlbl_lp.gravity = Gravity::CenterVertical;
         prot_card->add_view(prot_lbl_box, prlbl_lp);
 
-        m_active_secondary_switch = SwitchBuilder::create()
+        m_active_primary_switch = SwitchBuilder::create()
             ->checked(item->battery_cfg.charge_limit_enabled)
             ->onCheckedChanged([this, item](bool checked) {
                 item->battery_cfg.charge_limit_enabled = checked;
