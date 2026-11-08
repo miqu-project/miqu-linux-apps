@@ -526,12 +526,12 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         disp_timeout_lock->is_timeout_and_lock = true;
         disp_timeout_lock->timeout_lock_cfg.lock_timeout_minutes = 1;
         disp_timeout_lock->timeout_lock_cfg.display_off_minutes = 5;
-        disp_timeout_lock->timeout_lock_cfg.suspend_minutes = 15;
+        disp_timeout_lock->timeout_lock_cfg.sleep_minutes = 15;
         disp_timeout_lock->timeout_lock_cfg.hibernate_delay_minutes = 120;
-        disp_timeout_lock->timeout_lock_cfg.sleep_mode = "Suspend-then-Hibernate (Hybrid)";
-        disp_timeout_lock->timeout_lock_cfg.lid_action = "Suspend system";
+        disp_timeout_lock->timeout_lock_cfg.sleep_mode = "Hybrid Sleep (Recommended)";
+        disp_timeout_lock->timeout_lock_cfg.lid_action = "Sleep";
         disp_timeout_lock->timeout_lock_cfg.power_button_action = "Show power menu (miqupower)";
-        disp_timeout_lock->timeout_lock_cfg.critical_battery_action = "Hibernate system";
+        disp_timeout_lock->timeout_lock_cfg.critical_battery_action = "Hibernate";
         disp_timeout_lock->timeout_lock_cfg.dim_screen = true;
         disp_timeout_lock->timeout_lock_cfg.prevent_sleep_media = true;
         disp_timeout_lock->timeout_lock_cfg.energy_saver_battery = true;

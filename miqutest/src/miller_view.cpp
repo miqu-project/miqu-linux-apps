@@ -2633,83 +2633,83 @@ void MillerView::rebuild_preview_column() {
         dsl_lp.height = 24;
         main_card->add_view(d_slider, dsl_lp);
 
-        // Timer 3: System Suspend Inactivity
-        std::vector<int> susp_steps = {5, 10, 15, 30, 60, 120, 0};
-        auto format_susp_mins = [](int mins) -> std::string {
+        // Timer 3: Sleep Inactivity
+        std::vector<int> sleep_steps = {5, 10, 15, 30, 60, 120, 0};
+        auto format_sleep_mins = [](int mins) -> std::string {
             if (mins == 0) return "Never";
             if (mins == 60) return "1 hour";
             if (mins > 60) return std::to_string(mins / 60) + " hours";
             return std::to_string(mins) + " minutes";
         };
 
-        auto susp_header = LinearLayoutBuilder::create()
+        auto sleep_header = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->gravity(Gravity::CenterVertical)
             ->build();
 
-        auto susp_box = LinearLayoutBuilder::create()
+        auto sleep_box = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(2)
             ->build();
 
-        auto susp_title = TextViewBuilder::create()
-            ->text("Suspend system after inactivity")
+        auto sleep_title = TextViewBuilder::create()
+            ->text("Put computer to sleep after inactivity")
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.on_surface)
             ->build();
-        susp_box->add_view(susp_title);
+        sleep_box->add_view(sleep_title);
 
-        auto susp_hint = TextViewBuilder::create()
-            ->text("Enters deep low-power sleep to halt battery drain")
+        auto sleep_hint = TextViewBuilder::create()
+            ->text("Pauses apps and halts CPU while holding memory in RAM")
             ->caption(true)
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
-        susp_box->add_view(susp_hint);
+        sleep_box->add_view(sleep_hint);
 
-        LayoutParams suspbox_lp;
-        suspbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        suspbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        suspbox_lp.weight = 1.0f;
-        suspbox_lp.gravity = Gravity::CenterVertical;
-        susp_header->add_view(susp_box, suspbox_lp);
+        LayoutParams sleepbox_lp;
+        sleepbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        sleepbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        sleepbox_lp.weight = 1.0f;
+        sleepbox_lp.gravity = Gravity::CenterVertical;
+        sleep_header->add_view(sleep_box, sleepbox_lp);
 
-        auto susp_val_label = TextViewBuilder::create()
-            ->text(format_susp_mins(item->timeout_lock_cfg.suspend_minutes))
+        auto sleep_val_label = TextViewBuilder::create()
+            ->text(format_sleep_mins(item->timeout_lock_cfg.sleep_minutes))
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.primary)
             ->build();
-        LayoutParams suspval_lp;
-        suspval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        suspval_lp.gravity = Gravity::CenterVertical;
-        susp_header->add_view(susp_val_label, suspval_lp);
-        main_card->add_view(susp_header);
+        LayoutParams sleepval_lp;
+        sleepval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        sleepval_lp.gravity = Gravity::CenterVertical;
+        sleep_header->add_view(sleep_val_label, sleepval_lp);
+        main_card->add_view(sleep_header);
 
-        int cur_susp_idx = 2; // 15 min default
-        for (size_t i = 0; i < susp_steps.size(); ++i) {
-            if (susp_steps[i] == item->timeout_lock_cfg.suspend_minutes) {
-                cur_susp_idx = static_cast<int>(i);
+        int cur_sleep_idx = 2; // 15 min default
+        for (size_t i = 0; i < sleep_steps.size(); ++i) {
+            if (sleep_steps[i] == item->timeout_lock_cfg.sleep_minutes) {
+                cur_sleep_idx = static_cast<int>(i);
                 break;
             }
         }
-        float initial_susp_val = static_cast<float>(cur_susp_idx) / static_cast<float>(susp_steps.size() - 1);
+        float initial_sleep_val = static_cast<float>(cur_sleep_idx) / static_cast<float>(sleep_steps.size() - 1);
 
-        auto susp_slider = SliderBuilder::create()
-            ->value(initial_susp_val)
-            ->onValueChanged([this, item, susp_val_label, susp_steps, format_susp_mins](float val, bool user) {
+        auto sleep_slider = SliderBuilder::create()
+            ->value(initial_sleep_val)
+            ->onValueChanged([this, item, sleep_val_label, sleep_steps, format_sleep_mins](float val, bool user) {
                 (void)user;
-                int idx = static_cast<int>(std::round(val * static_cast<float>(susp_steps.size() - 1)));
-                idx = std::clamp(idx, 0, static_cast<int>(susp_steps.size() - 1));
-                int mins = susp_steps[idx];
-                item->timeout_lock_cfg.suspend_minutes = mins;
-                susp_val_label->set_text(format_susp_mins(mins));
-                susp_val_label->request_redraw();
+                int idx = static_cast<int>(std::round(val * static_cast<float>(sleep_steps.size() - 1)));
+                idx = std::clamp(idx, 0, static_cast<int>(sleep_steps.size() - 1));
+                int mins = sleep_steps[idx];
+                item->timeout_lock_cfg.sleep_minutes = mins;
+                sleep_val_label->set_text(format_sleep_mins(mins));
+                sleep_val_label->request_redraw();
                 notify_state_changed();
             })
             ->build();
-        LayoutParams suspsl_lp;
-        suspsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        suspsl_lp.height = 24;
-        main_card->add_view(susp_slider, suspsl_lp);
+        LayoutParams sleepsl_lp;
+        sleepsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        sleepsl_lp.height = 24;
+        main_card->add_view(sleep_slider, sleepsl_lp);
 
         // Timer 4: Auto-Hibernate Delay
         std::vector<int> hib_steps = {30, 60, 120, 240, 0};
@@ -2834,9 +2834,9 @@ void MillerView::rebuild_preview_column() {
         sm_row->add_view(sm_box, smbox_lp);
 
         std::vector<std::string> sleep_modes = {
-            "Suspend-then-Hibernate (Hybrid)",
-            "Suspend to RAM (Sleep)",
-            "Hibernate to Disk"
+            "Hybrid Sleep (Recommended)",
+            "Sleep (RAM)",
+            "Hibernate (Disk)"
         };
         int cur_sm_idx = 0;
         for (size_t i = 0; i < sleep_modes.size(); ++i) {
@@ -2895,9 +2895,9 @@ void MillerView::rebuild_preview_column() {
         lid_action_row->add_view(la_box, labox_lp);
 
         std::vector<std::string> lid_actions = {
-            "Suspend system",
+            "Sleep",
             "Lock session only",
-            "Hibernate system",
+            "Hibernate",
             "Turn off display only",
             "Ignore (Do nothing)"
         };
@@ -2959,9 +2959,9 @@ void MillerView::rebuild_preview_column() {
 
         std::vector<std::string> pwr_actions = {
             "Show power menu (miqupower)",
-            "Suspend system",
+            "Sleep",
             "Lock session",
-            "Hibernate system",
+            "Hibernate",
             "Power off immediately"
         };
         int cur_pa_idx = 0;
@@ -3021,8 +3021,8 @@ void MillerView::rebuild_preview_column() {
         crit_action_row->add_view(ca_box, cabox_lp);
 
         std::vector<std::string> crit_actions = {
-            "Hibernate system",
-            "Suspend system",
+            "Hibernate",
+            "Sleep",
             "Power off immediately"
         };
         int cur_ca_idx = 0;
@@ -3569,6 +3569,78 @@ void MillerView::rebuild_preview_column() {
         main_card->add_view(clk_row);
 
         add_preview_card(main_card);
+
+        // -------------------------------------------------------------
+        // Definitions & Terminology Explained Card
+        // -------------------------------------------------------------
+        auto defs_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->padding(16, 16)
+            ->spacing(10)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(12)
+            ->build();
+
+        auto defs_title_row = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->spacing(8)
+            ->build();
+
+        auto defs_icon = TextViewBuilder::create()
+            ->text("󰋼")
+            ->textSize(config->metrics.font_size + 2)
+            ->textColor(config->colors.primary)
+            ->build();
+        LayoutParams deficon_lp;
+        deficon_lp.width = 24;
+        deficon_lp.gravity = Gravity::CenterVertical;
+        defs_title_row->add_view(defs_icon, deficon_lp);
+
+        auto defs_heading = TextViewBuilder::create()
+            ->text("Power & Lock Terminology Explained")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        defs_title_row->add_view(defs_heading);
+        defs_card->add_view(defs_title_row);
+
+        auto add_def_entry = [&defs_card, config](const std::string& term, const std::string& meaning) {
+            auto row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto t_label = TextViewBuilder::create()
+                ->text(term)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.primary)
+                ->build();
+            row->add_view(t_label);
+
+            auto m_label = TextViewBuilder::create()
+                ->text(meaning)
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.85f))
+                ->build();
+            row->add_view(m_label);
+
+            LayoutParams r_lp;
+            r_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            r_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            defs_card->add_view(row, r_lp);
+        };
+
+        add_def_entry("Display Off (DPMS)", "Powers down the screen backlight only. The CPU, Wi-Fi, and background applications continue running normally at full speed.");
+        add_def_entry("Sleep (Suspend to RAM)", "Pauses the CPU and freezes open applications in RAM with minimal power draw (~0.3W). Wakes back to your desktop in 1 to 2 seconds.");
+        add_def_entry("Hibernate (Suspend to Disk)", "Writes a complete memory snapshot to swap disk and cuts 100% of power (0W). Preserves your open work indefinitely even on zero battery.");
+        add_def_entry("Hybrid Sleep", "Enters Sleep immediately for fast 1-second wake, then automatically Hibernates to swap disk after prolonged inactivity to protect the battery.");
+        add_def_entry("Lock Screen (miqulock)", "Obscures your workspace behind PAM authentication. Requires your password to unlock while apps continue running uninterrupted in the background.");
+        add_def_entry("Grace Period", "A brief safety window right after the display turns off where pressing any key immediately resumes your desktop without asking for your password.");
+        add_def_entry("Clamshell Docking", "Allows you to close your laptop lid without triggering sleep or lock when an external monitor and keyboard/mouse are connected.");
+
+        add_preview_card(defs_card);
 
         if (!item->telemetry.empty()) {
             add_preview_card(create_telemetry_card(item->telemetry, config, item->telemetry_title.empty() ? "Inactivity & security specifications" : item->telemetry_title));
