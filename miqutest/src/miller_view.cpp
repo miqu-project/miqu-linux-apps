@@ -2942,6 +2942,11 @@ void MillerView::rebuild_preview_column() {
             ->checked(item->lockscreen_cfg.require_password_immediately)
             ->onCheckedChanged([this, item](bool checked) {
                 item->lockscreen_cfg.require_password_immediately = checked;
+                if (checked) {
+                    item->lockscreen_cfg.grace_period_seconds = 0;
+                } else if (item->lockscreen_cfg.grace_period_seconds == 0) {
+                    item->lockscreen_cfg.grace_period_seconds = 15;
+                }
                 rebuild_preview_column();
                 notify_state_changed();
             })
@@ -2955,108 +2960,122 @@ void MillerView::rebuild_preview_column() {
 
         add_preview_card(pwd_card);
 
-        // 3. Grace Period Card
-        auto grace_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->padding(16, 14)
-            ->spacing(10)
-            ->backgroundColor(config->colors.surface)
-            ->stroke(1, config->colors.outline.with_alpha(0.3f))
-            ->cornerRadius(12)
-            ->build();
-
-        auto g_header = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->gravity(Gravity::CenterVertical)
-            ->build();
-
-        auto g_icon = TextViewBuilder::create()
-            ->text("󰌾")
-            ->textSize(config->metrics.font_size + 2)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams gicon_lp;
-        gicon_lp.width = 24;
-        gicon_lp.gravity = Gravity::CenterVertical;
-        g_header->add_view(g_icon, gicon_lp);
-
-        auto g_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto g_title = TextViewBuilder::create()
-            ->text("Grace Period")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->build();
-        g_box->add_view(g_title);
-
-        auto g_hint = TextViewBuilder::create()
-            ->text("Window before locking session after screen sleeps")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-            ->build();
-        g_box->add_view(g_hint);
-
-        LayoutParams gbox_lp;
-        gbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        gbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        gbox_lp.weight = 1.0f;
-        gbox_lp.gravity = Gravity::CenterVertical;
-        g_header->add_view(g_box, gbox_lp);
-
-        std::vector<int> grace_steps = {0, 15, 30, 60, 120, 300};
         auto format_grace = [](int secs) -> std::string {
             if (secs == 0) return "0 seconds (Instant)";
             if (secs < 60) return std::to_string(secs) + " seconds";
             return std::to_string(secs / 60) + (secs == 60 ? " minute" : " minutes");
         };
 
-        auto g_val_label = TextViewBuilder::create()
-            ->text(format_grace(item->lockscreen_cfg.grace_period_seconds))
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams gval_lp;
-        gval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        gval_lp.gravity = Gravity::CenterVertical;
-        g_header->add_view(g_val_label, gval_lp);
+        // 3. Grace Period Card (Only shown if NOT requiring password immediately)
+        if (!item->lockscreen_cfg.require_password_immediately) {
+            auto grace_card = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->padding(16, 14)
+                ->spacing(10)
+                ->backgroundColor(config->colors.surface)
+                ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                ->cornerRadius(12)
+                ->build();
 
-        grace_card->add_view(g_header);
+            auto g_header = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->gravity(Gravity::CenterVertical)
+                ->build();
 
-        int cur_g_idx = 0;
-        for (size_t i = 0; i < grace_steps.size(); ++i) {
-            if (grace_steps[i] == item->lockscreen_cfg.grace_period_seconds) {
-                cur_g_idx = static_cast<int>(i);
-                break;
+            auto g_icon = TextViewBuilder::create()
+                ->text("󰌾")
+                ->textSize(config->metrics.font_size + 2)
+                ->textColor(config->colors.primary)
+                ->build();
+            LayoutParams gicon_lp;
+            gicon_lp.width = 24;
+            gicon_lp.gravity = Gravity::CenterVertical;
+            g_header->add_view(g_icon, gicon_lp);
+
+            auto g_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto g_title = TextViewBuilder::create()
+                ->text("Grace Period")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            g_box->add_view(g_title);
+
+            auto g_hint = TextViewBuilder::create()
+                ->text("Window before locking session after screen sleeps")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            g_box->add_view(g_hint);
+
+            LayoutParams gbox_lp;
+            gbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            gbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+            gbox_lp.weight = 1.0f;
+            gbox_lp.gravity = Gravity::CenterVertical;
+            g_header->add_view(g_box, gbox_lp);
+
+            std::vector<int> grace_steps = {5, 15, 30, 60, 120, 300};
+
+            auto g_val_label = TextViewBuilder::create()
+                ->text(format_grace(item->lockscreen_cfg.grace_period_seconds))
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.primary)
+                ->build();
+            LayoutParams gval_lp;
+            gval_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            gval_lp.gravity = Gravity::CenterVertical;
+            g_header->add_view(g_val_label, gval_lp);
+
+            grace_card->add_view(g_header);
+
+            int cur_g_idx = 1; // Default 15s
+            for (size_t i = 0; i < grace_steps.size(); ++i) {
+                if (grace_steps[i] == item->lockscreen_cfg.grace_period_seconds) {
+                    cur_g_idx = static_cast<int>(i);
+                    break;
+                }
+            }
+            float initial_g_val = static_cast<float>(cur_g_idx) / static_cast<float>(grace_steps.size() - 1);
+
+            auto g_slider = SliderBuilder::create()
+                ->value(initial_g_val)
+                ->onValueChanged([this, item, g_val_label, grace_steps, format_grace](float val, bool user) {
+                    (void)user;
+                    int idx = static_cast<int>(std::round(val * static_cast<float>(grace_steps.size() - 1)));
+                    idx = std::clamp(idx, 0, static_cast<int>(grace_steps.size() - 1));
+                    int secs = grace_steps[idx];
+                    item->lockscreen_cfg.grace_period_seconds = secs;
+                    g_val_label->set_text(format_grace(secs));
+                    g_val_label->request_redraw();
+                    notify_state_changed();
+                })
+                ->build();
+
+            LayoutParams gsl_lp;
+            gsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            gsl_lp.height = 24;
+            grace_card->add_view(g_slider, gsl_lp);
+
+            add_preview_card(grace_card);
+        }
+
+        std::vector<TelemetryEntry> lock_telemetry = item->telemetry;
+        for (auto& entry : lock_telemetry) {
+            if (entry.key == "Grace Period Timer") {
+                if (item->lockscreen_cfg.require_password_immediately) {
+                    entry.value = "0 s (Instant Lock)";
+                } else {
+                    entry.value = format_grace(item->lockscreen_cfg.grace_period_seconds);
+                }
             }
         }
-        float initial_g_val = static_cast<float>(cur_g_idx) / static_cast<float>(grace_steps.size() - 1);
 
-        auto g_slider = SliderBuilder::create()
-            ->value(initial_g_val)
-            ->onValueChanged([this, item, g_val_label, grace_steps, format_grace](float val, bool user) {
-                (void)user;
-                int idx = static_cast<int>(std::round(val * static_cast<float>(grace_steps.size() - 1)));
-                idx = std::clamp(idx, 0, static_cast<int>(grace_steps.size() - 1));
-                int secs = grace_steps[idx];
-                item->lockscreen_cfg.grace_period_seconds = secs;
-                g_val_label->set_text(format_grace(secs));
-                g_val_label->request_redraw();
-                notify_state_changed();
-            })
-            ->build();
-
-        LayoutParams gsl_lp;
-        gsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        gsl_lp.height = 24;
-        grace_card->add_view(g_slider, gsl_lp);
-
-        add_preview_card(grace_card);
-
-        if (!item->telemetry.empty()) {
-            add_preview_card(create_telemetry_card(item->telemetry, config, item->telemetry_title.empty() ? "Session security specifications" : item->telemetry_title));
+        if (!lock_telemetry.empty()) {
+            add_preview_card(create_telemetry_card(lock_telemetry, config, item->telemetry_title.empty() ? "Session security specifications" : item->telemetry_title));
         }
         return;
     }
