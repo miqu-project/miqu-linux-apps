@@ -23,6 +23,8 @@ add_executable(miqutest
     src/preview_hardware.cpp
     src/preview_apps.cpp
     src/test_app.cpp
+    src/wifi_backend.cpp
+    src/display_backend.cpp
 )
 
 target_include_directories(miqutest PRIVATE

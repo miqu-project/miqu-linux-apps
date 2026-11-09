@@ -1,5 +1,6 @@
 #include "miller_view.hpp"
 #include "preview_common.hpp"
+#include "display_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
 #include <algorithm>
 #include <chrono>
@@ -129,11 +130,20 @@ void MillerView::render_sound_preview(const std::shared_ptr<SettingItem>& item, 
 
 
 void MillerView::render_brightness_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    // 1. Simple Brightness Adjusting Card (No hero card)
+    // 1. Sync state with hardware via DisplayBackend
+    DisplayBackend::sync_item_state(item);
+    auto b_info = DisplayBackend::get_brightness_info();
+
+    int current_pct = static_cast<int>(std::round(item->brightness_val * 100.0f));
+
+    // Dynamic icon based on brightness level
+    std::string bright_icon_str = (current_pct >= 75) ? "󰃠" : ((current_pct >= 40) ? "󰃟" : "󰃞");
+
+    // 1. Brightness Adjustment Card
     auto bright_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->padding(16, 14)
-        ->spacing(10)
+        ->spacing(12)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
         ->cornerRadius(get_card_radius(config))
@@ -145,7 +155,7 @@ void MillerView::render_brightness_preview(const std::shared_ptr<SettingItem>& i
         ->build();
 
     auto icon = TextViewBuilder::create()
-        ->text("󰃠")
+        ->text(bright_icon_str)
         ->textSize(config->metrics.font_size + 4)
         ->textColor(config->colors.primary)
         ->build();
@@ -166,8 +176,12 @@ void MillerView::render_brightness_preview(const std::shared_ptr<SettingItem>& i
         ->build();
     lbl_box->add_view(title);
 
+    std::string hint_str = b_info.available
+        ? ("Backlight level: " + std::to_string(current_pct) + "% · " + b_info.device_name)
+        : "Adjust panel backlight luminance";
+
     auto hint = TextViewBuilder::create()
-        ->text("Adjust panel backlight luminance")
+        ->text(hint_str)
         ->caption(true)
         ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
         ->build();
@@ -180,11 +194,11 @@ void MillerView::render_brightness_preview(const std::shared_ptr<SettingItem>& i
     lbl_lp.gravity = Gravity::CenterVertical;
     header_row->add_view(lbl_box, lbl_lp);
 
-    int current_pct = static_cast<int>(std::round(item->brightness_val * 100.0f));
     auto val_label = TextViewBuilder::create()
         ->text(std::to_string(current_pct) + "%")
         ->textSize(config->metrics.font_size)
         ->textColor(config->colors.primary)
+        ->bold(true)
         ->build();
     LayoutParams val_lp;
     val_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -193,15 +207,46 @@ void MillerView::render_brightness_preview(const std::shared_ptr<SettingItem>& i
 
     bright_card->add_view(header_row);
 
+    // Slider Row with Dim and Bright icon indicators
+    auto slider_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->spacing(10)
+        ->gravity(Gravity::CenterVertical)
+        ->build();
+
+    auto icon_dim = TextViewBuilder::create()
+        ->text("󰃞")
+        ->textSize(config->metrics.font_size - 2)
+        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+        ->build();
+    LayoutParams idim_lp;
+    idim_lp.width = 20;
+    idim_lp.gravity = Gravity::CenterVertical;
+    slider_row->add_view(icon_dim, idim_lp);
+
     auto slider = SliderBuilder::create()
         ->value(item->brightness_val)
-        ->onValueChanged([this, item, val_label](float val, bool user) {
+        ->onValueChanged([this, item, val_label, icon, hint, b_info](float val, bool user) {
             (void)user;
-            float clamped = std::clamp(val, 0.05f, 1.0f);
+            float clamped = std::clamp(val, 0.01f, 1.0f);
             item->brightness_val = clamped;
             int pct = static_cast<int>(std::round(clamped * 100.0f));
             val_label->set_text(std::to_string(pct) + "%");
             val_label->request_redraw();
+
+            // Dynamically update icon and hint string
+            if (pct >= 75) icon->set_text("󰃠");
+            else if (pct >= 40) icon->set_text("󰃟");
+            else icon->set_text("󰃞");
+            icon->request_redraw();
+
+            if (b_info.available) {
+                hint->set_text("Backlight level: " + std::to_string(pct) + "% · " + b_info.device_name);
+                hint->request_redraw();
+            }
+
+            // Real-time hardware adjustment via DisplayBackend
+            DisplayBackend::set_brightness_percent(pct);
             notify_state_changed();
         })
         ->build();
@@ -209,10 +254,88 @@ void MillerView::render_brightness_preview(const std::shared_ptr<SettingItem>& i
     LayoutParams sl_lp;
     sl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
     sl_lp.height = 24;
-    bright_card->add_view(slider, sl_lp);
+    sl_lp.weight = 1.0f;
+    sl_lp.gravity = Gravity::CenterVertical;
+    slider_row->add_view(slider, sl_lp);
 
+    auto icon_bright = TextViewBuilder::create()
+        ->text("󰃠")
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.primary)
+        ->build();
+    LayoutParams ibright_lp;
+    ibright_lp.width = 20;
+    ibright_lp.gravity = Gravity::CenterVertical;
+    slider_row->add_view(icon_bright, ibright_lp);
+
+    bright_card->add_view(slider_row);
     add_preview_card(bright_card);
 
+    // 2. Quick Brightness Presets Card (like miqusettings)
+    auto presets_card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(14, 12)
+        ->spacing(10)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+        ->cornerRadius(get_card_radius(config))
+        ->build();
+
+    auto presets_title = TextViewBuilder::create()
+        ->text("QUICK PRESETS")
+        ->bold(true)
+        ->caption(true)
+        ->textColor(config->colors.outline)
+        ->build();
+    presets_card->add_view(presets_title);
+
+    auto presets_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->spacing(8)
+        ->build();
+
+    struct Preset {
+        std::string label;
+        float value;
+    };
+    std::vector<Preset> presets = {
+        {"25% Dim", 0.25f},
+        {"50% Balanced", 0.50f},
+        {"75% Bright", 0.75f},
+        {"100% Max", 1.00f}
+    };
+
+    for (const auto& p : presets) {
+        int cur_p = static_cast<int>(std::round(item->brightness_val * 100.0f));
+        int target_p = static_cast<int>(std::round(p.value * 100.0f));
+        bool is_sel = (std::abs(cur_p - target_p) <= 5);
+
+        auto btn = ButtonBuilder::create()
+            ->text(p.label)
+            ->textSize(config->metrics.caption_size)
+            ->primary(is_sel)
+            ->style(is_sel ? ButtonStyle::Primary : ButtonStyle::Standard)
+            ->cornerRadius(get_btn_radius(config))
+            ->padding(8, 6)
+            ->onClick([this, item, p, target_p]() {
+                item->brightness_val = p.value;
+                DisplayBackend::set_brightness_percent(target_p);
+                DisplayBackend::sync_item_state(item);
+                deferred_rebuild_preview();
+                notify_state_changed();
+            })
+            ->build();
+
+        LayoutParams btn_lp;
+        btn_lp.width = 0;
+        btn_lp.height = 32;
+        btn_lp.weight = 1.0f;
+        presets_row->add_view(btn, btn_lp);
+    }
+    presets_card->add_view(presets_row);
+    add_preview_card(presets_card);
+
+    // 3. Backlight & Panel Specifications (Telemetry from hardware backend)
     if (!item->telemetry.empty()) {
         add_preview_card(create_telemetry_card(item->telemetry, config, item->telemetry_title.empty() ? "Backlight & panel specifications" : item->telemetry_title));
     }

@@ -14,9 +14,18 @@ struct TelemetryEntry {
 
 struct WifiNetwork {
     std::string ssid;
-    std::string status; // "Connected", "Saved", "Connect"
+    std::string status = "Connect"; // "Connected", "Saved", "Connect", "Connecting..."
     std::string icon = "󰤨";
     bool secured = true;
+
+    // Detailed link fields (displayed on 3rd line and modals)
+    std::string bssid;
+    int signal_percent = 0;
+    std::string frequency;
+    std::string channel;
+    std::string security;
+    std::string rate;
+    std::string details;
 };
 
 struct BluetoothDevice {

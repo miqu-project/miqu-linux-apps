@@ -1,16 +1,39 @@
 #include "miller_view.hpp"
 #include "preview_common.hpp"
+#include "wifi_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
+#include <miqutoolkit/view/edit_text.hpp>
+#include <miqutoolkit/core/app_engine.hpp>
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <thread>
 
 namespace fs = std::filesystem;
 
 namespace miqu {
 void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    // Sync with live backend if available and not actively in a background connect/scan
+    if (WifiBackend::is_wifi_available()) {
+        if (item->last_action_message.find("Connecting") == std::string::npos &&
+            item->last_action_message.find("Scanning") == std::string::npos) {
+            WifiBackend::sync_item_state(item);
+        }
+    }
+
+    // Determine connected SSID
+    std::string connected_ssid;
+    if (item->switch_val) {
+        for (const auto& n : item->wifi_networks) {
+            if (n.status == "Connected") {
+                connected_ssid = n.ssid;
+                break;
+            }
+        }
+    }
+
     // 1. Wi-Fi Power Toggle Card (Just like mute button of speaker)
     auto wifi_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Horizontal)
@@ -21,10 +44,15 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
         ->cornerRadius(get_card_radius(config))
         ->build();
 
+    std::string wifi_top_icon = !item->switch_val ? "󰤮" : (!connected_ssid.empty() ? "󰤨" : "󰤟");
+    Color wifi_icon_color = (!item->switch_val || connected_ssid.empty())
+        ? config->colors.on_surface_variant
+        : config->colors.primary;
+
     auto wifi_icon = TextViewBuilder::create()
-        ->text("󰤨")
+        ->text(wifi_top_icon)
         ->textSize(config->metrics.font_size + 4)
-        ->textColor(item->switch_val ? config->colors.primary : config->colors.on_surface_variant)
+        ->textColor(wifi_icon_color)
         ->build();
     LayoutParams wicon_lp;
     wicon_lp.width = 30;
@@ -43,7 +71,15 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
         ->build();
     wifi_lbl_box->add_view(wifi_title);
 
-    std::string wifi_hint_str = item->switch_val ? "Connected to Miqu-Fiber-5G" : "Wi-Fi is turned off";
+    std::string wifi_hint_str;
+    if (!item->switch_val) {
+        wifi_hint_str = "Wi-Fi is turned off";
+    } else if (!connected_ssid.empty()) {
+        wifi_hint_str = "Connected to " + connected_ssid;
+    } else {
+        wifi_hint_str = "Not connected to any network";
+    }
+
     auto wifi_hint = TextViewBuilder::create()
         ->text(wifi_hint_str)
         ->caption(true)
@@ -62,6 +98,20 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
         ->checked(item->switch_val)
         ->onCheckedChanged([this, item](bool checked) {
             item->switch_val = checked;
+            item->last_action_message = checked ? "Turning Wi-Fi on..." : "Turning Wi-Fi off...";
+            std::thread([this, item, checked]() {
+                WifiBackend::set_radio_enabled(checked);
+                std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(0, [this, item]() {
+                        WifiBackend::sync_item_state(item);
+                        item->last_action_message = "";
+                        rebuild_current_column();
+                        deferred_rebuild_preview();
+                        notify_state_changed();
+                    });
+                }
+            }).detach();
             rebuild_current_column();
             deferred_rebuild_preview();
             notify_state_changed();
@@ -104,9 +154,20 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
         net_header_row->add_view(net_title, nt_lp);
 
         auto on_scan = [this, item]() {
-            item->last_action_message = "Scan completed • 5 networks found";
+            item->last_action_message = "Scanning for networks...";
             rebuild_preview_column();
-            notify_state_changed();
+            std::thread([this, item]() {
+                WifiBackend::rescan_async();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1800));
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(0, [this, item]() {
+                        WifiBackend::sync_item_state(item);
+                        item->last_action_message = "Scan completed • " + std::to_string(item->wifi_networks.size()) + " networks found";
+                        deferred_rebuild_preview();
+                        notify_state_changed();
+                    });
+                }
+            }).detach();
         };
 
         auto scan_btn = ButtonBuilder::create()
@@ -137,12 +198,12 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
 
         // Networks List
         for (size_t ni = 0; ni < item->wifi_networks.size(); ++ni) {
-            auto& net = item->wifi_networks[ni];
+            const auto& net = item->wifi_networks[ni];
             bool is_conn = (net.status == "Connected");
 
             auto row_content = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
-                ->padding(10, 8)
+                ->padding(12, 10)
                 ->spacing(12)
                 ->build();
 
@@ -157,20 +218,26 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
             sig_lp.gravity = Gravity::CenterVertical;
             row_content->add_view(sig_view, sig_lp);
 
-            // SSID and Status subtitle
+            // 3-Line Network Information Box:
+            // Line 1: Title (SSID)
+            // Line 2: Status (Connected / Saved / Connect / Connecting...)
+            // Line 3: Details (Security • Frequency/Channel • Signal • Bitrate • BSSID)
             auto text_box = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Vertical)
                 ->spacing(2)
                 ->build();
 
+            // Line 1: Title
             auto ssid_text = TextViewBuilder::create()
                 ->text(net.ssid)
                 ->textSize(config->metrics.font_size)
                 ->textColor(is_conn ? config->colors.primary : config->colors.on_surface)
+                ->bold(is_conn)
                 ->ellipsize(true)
                 ->build();
             text_box->add_view(ssid_text);
 
+            // Line 2: Status
             Color sub_color = is_conn ? config->colors.primary :
                               (net.status == "Saved" ? config->colors.on_surface_variant : config->colors.on_surface_variant.with_alpha(0.7f));
             auto status_text = TextViewBuilder::create()
@@ -179,6 +246,33 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
                 ->textColor(sub_color)
                 ->build();
             text_box->add_view(status_text);
+
+            // Line 3: Details
+            std::string details_str = net.details;
+            if (details_str.empty()) {
+                std::vector<std::string> parts;
+                if (!net.security.empty()) parts.push_back(net.security);
+                std::string freq_chan = net.frequency;
+                if (!net.channel.empty()) freq_chan += " (Ch " + net.channel + ")";
+                if (!freq_chan.empty()) parts.push_back(freq_chan);
+                if (net.signal_percent > 0) parts.push_back(std::to_string(net.signal_percent) + "%");
+                if (!net.rate.empty()) parts.push_back(net.rate);
+                if (!net.bssid.empty()) parts.push_back(net.bssid);
+
+                for (size_t pi = 0; pi < parts.size(); ++pi) {
+                    if (pi > 0) details_str += " • ";
+                    details_str += parts[pi];
+                }
+            }
+            if (!details_str.empty()) {
+                auto details_text = TextViewBuilder::create()
+                    ->text(details_str)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.65f))
+                    ->ellipsize(true)
+                    ->build();
+                text_box->add_view(details_text);
+            }
 
             LayoutParams tb_lp;
             tb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
@@ -192,6 +286,7 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
                     ->text("✓")
                     ->textSize(config->metrics.font_size)
                     ->textColor(config->colors.primary)
+                    ->bold(true)
                     ->build();
                 LayoutParams chk_lp;
                 chk_lp.width = static_cast<int>(LayoutDimension::WrapContent);
@@ -219,29 +314,277 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
                 ->addView(row_content)
                 ->build();
 
-            auto on_connect = [this, item, ni]() {
-                if (ni >= item->wifi_networks.size()) return;
-                for (size_t k = 0; k < item->wifi_networks.size(); ++k) {
-                    if (k == ni) {
-                        item->wifi_networks[k].status = "Connected";
-                    } else if (item->wifi_networks[k].status == "Connected") {
-                        item->wifi_networks[k].status = "Saved";
-                    }
+            // Connect / Manage Network Action
+            auto on_connect = [this, item, net, net_row_card, config]() {
+                if (m_active_popup) {
+                    m_active_popup->dismiss();
+                    m_active_popup = nullptr;
                 }
-                deferred_rebuild_preview();
-                notify_state_changed();
+
+                // If currently connected: show Disconnect / Forget options popup
+                if (net.status == "Connected") {
+                    auto popup_col = LinearLayoutBuilder::create()
+                        ->orientation(Orientation::Vertical)
+                        ->spacing(10)
+                        ->padding(14, 12)
+                        ->backgroundColor(config->colors.surface)
+                        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                        ->cornerRadius(get_card_radius(config))
+                        ->build();
+
+                    auto title = TextViewBuilder::create()
+                        ->text(net.ssid)
+                        ->textSize(config->metrics.font_size)
+                        ->bold(true)
+                        ->textColor(config->colors.on_surface)
+                        ->build();
+                    popup_col->add_view(title);
+
+                    auto sub = TextViewBuilder::create()
+                        ->text("Active Wi-Fi Connection")
+                        ->caption(true)
+                        ->textColor(config->colors.primary)
+                        ->build();
+                    popup_col->add_view(sub);
+
+                    auto btn_row = LinearLayoutBuilder::create()
+                        ->orientation(Orientation::Horizontal)
+                        ->spacing(8)
+                        ->gravity(Gravity::End)
+                        ->build();
+
+                    auto btn_forget = ButtonBuilder::create()
+                        ->text("Forget")
+                        ->style(ButtonStyle::Outlined)
+                        ->padding(10, 4)
+                        ->cornerRadius(get_btn_radius(config))
+                        ->onClick([this, item, net]() {
+                            if (m_active_popup) {
+                                m_active_popup->dismiss();
+                                m_active_popup = nullptr;
+                            }
+                            item->last_action_message = "Forgetting " + net.ssid + "...";
+                            rebuild_preview_column();
+                            std::thread([this, item, net]() {
+                                WifiBackend::forget_network(net.ssid);
+                                if (auto* eng = AppEngine::instance()) {
+                                    eng->post_delayed(500, [this, item, net]() {
+                                        WifiBackend::sync_item_state(item);
+                                        item->last_action_message = "Removed network " + net.ssid;
+                                        deferred_rebuild_preview();
+                                        notify_state_changed();
+                                    });
+                                }
+                            }).detach();
+                        })
+                        ->build();
+                    btn_row->add_view(btn_forget);
+
+                    auto btn_disc = ButtonBuilder::create()
+                        ->text("Disconnect")
+                        ->style(ButtonStyle::Standard)
+                        ->textColor(config->colors.primary)
+                        ->padding(10, 4)
+                        ->cornerRadius(get_btn_radius(config))
+                        ->onClick([this, item]() {
+                            if (m_active_popup) {
+                                m_active_popup->dismiss();
+                                m_active_popup = nullptr;
+                            }
+                            item->last_action_message = "Disconnecting...";
+                            rebuild_preview_column();
+                            std::thread([this, item]() {
+                                WifiBackend::disconnect_current();
+                                if (auto* eng = AppEngine::instance()) {
+                                    eng->post_delayed(800, [this, item]() {
+                                        WifiBackend::sync_item_state(item);
+                                        item->last_action_message = "Disconnected";
+                                        deferred_rebuild_preview();
+                                        notify_state_changed();
+                                    });
+                                }
+                            }).detach();
+                        })
+                        ->build();
+                    btn_row->add_view(btn_disc);
+
+                    popup_col->add_view(btn_row);
+
+                    m_active_popup = PopupWindowBuilder::create()
+                        ->content(popup_col)
+                        ->width(280)
+                        ->elevation(6)
+                        ->cornerRadius(get_card_radius(config))
+                        ->dismissOnOutsideClick(true)
+                        ->dismissOnEscape(true)
+                        ->build();
+                    m_active_popup->show_as_dropdown(net_row_card, PopupGravity::BottomCenter);
+                    return;
+                }
+
+                // If saved or open: connect directly without prompting
+                if (net.status == "Saved" || !net.secured) {
+                    item->last_action_message = "Connecting to " + net.ssid + "...";
+                    for (auto& n : item->wifi_networks) {
+                        if (n.ssid == net.ssid) n.status = "Connecting...";
+                    }
+                    rebuild_preview_column();
+
+                    std::thread([this, item, net]() {
+                        bool ok = WifiBackend::connect_network(net.ssid);
+                        if (auto* eng = AppEngine::instance()) {
+                            eng->post_delayed(1500, [this, item, net, ok]() {
+                                WifiBackend::sync_item_state(item);
+                                item->last_action_message = ok ? ("Connected to " + net.ssid) : ("Failed to connect to " + net.ssid);
+                                deferred_rebuild_preview();
+                                notify_state_changed();
+                            });
+                        }
+                    }).detach();
+                    return;
+                }
+
+                // Otherwise, secured & not saved: prompt password in popup modal
+                auto popup_col = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Vertical)
+                    ->spacing(12)
+                    ->padding(16, 14)
+                    ->backgroundColor(config->colors.surface)
+                    ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                    ->cornerRadius(get_card_radius(config))
+                    ->build();
+
+                auto title = TextViewBuilder::create()
+                    ->text("Connect to " + net.ssid)
+                    ->textSize(config->metrics.font_size)
+                    ->bold(true)
+                    ->textColor(config->colors.on_surface)
+                    ->build();
+                popup_col->add_view(title);
+
+                if (!net.details.empty()) {
+                    auto det = TextViewBuilder::create()
+                        ->text(net.details)
+                        ->caption(true)
+                        ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                        ->ellipsize(true)
+                        ->build();
+                    popup_col->add_view(det);
+                }
+
+                auto pwd_edit = EditTextBuilder::create()
+                    ->text("")
+                    ->hint("Enter Wi-Fi password")
+                    ->passwordMode(true)
+                    ->editable(true)
+                    ->padding(12, 6)
+                    ->build();
+                LayoutParams p_lp;
+                p_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+                p_lp.height = 36;
+                popup_col->add_view(pwd_edit, p_lp);
+
+                // Show password row
+                auto show_row = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Horizontal)
+                    ->spacing(8)
+                    ->gravity(Gravity::CenterVertical)
+                    ->build();
+
+                auto sw_reveal = SwitchBuilder::create()
+                    ->checked(false)
+                    ->onCheckedChanged([pwd_edit](bool checked) {
+                        pwd_edit->set_password_mode(!checked);
+                        pwd_edit->request_redraw();
+                    })
+                    ->build();
+                LayoutParams swr_lp;
+                swr_lp.width = 44;
+                swr_lp.height = 24;
+                show_row->add_view(sw_reveal, swr_lp);
+
+                auto show_lbl = TextViewBuilder::create()
+                    ->text("Show password")
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant)
+                    ->build();
+                show_row->add_view(show_lbl);
+                popup_col->add_view(show_row);
+
+                // Action buttons
+                auto btn_box = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Horizontal)
+                    ->spacing(8)
+                    ->gravity(Gravity::End)
+                    ->build();
+
+                auto cancel_btn = ButtonBuilder::create()
+                    ->text("Cancel")
+                    ->style(ButtonStyle::Outlined)
+                    ->padding(12, 4)
+                    ->cornerRadius(get_btn_radius(config))
+                    ->onClick([this]() {
+                        if (m_active_popup) {
+                            m_active_popup->dismiss();
+                            m_active_popup = nullptr;
+                        }
+                    })
+                    ->build();
+                btn_box->add_view(cancel_btn);
+
+                auto conn_btn = ButtonBuilder::create()
+                    ->text("Connect")
+                    ->primary(true)
+                    ->padding(14, 4)
+                    ->cornerRadius(get_btn_radius(config))
+                    ->onClick([this, item, net, pwd_edit]() {
+                        std::string pwd = pwd_edit->get_text();
+                        if (m_active_popup) {
+                            m_active_popup->dismiss();
+                            m_active_popup = nullptr;
+                        }
+                        item->last_action_message = "Connecting to " + net.ssid + "...";
+                        for (auto& n : item->wifi_networks) {
+                            if (n.ssid == net.ssid) n.status = "Connecting...";
+                        }
+                        rebuild_preview_column();
+
+                        std::thread([this, item, net, pwd]() {
+                            bool ok = WifiBackend::connect_network(net.ssid, pwd);
+                            if (auto* eng = AppEngine::instance()) {
+                                eng->post_delayed(2000, [this, item, net, ok]() {
+                                    WifiBackend::sync_item_state(item);
+                                    item->last_action_message = ok ? ("Connected to " + net.ssid) : ("Failed to connect to " + net.ssid);
+                                    deferred_rebuild_preview();
+                                    notify_state_changed();
+                                });
+                            }
+                        }).detach();
+                    })
+                    ->build();
+                btn_box->add_view(conn_btn);
+
+                popup_col->add_view(btn_box);
+
+                m_active_popup = PopupWindowBuilder::create()
+                    ->content(popup_col)
+                    ->width(320)
+                    ->elevation(6)
+                    ->cornerRadius(get_card_radius(config))
+                    ->dismissOnOutsideClick(true)
+                    ->dismissOnEscape(true)
+                    ->build();
+                m_active_popup->show_as_dropdown(net_row_card, PopupGravity::BottomCenter);
             };
 
-            // Clicking network: switches connection to this network
             net_row_card->set_on_click_listener(on_connect);
-
             net_card->add_view(net_row_card);
         }
 
         add_preview_card(net_card);
     }
 
-    // 3. Interface Specifications
+    // 3. Interface Specifications (Live telemetry from backend)
     if (!item->telemetry.empty()) {
         add_preview_card(create_telemetry_card(item->telemetry, config, "Wireless interface specifications"));
     }

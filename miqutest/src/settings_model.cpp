@@ -1,4 +1,6 @@
 #include "settings_model.hpp"
+#include "wifi_backend.hpp"
+#include "display_backend.hpp"
 
 namespace miqu {
 
@@ -41,11 +43,11 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         wifi->switch_val = true;
         wifi->switch_label = "Wi-Fi";
         wifi->wifi_networks = {
-            {"Miqu-Fiber-5G", "Connected", "󰤨", true},
-            {"Home-Mesh-Office", "Saved", "󰤥", true},
-            {"Miqu-Lab-Secure", "Saved", "󰤢", true},
-            {"Cafe-Express-WiFi", "Connect", "󰤨", false},
-            {"Airport-Free-5G", "Connect", "󰤢", false}
+            {"Miqu-Fiber-5G", "Connected", "󰤨", true, "E4:70:B8:52:2F:BF", 92, "5 GHz", "36", "WPA3", "1200 Mbit/s", "WPA3 • 5 GHz (Ch 36) • 92% • 1200 Mbit/s • E4:70:B8:52:2F:BF"},
+            {"Home-Mesh-Office", "Saved", "󰤥", true, "A0:B1:C2:D3:E4:F5", 78, "5 GHz", "44", "WPA2", "866 Mbit/s", "WPA2 • 5 GHz (Ch 44) • 78% • 866 Mbit/s • A0:B1:C2:D3:E4:F5"},
+            {"Miqu-Lab-Secure", "Saved", "󰤢", true, "12:34:56:78:9A:BC", 60, "5 GHz", "149", "WPA2 Enterprise", "540 Mbit/s", "WPA2 Enterprise • 5 GHz (Ch 149) • 60% • 540 Mbit/s • 12:34:56:78:9A:BC"},
+            {"Cafe-Express-WiFi", "Connect", "󰤨", false, "FE:DC:BA:98:76:54", 85, "2.4 GHz", "6", "Open", "144 Mbit/s", "Open • 2.4 GHz (Ch 6) • 85% • 144 Mbit/s • FE:DC:BA:98:76:54"},
+            {"Airport-Free-5G", "Connect", "󰤢", false, "00:11:22:33:44:55", 52, "5 GHz", "157", "Open", "300 Mbit/s", "Open • 5 GHz (Ch 157) • 52% • 300 Mbit/s • 00:11:22:33:44:55"}
         };
         wifi->telemetry = {
             {"Interface", "wlan0 (Intel Wi-Fi 6 AX200)"},
@@ -54,6 +56,10 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Link Speed", "866 Mbps (5 GHz, 80 MHz)"},
             {"Signal Strength", "-46 dBm (Excellent)"}
         };
+
+        if (WifiBackend::is_wifi_available()) {
+            WifiBackend::sync_item_state(wifi);
+        }
 
         // 1.2 Bluetooth (Leaf)
         auto bt = SettingItem::create_leaf("net_bluetooth", "Bluetooth", "", "󰂯");
@@ -541,6 +547,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Minimum Brightness", "1% (Prevents full blackout)"},
             {"PWM Frequency", "20000 Hz (Flicker-Free)"}
         };
+        DisplayBackend::sync_item_state(disp_bright);
 
         // 5.2 Screen Timeout & Lock (Unified Inactivity & Security)
         auto disp_timeout_lock = SettingItem::create_leaf("disp_timeout_lock", "Screen Timeout & Lock", "", "󰌾");
