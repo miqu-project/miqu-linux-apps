@@ -26,6 +26,7 @@ add_executable(miqutest
     src/wifi_backend.cpp
     src/display_backend.cpp
     src/ethernet_backend.cpp
+    src/firewall_backend.cpp
 )
 
 target_include_directories(miqutest PRIVATE

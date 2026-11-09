@@ -2,6 +2,7 @@
 #include "preview_common.hpp"
 #include "wifi_backend.hpp"
 #include "ethernet_backend.hpp"
+#include "firewall_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
 #include <miqutoolkit/view/edit_text.hpp>
 #include <miqutoolkit/core/app_engine.hpp>
@@ -2005,7 +2006,19 @@ void MillerView::render_dns_preview(const std::shared_ptr<SettingItem>& item, co
 }
 
 void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    // 1. Top Card: Simple Bluetooth-like On/Off Switch with Subtitle "Powered by UFW"
+    // 0. Sync with live backend if available and not actively in a background authentication command
+    if (FirewallBackend::is_available()) {
+        if (item->last_action_message.find("authenticating") == std::string::npos &&
+            item->last_action_message.find("Enabling") == std::string::npos &&
+            item->last_action_message.find("Disabling") == std::string::npos &&
+            item->last_action_message.find("Applying") == std::string::npos &&
+            item->last_action_message.find("Updating") == std::string::npos &&
+            item->last_action_message.find("Adding") == std::string::npos) {
+            FirewallBackend::sync_item_state(item);
+        }
+    }
+
+    // 1. Top Card: Master Firewall On/Off Switch (with Polkit authentication)
     auto fw_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Horizontal)
         ->padding(16, 14)
@@ -2037,10 +2050,17 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
         ->build();
     fw_lbl_box->add_view(fw_title);
 
+    std::string fw_hint_str;
+    if (item->firewall_cfg.enabled) {
+        fw_hint_str = "Powered by UFW • Active (" + item->firewall_cfg.incoming_policy + " in, " + item->firewall_cfg.outgoing_policy + " out)";
+    } else {
+        fw_hint_str = "Powered by UFW • Disabled";
+    }
+
     auto fw_hint = TextViewBuilder::create()
-        ->text("Powered by UFW")
+        ->text(fw_hint_str)
         ->caption(true)
-        ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+        ->textColor(item->firewall_cfg.enabled ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
         ->build();
     fw_lbl_box->add_view(fw_hint);
 
@@ -2055,8 +2075,21 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
         ->checked(item->firewall_cfg.enabled)
         ->onCheckedChanged([this, item](bool checked) {
             item->firewall_cfg.enabled = checked;
+            item->last_action_message = checked ? "Enabling firewall (authenticating)..." : "Disabling firewall (authenticating)...";
+            rebuild_preview_column();
+            std::thread([this, item, checked]() {
+                bool ok = FirewallBackend::set_enabled(checked);
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(800, [this, item, ok]() {
+                        FirewallBackend::sync_item_state(item);
+                        item->last_action_message = ok ? "" : "Authentication failed or cancelled";
+                        rebuild_current_column();
+                        deferred_rebuild_preview();
+                        notify_state_changed();
+                    });
+                }
+            }).detach();
             rebuild_current_column();
-            deferred_rebuild_preview();
             notify_state_changed();
         })
         ->build();
@@ -2069,8 +2102,27 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
 
     add_preview_card(fw_card);
 
+    // Feedback message banner
+    if (!item->last_action_message.empty()) {
+        auto msg_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->padding(12, 8)
+            ->backgroundColor(config->colors.primary_container.with_alpha(0.25f))
+            ->stroke(1, config->colors.primary.with_alpha(0.4f))
+            ->cornerRadius(get_inner_radius(config))
+            ->build();
+
+        auto msg_tv = TextViewBuilder::create()
+            ->text(item->last_action_message)
+            ->caption(true)
+            ->textColor(config->colors.primary)
+            ->build();
+        msg_card->add_view(msg_tv);
+        add_preview_card(msg_card);
+    }
+
     if (item->firewall_cfg.enabled) {
-        // 2. Policy Card: Incoming Spinner, Outgoing Spinner
+        // 2. Policy Card: Incoming Spinner, Outgoing Spinner (with Polkit authentication)
         auto policy_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
@@ -2110,9 +2162,23 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
             ->fontSize(config->metrics.font_size)
             ->padding(12, 6)
             ->cornerRadius(get_inner_radius(config))
-            ->onItemSelected([item, in_policies](int idx, const std::string& val) {
+            ->onItemSelected([this, item, in_policies](int idx, const std::string& val) {
                 (void)idx;
-                item->firewall_cfg.incoming_policy = val;
+                if (val != item->firewall_cfg.incoming_policy) {
+                    item->last_action_message = "Updating incoming policy to " + val + " (authenticating)...";
+                    rebuild_preview_column();
+                    std::thread([this, item, val]() {
+                        bool ok = FirewallBackend::set_default_policy(true, val);
+                        if (auto* eng = AppEngine::instance()) {
+                            eng->post_delayed(800, [this, item, ok]() {
+                                FirewallBackend::sync_item_state(item);
+                                item->last_action_message = ok ? "Incoming policy updated" : "Authentication failed or cancelled";
+                                deferred_rebuild_preview();
+                                notify_state_changed();
+                            });
+                        }
+                    }).detach();
+                }
             })
             ->build();
 
@@ -2142,9 +2208,23 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
             ->fontSize(config->metrics.font_size)
             ->padding(12, 6)
             ->cornerRadius(get_inner_radius(config))
-            ->onItemSelected([item, out_policies](int idx, const std::string& val) {
+            ->onItemSelected([this, item, out_policies](int idx, const std::string& val) {
                 (void)idx;
-                item->firewall_cfg.outgoing_policy = val;
+                if (val != item->firewall_cfg.outgoing_policy) {
+                    item->last_action_message = "Updating outgoing policy to " + val + " (authenticating)...";
+                    rebuild_preview_column();
+                    std::thread([this, item, val]() {
+                        bool ok = FirewallBackend::set_default_policy(false, val);
+                        if (auto* eng = AppEngine::instance()) {
+                            eng->post_delayed(800, [this, item, ok]() {
+                                FirewallBackend::sync_item_state(item);
+                                item->last_action_message = ok ? "Outgoing policy updated" : "Authentication failed or cancelled";
+                                deferred_rebuild_preview();
+                                notify_state_changed();
+                            });
+                        }
+                    }).detach();
+                }
             })
             ->build();
 
@@ -2163,12 +2243,50 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
             ->cornerRadius(get_card_radius(config))
             ->build();
 
+        auto preset_hdr = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
+
         auto preset_title = TextViewBuilder::create()
             ->text("Security Preset")
             ->caption(true)
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
-        preset_card->add_view(preset_title);
+        LayoutParams phdr_lp;
+        phdr_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        phdr_lp.weight = 1.0f;
+        phdr_lp.gravity = Gravity::CenterVertical;
+        preset_hdr->add_view(preset_title, phdr_lp);
+
+        auto btn_preset = ButtonBuilder::create()
+            ->text("Apply Preset")
+            ->style(ButtonStyle::Standard)
+            ->textColor(config->colors.primary)
+            ->padding(10, 4)
+            ->cornerRadius(get_btn_radius(config))
+            ->onClick([this, item]() {
+                item->last_action_message = "Applying " + item->firewall_cfg.selected_preset + " preset (authenticating)...";
+                rebuild_preview_column();
+                std::thread([this, item]() {
+                    bool ok = FirewallBackend::apply_preset(item->firewall_cfg.selected_preset);
+                    if (auto* eng = AppEngine::instance()) {
+                        eng->post_delayed(1000, [this, item, ok]() {
+                            FirewallBackend::sync_item_state(item);
+                            item->last_action_message = ok ? (item->firewall_cfg.selected_preset + " preset applied") : "Authentication failed or cancelled";
+                            deferred_rebuild_preview();
+                            notify_state_changed();
+                        });
+                    }
+                }).detach();
+            })
+            ->build();
+        LayoutParams bp_lp;
+        bp_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        bp_lp.height = 28;
+        bp_lp.gravity = Gravity::CenterVertical;
+        preset_hdr->add_view(btn_preset, bp_lp);
+        preset_card->add_view(preset_hdr);
 
         auto preset_lbl = TextViewBuilder::create()
             ->text("Profile / Location")
@@ -2248,7 +2366,8 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
 
         auto add_btn = ButtonBuilder::create()
             ->text("+ Add Rule")
-            ->style(ButtonStyle::Outlined)
+            ->style(ButtonStyle::Standard)
+            ->textColor(config->colors.primary)
             ->padding(12, 4)
             ->cornerRadius(get_btn_radius(config))
             ->build();
@@ -2273,6 +2392,7 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
                 ->text("Add Firewall Rule")
                 ->textSize(config->metrics.font_size)
                 ->textColor(config->colors.on_surface)
+                ->bold(true)
                 ->build();
             popup_col->add_view(pop_title);
 
@@ -2321,7 +2441,8 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
 
             auto cancel_btn = ButtonBuilder::create()
                 ->text("Cancel")
-                ->style(ButtonStyle::Outlined)
+                ->style(ButtonStyle::Standard)
+                ->textColor(config->colors.on_surface_variant)
                 ->padding(12, 4)
                 ->cornerRadius(get_btn_radius(config))
                 ->onClick([this]() {
@@ -2334,22 +2455,38 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
             btn_box->add_view(cancel_btn);
 
             auto submit_btn = ButtonBuilder::create()
-                ->text("Add")
+                ->text("Add & Allow")
+                ->style(ButtonStyle::Standard)
                 ->primary(true)
+                ->textColor(config->colors.on_primary)
+                ->backgroundColor(config->colors.primary)
                 ->padding(14, 4)
                 ->cornerRadius(get_btn_radius(config))
                 ->onClick([this, item, name_edit, port_edit]() {
-                    std::string r_name = name_edit->get_text();
-                    std::string r_port = port_edit->get_text();
+                    std::string r_name = name_edit ? name_edit->get_text() : "";
+                    std::string r_port = port_edit ? port_edit->get_text() : "";
                     if (r_name.empty()) r_name = "Custom Port";
                     if (r_port.empty()) r_port = "8080/tcp";
-                    item->firewall_cfg.custom_rules.push_back({r_name, r_port, true});
+
                     if (m_active_popup) {
                         m_active_popup->dismiss();
                         m_active_popup = nullptr;
                     }
-                    deferred_rebuild_preview();
-                    notify_state_changed();
+
+                    item->last_action_message = "Adding rule for " + r_port + " (authenticating)...";
+                    rebuild_preview_column();
+
+                    std::thread([this, item, r_name, r_port]() {
+                        bool ok = FirewallBackend::add_custom_rule(r_name, r_port);
+                        if (auto* eng = AppEngine::instance()) {
+                            eng->post_delayed(1000, [this, item, ok]() {
+                                FirewallBackend::sync_item_state(item);
+                                item->last_action_message = ok ? "Rule applied successfully" : "Authentication failed or cancelled";
+                                deferred_rebuild_preview();
+                                notify_state_changed();
+                            });
+                        }
+                    }).detach();
                 })
                 ->build();
             btn_box->add_view(submit_btn);
@@ -2358,7 +2495,7 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
 
             m_active_popup = PopupWindowBuilder::create()
                 ->content(popup_col)
-                ->width(280)
+                ->width(300)
                 ->elevation(6)
                 ->cornerRadius(get_card_radius(config))
                 ->dismissOnOutsideClick(true)
@@ -2416,9 +2553,8 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
 
             auto sw = SwitchBuilder::create()
                 ->checked(is_checked)
-                ->onCheckedChanged([this, on_toggle](bool c) {
+                ->onCheckedChanged([on_toggle](bool c) {
                     if (on_toggle) on_toggle(c);
-                    notify_state_changed();
                 })
                 ->build();
             LayoutParams sw_lp;
@@ -2430,29 +2566,150 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
             rules_card->add_view(row);
         };
 
-        // Predefined common rules
+        // Predefined common rules (with Polkit authentication)
         add_rule_row("KDE Connect", "Allow local device pairing & clipboard sync (UDP/TCP 1714–1764)",
-                     item->firewall_cfg.allow_kdeconnect, [item](bool c) { item->firewall_cfg.allow_kdeconnect = c; });
+                     item->firewall_cfg.allow_kdeconnect, [this, item](bool c) {
+                         item->firewall_cfg.allow_kdeconnect = c;
+                         item->last_action_message = c ? "Allowing KDE Connect (authenticating)..." : "Revoking KDE Connect (authenticating)...";
+                         rebuild_preview_column();
+                         std::thread([this, item, c]() {
+                             bool ok = FirewallBackend::toggle_service("kdeconnect", c);
+                             if (auto* eng = AppEngine::instance()) {
+                                 eng->post_delayed(800, [this, item, ok]() {
+                                     FirewallBackend::sync_item_state(item);
+                                     item->last_action_message = ok ? "" : "Authentication failed";
+                                     deferred_rebuild_preview();
+                                     notify_state_changed();
+                                 });
+                             }
+                         }).detach();
+                     });
 
         add_rule_row("SSH Server", "Allow secure shell remote access (TCP 22)",
-                     item->firewall_cfg.allow_ssh, [item](bool c) { item->firewall_cfg.allow_ssh = c; });
+                     item->firewall_cfg.allow_ssh, [this, item](bool c) {
+                         item->firewall_cfg.allow_ssh = c;
+                         item->last_action_message = c ? "Allowing SSH (authenticating)..." : "Revoking SSH (authenticating)...";
+                         rebuild_preview_column();
+                         std::thread([this, item, c]() {
+                             bool ok = FirewallBackend::toggle_service("ssh", c);
+                             if (auto* eng = AppEngine::instance()) {
+                                 eng->post_delayed(800, [this, item, ok]() {
+                                     FirewallBackend::sync_item_state(item);
+                                     item->last_action_message = ok ? "" : "Authentication failed";
+                                     deferred_rebuild_preview();
+                                     notify_state_changed();
+                                 });
+                             }
+                         }).detach();
+                     });
 
         add_rule_row("Samba File Sharing", "Allow local network folder sharing (TCP 445 / UDP 137–138)",
-                     item->firewall_cfg.allow_samba, [item](bool c) { item->firewall_cfg.allow_samba = c; });
+                     item->firewall_cfg.allow_samba, [this, item](bool c) {
+                         item->firewall_cfg.allow_samba = c;
+                         item->last_action_message = c ? "Allowing Samba (authenticating)..." : "Revoking Samba (authenticating)...";
+                         rebuild_preview_column();
+                         std::thread([this, item, c]() {
+                             bool ok = FirewallBackend::toggle_service("samba", c);
+                             if (auto* eng = AppEngine::instance()) {
+                                 eng->post_delayed(800, [this, item, ok]() {
+                                     FirewallBackend::sync_item_state(item);
+                                     item->last_action_message = ok ? "" : "Authentication failed";
+                                     deferred_rebuild_preview();
+                                     notify_state_changed();
+                                 });
+                             }
+                         }).detach();
+                     });
 
         add_rule_row("Network Printing (CUPS)", "Allow local IPP printer discovery (UDP/TCP 631)",
-                     item->firewall_cfg.allow_cups, [item](bool c) { item->firewall_cfg.allow_cups = c; });
+                     item->firewall_cfg.allow_cups, [this, item](bool c) {
+                         item->firewall_cfg.allow_cups = c;
+                         item->last_action_message = c ? "Allowing CUPS (authenticating)..." : "Revoking CUPS (authenticating)...";
+                         rebuild_preview_column();
+                         std::thread([this, item, c]() {
+                             bool ok = FirewallBackend::toggle_service("cups", c);
+                             if (auto* eng = AppEngine::instance()) {
+                                 eng->post_delayed(800, [this, item, ok]() {
+                                     FirewallBackend::sync_item_state(item);
+                                     item->last_action_message = ok ? "" : "Authentication failed";
+                                     deferred_rebuild_preview();
+                                     notify_state_changed();
+                                 });
+                             }
+                         }).detach();
+                     });
 
-        // User-added custom rules
+        // User-added custom rules with toggle and delete actions
         for (size_t i = 0; i < item->firewall_cfg.custom_rules.size(); ++i) {
             auto& crule = item->firewall_cfg.custom_rules[i];
-            add_rule_row(crule.name, "Custom port rule (" + crule.port_proto + ")",
-                         crule.enabled, [&crule](bool c) { crule.enabled = c; });
+            auto row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->spacing(12)
+                ->padding(8, 4)
+                ->backgroundColor(Color::transparent())
+                ->cornerRadius(get_inner_radius(config))
+                ->gravity(Gravity::CenterVertical)
+                ->build();
+
+            auto box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto lbl = TextViewBuilder::create()
+                ->text(crule.name)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            box->add_view(lbl);
+
+            auto sub = TextViewBuilder::create()
+                ->text("Port rule: " + crule.port_proto)
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                ->build();
+            box->add_view(sub);
+
+            LayoutParams box_lp;
+            box_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            box_lp.weight = 1.0f;
+            box_lp.gravity = Gravity::CenterVertical;
+            row->add_view(box, box_lp);
+
+            auto del_btn = ButtonBuilder::create()
+                ->text("✕")
+                ->style(ButtonStyle::Standard)
+                ->textColor(config->colors.on_surface_variant)
+                ->padding(8, 4)
+                ->cornerRadius(get_btn_radius(config))
+                ->onClick([this, item, crule]() {
+                    item->last_action_message = "Deleting rule " + crule.port_proto + " (authenticating)...";
+                    rebuild_preview_column();
+                    std::thread([this, item, crule]() {
+                        bool ok = FirewallBackend::delete_custom_rule(crule.port_proto);
+                        if (auto* eng = AppEngine::instance()) {
+                            eng->post_delayed(800, [this, item, ok]() {
+                                FirewallBackend::sync_item_state(item);
+                                item->last_action_message = ok ? "Rule deleted" : "Authentication failed";
+                                deferred_rebuild_preview();
+                                notify_state_changed();
+                            });
+                        }
+                    }).detach();
+                })
+                ->build();
+            LayoutParams del_lp;
+            del_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            del_lp.height = 24;
+            del_lp.gravity = Gravity::CenterVertical;
+            row->add_view(del_btn, del_lp);
+
+            rules_card->add_view(row);
         }
 
         add_preview_card(rules_card);
 
-        // 5. Monitor Card: Can be disabled with switch
+        // 5. Monitor Card: Logging toggle + Live socket & probe auditing telemetry
         auto monitor_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
@@ -2484,7 +2741,7 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
             ->build();
 
         auto mon_title = TextViewBuilder::create()
-            ->text("Monitor")
+            ->text("Monitor & Packet Audit")
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.on_surface)
             ->build();
@@ -2503,12 +2760,40 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
         mlbl_lp.gravity = Gravity::CenterVertical;
         mon_hdr->add_view(mon_lbl_box, mlbl_lp);
 
+        auto refresh_telem_btn = ButtonBuilder::create()
+            ->text("↻")
+            ->style(ButtonStyle::Standard)
+            ->textColor(config->colors.primary)
+            ->padding(8, 2)
+            ->cornerRadius(get_btn_radius(config))
+            ->onClick([this, item]() {
+                FirewallBackend::sync_item_state(item);
+                rebuild_preview_column();
+            })
+            ->build();
+        LayoutParams rbtn_lp;
+        rbtn_lp.width = 28;
+        rbtn_lp.height = 24;
+        rbtn_lp.gravity = Gravity::CenterVertical;
+        mon_hdr->add_view(refresh_telem_btn, rbtn_lp);
+
         auto mon_sw = SwitchBuilder::create()
             ->checked(item->firewall_cfg.monitor_enabled)
             ->onCheckedChanged([this, item](bool checked) {
                 item->firewall_cfg.monitor_enabled = checked;
-                deferred_rebuild_preview();
-                notify_state_changed();
+                item->last_action_message = checked ? "Enabling logging (authenticating)..." : "Disabling logging (authenticating)...";
+                rebuild_preview_column();
+                std::thread([this, item, checked]() {
+                    bool ok = FirewallBackend::set_logging(checked);
+                    if (auto* eng = AppEngine::instance()) {
+                        eng->post_delayed(800, [this, item, ok]() {
+                            FirewallBackend::sync_item_state(item);
+                            item->last_action_message = ok ? "" : "Authentication failed";
+                            deferred_rebuild_preview();
+                            notify_state_changed();
+                        });
+                    }
+                }).detach();
             })
             ->build();
         LayoutParams mon_sw_lp;
@@ -2562,6 +2847,7 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
 
     return;
 }
+
 
 void MillerView::render_app_network_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
     auto card = LinearLayoutBuilder::create()

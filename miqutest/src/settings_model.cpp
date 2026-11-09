@@ -2,6 +2,7 @@
 #include "wifi_backend.hpp"
 #include "display_backend.hpp"
 #include "ethernet_backend.hpp"
+#include "firewall_backend.hpp"
 
 namespace miqu {
 
@@ -150,6 +151,9 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         firewall->firewall_cfg.allow_samba = false;
         firewall->firewall_cfg.allow_cups = true;
         firewall->firewall_cfg.monitor_enabled = true;
+        if (FirewallBackend::is_available()) {
+            FirewallBackend::sync_item_state(firewall);
+        }
 
         // 1.7 Per App Network Access (Leaf)
         auto per_app_net = SettingItem::create_leaf("net_per_app", "Per App Network Access", "", "󰀻");
