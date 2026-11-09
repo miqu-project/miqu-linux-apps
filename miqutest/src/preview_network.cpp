@@ -1,6 +1,7 @@
 #include "miller_view.hpp"
 #include "preview_common.hpp"
 #include "wifi_backend.hpp"
+#include "ethernet_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
 #include <miqutoolkit/view/edit_text.hpp>
 #include <miqutoolkit/core/app_engine.hpp>
@@ -875,10 +876,115 @@ void MillerView::render_bluetooth_preview(const std::shared_ptr<SettingItem>& it
 }
 
 void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    bool is_conn = (item->eth_profile.status == "Connected");
+    if (EthernetBackend::is_networkmanager_available()) {
+        if (item->last_action_message.find("Enabling") == std::string::npos &&
+            item->last_action_message.find("Disabling") == std::string::npos &&
+            item->last_action_message.find("Renewing") == std::string::npos &&
+            item->last_action_message.find("Applying") == std::string::npos &&
+            item->last_action_message.find("Connecting") == std::string::npos) {
+            EthernetBackend::sync_item_state(item);
+        }
+    }
 
-    // 1. Active Wired Connection Profile & IP Parameters (Visible when connected)
-    if (is_conn) {
+    bool is_conn = (item->eth_profile.status == "Connected");
+    bool has_carrier = item->eth_profile.has_carrier;
+    bool is_enabled = item->eth_profile.is_enabled;
+
+    // 1. Primary Ethernet Switch & Status Card
+    auto eth_card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->padding(16, 14)
+        ->spacing(12)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+        ->cornerRadius(get_card_radius(config))
+        ->build();
+
+    std::string eth_icon = is_conn ? "󰈀" : (has_carrier ? "󰈀" : "󰈂");
+    auto eth_icon_view = TextViewBuilder::create()
+        ->text(eth_icon)
+        ->textSize(config->metrics.font_size + 4)
+        ->textColor(is_conn ? config->colors.primary : config->colors.on_surface_variant)
+        ->build();
+    LayoutParams eicon_lp;
+    eicon_lp.width = 30;
+    eicon_lp.gravity = Gravity::CenterVertical;
+    eth_card->add_view(eth_icon_view, eicon_lp);
+
+    auto eth_lbl_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(2)
+        ->build();
+
+    auto eth_title = TextViewBuilder::create()
+        ->text("Ethernet")
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    eth_lbl_box->add_view(eth_title);
+
+    std::string eth_hint_str;
+    if (!is_enabled) {
+        eth_hint_str = item->eth_profile.iface + " • Interface Disabled";
+    } else if (is_conn) {
+        eth_hint_str = item->eth_profile.iface + " • Connected (" + item->eth_profile.ip_address + ")";
+        if (item->eth_profile.speed_mbps > 0) {
+            eth_hint_str += " • " + std::to_string(item->eth_profile.speed_mbps) + " Mbps";
+        }
+    } else if (has_carrier) {
+        eth_hint_str = item->eth_profile.iface + " • Physical Link Active • Disconnected";
+    } else {
+        eth_hint_str = item->eth_profile.iface + " • Cable Unplugged";
+    }
+
+    auto eth_hint = TextViewBuilder::create()
+        ->text(eth_hint_str)
+        ->caption(true)
+        ->textColor(is_conn ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+        ->build();
+    eth_lbl_box->add_view(eth_hint);
+
+    LayoutParams elbl_lp;
+    elbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    elbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    elbl_lp.weight = 1.0f;
+    elbl_lp.gravity = Gravity::CenterVertical;
+    eth_card->add_view(eth_lbl_box, elbl_lp);
+
+    auto primary_sw = SwitchBuilder::create()
+        ->checked(is_enabled)
+        ->onCheckedChanged([this, item](bool checked) {
+            item->eth_profile.is_enabled = checked;
+            item->switch_val = checked;
+            item->last_action_message = checked ? ("Enabling " + item->eth_profile.iface + "...") : ("Disabling " + item->eth_profile.iface + "...");
+            std::thread([this, item, checked]() {
+                EthernetBackend::set_device_enabled(item->eth_profile.iface, checked);
+                std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(0, [this, item]() {
+                        EthernetBackend::sync_item_state(item);
+                        item->last_action_message = "";
+                        rebuild_current_column();
+                        deferred_rebuild_preview();
+                        notify_state_changed();
+                    });
+                }
+            }).detach();
+            rebuild_current_column();
+            deferred_rebuild_preview();
+            notify_state_changed();
+        })
+        ->build();
+
+    LayoutParams sw_lp;
+    sw_lp.width = 44;
+    sw_lp.height = 24;
+    sw_lp.gravity = Gravity::CenterVertical;
+    eth_card->add_view(primary_sw, sw_lp);
+    add_preview_card(eth_card);
+
+    // 2. Wired Connection & Configuration Card (Visible when interface is enabled)
+    if (is_enabled) {
         auto profile_card = LinearLayoutBuilder::create()
             ->orientation(Orientation::Vertical)
             ->spacing(10)
@@ -888,10 +994,11 @@ void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& ite
             ->cornerRadius(get_card_radius(config))
             ->build();
 
-        // Header row with "Wired Connection" title and "Renew DHCP" button
+        // Header row with "Wired Connection" title and action buttons
         auto header_row = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->gravity(Gravity::CenterVertical)
+            ->spacing(8)
             ->build();
 
         auto header_title = TextViewBuilder::create()
@@ -905,145 +1012,581 @@ void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& ite
         ht_lp.gravity = Gravity::CenterVertical;
         header_row->add_view(header_title, ht_lp);
 
-        auto on_renew = [this, item]() {
-            item->last_action_message = "DHCP lease renewed • IPv4 192.168.1.105";
-            rebuild_preview_column();
-            notify_state_changed();
-        };
+        // Copy IP button (if assigned)
+        if (is_conn && !item->eth_profile.ip_address.empty() && item->eth_profile.ip_address != "None") {
+            auto copy_btn = ButtonBuilder::create()
+                ->text("Copy IP")
+                ->style(ButtonStyle::Standard)
+                ->textColor(config->colors.on_surface_variant)
+                ->padding(10, 4)
+                ->cornerRadius(get_btn_radius(config))
+                ->onClick([this, item]() {
+                    EthernetBackend::copy_to_clipboard(item->eth_profile.ip_address);
+                    item->last_action_message = "Copied " + item->eth_profile.ip_address + " to clipboard";
+                    rebuild_preview_column();
+                })
+                ->build();
+            LayoutParams cpy_lp;
+            cpy_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            cpy_lp.height = 28;
+            cpy_lp.gravity = Gravity::CenterVertical;
+            header_row->add_view(copy_btn, cpy_lp);
+        }
 
-        auto renew_btn = ButtonBuilder::create()
-            ->text("Renew DHCP")
-            ->flat(true)
-            ->textSize(config->metrics.font_size)
+        // Renew DHCP button (when carrier active and in DHCP mode)
+        if (has_carrier && item->eth_profile.mode.find("DHCP") != std::string::npos) {
+            auto on_renew = [this, item]() {
+                item->last_action_message = "Renewing DHCP lease...";
+                rebuild_preview_column();
+                std::thread([this, item]() {
+                    bool ok = EthernetBackend::configure_ipv4_auto(item->eth_profile.name);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+                    if (auto* eng = AppEngine::instance()) {
+                        eng->post_delayed(0, [this, item, ok]() {
+                            EthernetBackend::sync_item_state(item);
+                            if (ok && item->eth_profile.ip_address != "None") {
+                                item->last_action_message = "DHCP lease renewed • IPv4 " + item->eth_profile.ip_address;
+                            } else {
+                                item->last_action_message = "DHCP lease renewed";
+                            }
+                            deferred_rebuild_preview();
+                            notify_state_changed();
+                        });
+                    }
+                }).detach();
+            };
+
+            auto renew_btn = ButtonBuilder::create()
+                ->text("Renew DHCP")
+                ->style(ButtonStyle::Standard)
+                ->textColor(config->colors.primary)
+                ->padding(10, 4)
+                ->cornerRadius(get_btn_radius(config))
+                ->onClick(on_renew)
+                ->build();
+
+            LayoutParams renew_lp;
+            renew_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            renew_lp.height = 28;
+            renew_lp.gravity = Gravity::CenterVertical;
+            header_row->add_view(renew_btn, renew_lp);
+        }
+
+        // Configure button (opens popup modal for IPv4 settings)
+        auto config_btn = ButtonBuilder::create()
+            ->text("⚙ Configure")
+            ->style(ButtonStyle::Standard)
             ->textColor(config->colors.primary)
             ->padding(10, 4)
             ->cornerRadius(get_btn_radius(config))
-            ->onClick(on_renew)
             ->build();
 
-        LayoutParams renew_lp;
-        renew_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        renew_lp.height = 28;
-        renew_lp.gravity = Gravity::CenterVertical;
-        header_row->add_view(renew_btn, renew_lp);
+        config_btn->set_on_click_listener([this, item, config, config_btn]() {
+            if (m_active_popup) {
+                m_active_popup->dismiss();
+                m_active_popup = nullptr;
+            }
+
+            auto popup_col = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->padding(16, 14)
+                ->spacing(12)
+                ->backgroundColor(config->colors.surface)
+                ->build();
+
+            auto p_title = TextViewBuilder::create()
+                ->text("Configure IPv4 Network")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->bold(true)
+                ->build();
+            popup_col->add_view(p_title);
+
+            auto p_desc = TextViewBuilder::create()
+                ->text("Choose whether to obtain your IP address automatically via DHCP or specify static parameters.")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            popup_col->add_view(p_desc);
+
+            // Mode Selector Row
+            auto mode_row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->spacing(8)
+                ->build();
+
+            bool is_manual_initial = (item->eth_profile.mode.find("Manual") != std::string::npos ||
+                                      item->eth_profile.mode.find("Static") != std::string::npos);
+            auto is_manual_ref = std::make_shared<bool>(is_manual_initial);
+
+            auto btn_dhcp = ButtonBuilder::create()
+                ->text("Automatic (DHCP)")
+                ->textSize(config->metrics.caption_size)
+                ->style(ButtonStyle::Standard)
+                ->primary(!*is_manual_ref)
+                ->backgroundColor(!*is_manual_ref ? config->colors.primary : config->colors.surface_variant)
+                ->textColor(!*is_manual_ref ? config->colors.on_primary : config->colors.on_surface)
+                ->cornerRadius(get_btn_radius(config))
+                ->padding(12, 6)
+                ->build();
+            LayoutParams dhcp_lp;
+            dhcp_lp.width = 0;
+            dhcp_lp.weight = 1.0f;
+            dhcp_lp.height = 32;
+            mode_row->add_view(btn_dhcp, dhcp_lp);
+
+            auto btn_static = ButtonBuilder::create()
+                ->text("Manual (Static IP)")
+                ->textSize(config->metrics.caption_size)
+                ->style(ButtonStyle::Standard)
+                ->primary(*is_manual_ref)
+                ->backgroundColor(*is_manual_ref ? config->colors.primary : config->colors.surface_variant)
+                ->textColor(*is_manual_ref ? config->colors.on_primary : config->colors.on_surface)
+                ->cornerRadius(get_btn_radius(config))
+                ->padding(12, 6)
+                ->build();
+            LayoutParams static_lp;
+            static_lp.width = 0;
+            static_lp.weight = 1.0f;
+            static_lp.height = 32;
+            mode_row->add_view(btn_static, static_lp);
+
+            popup_col->add_view(mode_row);
+
+            // Manual fields container
+            auto manual_container = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(8)
+                ->build();
+            manual_container->set_visibility(*is_manual_ref ? Visibility::Visible : Visibility::Gone);
+
+            auto ip_lbl = TextViewBuilder::create()
+                ->text("IP Address & Subnet (e.g. 192.168.1.100/24)")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            manual_container->add_view(ip_lbl);
+
+            std::string def_ip = (item->eth_profile.ip_address != "None" && !item->eth_profile.ip_address.empty())
+                ? (item->eth_profile.ip_address + "/" + (item->eth_profile.ipv4_prefix.empty() ? "24" : item->eth_profile.ipv4_prefix))
+                : "";
+            auto ip_edit = EditTextBuilder::create()
+                ->text(def_ip)
+                ->hint("192.168.1.100/24")
+                ->editable(true)
+                ->padding(10, 6)
+                ->build();
+            LayoutParams ipe_lp;
+            ipe_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            ipe_lp.height = 34;
+            manual_container->add_view(ip_edit, ipe_lp);
+
+            auto gw_lbl = TextViewBuilder::create()
+                ->text("Default Gateway (Router IP)")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            manual_container->add_view(gw_lbl);
+
+            std::string def_gw = (item->eth_profile.gateway != "None") ? item->eth_profile.gateway : "";
+            auto gw_edit = EditTextBuilder::create()
+                ->text(def_gw)
+                ->hint("192.168.1.1")
+                ->editable(true)
+                ->padding(10, 6)
+                ->build();
+            LayoutParams gwe_lp;
+            gwe_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            gwe_lp.height = 34;
+            manual_container->add_view(gw_edit, gwe_lp);
+
+            auto dns_lbl = TextViewBuilder::create()
+                ->text("DNS Servers (comma separated)")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            manual_container->add_view(dns_lbl);
+
+            std::string def_dns = (item->eth_profile.dns != "None") ? item->eth_profile.dns : "";
+            auto dns_edit = EditTextBuilder::create()
+                ->text(def_dns)
+                ->hint("1.1.1.1, 8.8.8.8")
+                ->editable(true)
+                ->padding(10, 6)
+                ->build();
+            LayoutParams dnse_lp;
+            dnse_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            dnse_lp.height = 34;
+            manual_container->add_view(dns_edit, dnse_lp);
+
+            popup_col->add_view(manual_container);
+
+            btn_dhcp->set_on_click_listener([btn_dhcp, btn_static, manual_container, config, is_manual_ref]() {
+                *is_manual_ref = false;
+                btn_dhcp->set_primary(true);
+                btn_dhcp->set_background_color(config->colors.primary);
+                btn_dhcp->set_text_color(config->colors.on_primary);
+                btn_static->set_primary(false);
+                btn_static->set_background_color(config->colors.surface_variant);
+                btn_static->set_text_color(config->colors.on_surface);
+                manual_container->set_visibility(Visibility::Gone);
+            });
+
+            btn_static->set_on_click_listener([btn_dhcp, btn_static, manual_container, config, is_manual_ref]() {
+                *is_manual_ref = true;
+                btn_static->set_primary(true);
+                btn_static->set_background_color(config->colors.primary);
+                btn_static->set_text_color(config->colors.on_primary);
+                btn_dhcp->set_primary(false);
+                btn_dhcp->set_background_color(config->colors.surface_variant);
+                btn_dhcp->set_text_color(config->colors.on_surface);
+                manual_container->set_visibility(Visibility::Visible);
+            });
+
+            // Dialog buttons row: Cancel / Save
+            auto btn_row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->spacing(8)
+                ->gravity(Gravity::Right)
+                ->build();
+
+            auto cancel_btn = ButtonBuilder::create()
+                ->text("Cancel")
+                ->style(ButtonStyle::Standard)
+                ->textColor(config->colors.on_surface_variant)
+                ->padding(12, 6)
+                ->cornerRadius(get_btn_radius(config))
+                ->onClick([this]() {
+                    if (m_active_popup) {
+                        m_active_popup->dismiss();
+                        m_active_popup = nullptr;
+                    }
+                })
+                ->build();
+            btn_row->add_view(cancel_btn);
+
+            auto save_btn = ButtonBuilder::create()
+                ->text("Save & Apply")
+                ->style(ButtonStyle::Standard)
+                ->primary(true)
+                ->textColor(config->colors.on_primary)
+                ->backgroundColor(config->colors.primary)
+                ->padding(12, 6)
+                ->cornerRadius(get_btn_radius(config))
+                ->onClick([this, item, is_manual_ref, ip_edit, gw_edit, dns_edit]() {
+                    bool manual = *is_manual_ref;
+                    std::string ip = ip_edit ? ip_edit->get_text() : "";
+                    std::string gw = gw_edit ? gw_edit->get_text() : "";
+                    std::string dns = dns_edit ? dns_edit->get_text() : "";
+
+                    if (m_active_popup) {
+                        m_active_popup->dismiss();
+                        m_active_popup = nullptr;
+                    }
+
+                    item->last_action_message = manual ? "Applying static IPv4 configuration..." : "Applying Automatic (DHCP)...";
+                    rebuild_preview_column();
+
+                    std::thread([this, item, manual, ip, gw, dns]() {
+                        bool ok = false;
+                        if (!manual) {
+                            ok = EthernetBackend::configure_ipv4_auto(item->eth_profile.name);
+                        } else {
+                            ok = EthernetBackend::configure_ipv4_manual(item->eth_profile.name, ip, gw, dns);
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+                        if (auto* eng = AppEngine::instance()) {
+                            eng->post_delayed(0, [this, item, ok]() {
+                                EthernetBackend::sync_item_state(item);
+                                item->last_action_message = ok ? "Network configuration applied" : "Failed to apply network configuration";
+                                deferred_rebuild_preview();
+                                notify_state_changed();
+                            });
+                        }
+                    }).detach();
+                })
+                ->build();
+            btn_row->add_view(save_btn);
+
+            popup_col->add_view(btn_row);
+
+            m_active_popup = PopupWindowBuilder::create()
+                ->content(popup_col)
+                ->width(360)
+                ->elevation(6)
+                ->cornerRadius(get_card_radius(config))
+                ->dismissOnOutsideClick(true)
+                ->dismissOnEscape(true)
+                ->build();
+            m_active_popup->show_as_dropdown(config_btn, PopupGravity::BottomEnd);
+        });
+
+        LayoutParams cfg_lp;
+        cfg_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        cfg_lp.height = 28;
+        cfg_lp.gravity = Gravity::CenterVertical;
+        header_row->add_view(config_btn, cfg_lp);
+
         profile_card->add_view(header_row);
 
+        // Feedback message
         if (!item->last_action_message.empty()) {
-            auto renew_status = TextViewBuilder::create()
+            auto action_status = TextViewBuilder::create()
                 ->text(item->last_action_message)
                 ->caption(true)
                 ->textColor(config->colors.primary)
                 ->build();
-            profile_card->add_view(renew_status);
+            profile_card->add_view(action_status);
         }
 
-        // Active Connection Highlight Card
-        auto conn_row_content = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->padding(10, 8)
-            ->spacing(12)
-            ->build();
-
-        auto conn_icon = TextViewBuilder::create()
-            ->text("󰈀")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams cicon_lp;
-        cicon_lp.width = 24;
-        cicon_lp.gravity = Gravity::CenterVertical;
-        conn_row_content->add_view(conn_icon, cicon_lp);
-
-        auto text_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(2)
-            ->build();
-
-        auto profile_name = TextViewBuilder::create()
-            ->text(item->eth_profile.name)
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        text_box->add_view(profile_name);
-
-        auto profile_sub = TextViewBuilder::create()
-            ->text(item->eth_profile.mode + " • " + item->eth_profile.status)
-            ->caption(true)
-            ->textColor(config->colors.primary)
-            ->build();
-        text_box->add_view(profile_sub);
-
-        LayoutParams tb_lp;
-        tb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        tb_lp.weight = 1.0f;
-        tb_lp.gravity = Gravity::CenterVertical;
-        conn_row_content->add_view(text_box, tb_lp);
-
-        auto check_view = TextViewBuilder::create()
-            ->text("✓")
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.primary)
-            ->build();
-        LayoutParams chk_lp;
-        chk_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-        chk_lp.gravity = Gravity::CenterVertical;
-        conn_row_content->add_view(check_view, chk_lp);
-
-        auto conn_row_card = CardViewBuilder::create()
-            ->style(CardStyle::Filled)
-            ->backgroundColor(config->colors.primary_container.with_alpha(0.35f))
-            ->cornerRadius(get_inner_radius(config))
-            ->elevation(0)
-            ->addView(conn_row_content)
-            ->build();
-        profile_card->add_view(conn_row_card);
-
-        // IP Parameters Details
-        std::vector<std::pair<std::string, std::string>> ip_params = {
-            {"IP Address", item->eth_profile.ip_address},
-            {"Subnet Mask", item->eth_profile.subnet},
-            {"Default Gateway", item->eth_profile.gateway},
-            {"DNS Servers", item->eth_profile.dns}
-        };
-
-        for (const auto& [k, v] : ip_params) {
-            auto row = LinearLayoutBuilder::create()
+        // Active Connection Highlight or Link Status
+        if (is_conn) {
+            auto conn_row_content = LinearLayoutBuilder::create()
                 ->orientation(Orientation::Horizontal)
-                ->padding(2, 2)
+                ->padding(10, 8)
+                ->spacing(12)
                 ->build();
 
-            auto k_view = TextViewBuilder::create()
-                ->text(k)
+            auto conn_icon = TextViewBuilder::create()
+                ->text("󰈀")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.primary)
+                ->build();
+            LayoutParams cicon_lp;
+            cicon_lp.width = 24;
+            cicon_lp.gravity = Gravity::CenterVertical;
+            conn_row_content->add_view(conn_icon, cicon_lp);
+
+            auto text_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto profile_name = TextViewBuilder::create()
+                ->text(item->eth_profile.name)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.primary)
+                ->build();
+            text_box->add_view(profile_name);
+
+            auto profile_sub = TextViewBuilder::create()
+                ->text(item->eth_profile.mode + " • " + item->eth_profile.status)
+                ->caption(true)
+                ->textColor(config->colors.primary)
+                ->build();
+            text_box->add_view(profile_sub);
+
+            LayoutParams tb_lp;
+            tb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            tb_lp.weight = 1.0f;
+            tb_lp.gravity = Gravity::CenterVertical;
+            conn_row_content->add_view(text_box, tb_lp);
+
+            auto check_view = TextViewBuilder::create()
+                ->text("✓")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.primary)
+                ->build();
+            LayoutParams chk_lp;
+            chk_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            chk_lp.gravity = Gravity::CenterVertical;
+            conn_row_content->add_view(check_view, chk_lp);
+
+            auto conn_row_card = CardViewBuilder::create()
+                ->style(CardStyle::Filled)
+                ->backgroundColor(config->colors.primary_container.with_alpha(0.35f))
+                ->cornerRadius(get_inner_radius(config))
+                ->elevation(0)
+                ->addView(conn_row_content)
+                ->build();
+            profile_card->add_view(conn_row_card);
+
+            // IP Parameters Details Table
+            std::vector<std::pair<std::string, std::string>> ip_params = {
+                {"IP Address", item->eth_profile.ip_address + (item->eth_profile.ipv4_prefix.empty() ? "" : " (/" + item->eth_profile.ipv4_prefix + ")")},
+                {"Subnet Mask", item->eth_profile.subnet},
+                {"Default Gateway", item->eth_profile.gateway},
+                {"DNS Servers", item->eth_profile.dns}
+            };
+            if (!item->eth_profile.mac_address.empty()) {
+                ip_params.push_back({"MAC Address", item->eth_profile.mac_address});
+            }
+
+            for (const auto& [k, v] : ip_params) {
+                auto row = LinearLayoutBuilder::create()
+                    ->orientation(Orientation::Horizontal)
+                    ->padding(2, 2)
+                    ->build();
+
+                auto k_view = TextViewBuilder::create()
+                    ->text(k)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface_variant)
+                    ->build();
+                LayoutParams k_lp;
+                k_lp.width = 140;
+                row->add_view(k_view, k_lp);
+
+                auto v_view = TextViewBuilder::create()
+                    ->text(v)
+                    ->caption(true)
+                    ->textColor(config->colors.on_surface)
+                    ->build();
+                LayoutParams v_lp;
+                v_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+                v_lp.weight = 1.0f;
+                row->add_view(v_view, v_lp);
+
+                profile_card->add_view(row);
+            }
+        } else if (has_carrier) {
+            // Physical carrier active, but connection profile disconnected
+            auto link_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->padding(10, 8)
+                ->spacing(12)
+                ->gravity(Gravity::CenterVertical)
+                ->build();
+
+            auto conn_icon = TextViewBuilder::create()
+                ->text("󰈀")
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.primary)
+                ->build();
+            LayoutParams cicon_lp;
+            cicon_lp.width = 24;
+            cicon_lp.gravity = Gravity::CenterVertical;
+            link_box->add_view(conn_icon, cicon_lp);
+
+            auto text_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto profile_name = TextViewBuilder::create()
+                ->text(item->eth_profile.name)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            text_box->add_view(profile_name);
+
+            auto profile_sub = TextViewBuilder::create()
+                ->text("Physical Link Active • Disconnected")
                 ->caption(true)
                 ->textColor(config->colors.on_surface_variant)
                 ->build();
-            LayoutParams k_lp;
-            k_lp.width = 140;
-            row->add_view(k_view, k_lp);
+            text_box->add_view(profile_sub);
 
-            auto v_view = TextViewBuilder::create()
-                ->text(v)
-                ->caption(true)
+            LayoutParams tb_lp;
+            tb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            tb_lp.weight = 1.0f;
+            tb_lp.gravity = Gravity::CenterVertical;
+            link_box->add_view(text_box, tb_lp);
+
+            auto connect_btn = ButtonBuilder::create()
+                ->text("Connect")
+                ->style(ButtonStyle::Standard)
+                ->primary(true)
+                ->textColor(config->colors.on_primary)
+                ->backgroundColor(config->colors.primary)
+                ->padding(12, 4)
+                ->cornerRadius(get_btn_radius(config))
+                ->onClick([this, item]() {
+                    item->last_action_message = "Connecting " + item->eth_profile.name + "...";
+                    rebuild_preview_column();
+                    std::thread([this, item]() {
+                        std::string cmd = "nmcli connection up \"" + item->eth_profile.name + "\" 2>/dev/null";
+                        std::system(cmd.c_str());
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+                        if (auto* eng = AppEngine::instance()) {
+                            eng->post_delayed(0, [this, item]() {
+                                EthernetBackend::sync_item_state(item);
+                                item->last_action_message = (item->eth_profile.status == "Connected") ? "Connected" : "";
+                                deferred_rebuild_preview();
+                                notify_state_changed();
+                            });
+                        }
+                    }).detach();
+                })
+                ->build();
+            LayoutParams conn_lp;
+            conn_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+            conn_lp.height = 28;
+            link_box->add_view(connect_btn, conn_lp);
+
+            auto link_card = CardViewBuilder::create()
+                ->style(CardStyle::Filled)
+                ->backgroundColor(config->colors.surface_variant.with_alpha(0.5f))
+                ->cornerRadius(get_inner_radius(config))
+                ->elevation(0)
+                ->addView(link_box)
+                ->build();
+            profile_card->add_view(link_card);
+        } else {
+            // Cable unplugged
+            auto unplugged_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->padding(12, 10)
+                ->spacing(12)
+                ->gravity(Gravity::CenterVertical)
+                ->build();
+
+            auto u_icon = TextViewBuilder::create()
+                ->text("󰈂")
+                ->textSize(config->metrics.font_size + 2)
+                ->textColor(config->colors.on_surface_variant)
+                ->build();
+            LayoutParams uicon_lp;
+            uicon_lp.width = 24;
+            uicon_lp.gravity = Gravity::CenterVertical;
+            unplugged_box->add_view(u_icon, uicon_lp);
+
+            auto u_text_box = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Vertical)
+                ->spacing(2)
+                ->build();
+
+            auto u_title = TextViewBuilder::create()
+                ->text("Cable Unplugged")
+                ->textSize(config->metrics.font_size)
                 ->textColor(config->colors.on_surface)
                 ->build();
-            LayoutParams v_lp;
-            v_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-            v_lp.weight = 1.0f;
-            row->add_view(v_view, v_lp);
+            u_text_box->add_view(u_title);
 
-            profile_card->add_view(row);
+            auto u_desc = TextViewBuilder::create()
+                ->text("No physical Ethernet link detected on interface " + item->eth_profile.iface + ". Connect an RJ-45 cable to activate.")
+                ->caption(true)
+                ->textColor(config->colors.on_surface_variant.with_alpha(0.8f))
+                ->build();
+            u_text_box->add_view(u_desc);
+
+            LayoutParams utb_lp;
+            utb_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+            utb_lp.weight = 1.0f;
+            utb_lp.gravity = Gravity::CenterVertical;
+            unplugged_box->add_view(u_text_box, utb_lp);
+
+            auto u_card = CardViewBuilder::create()
+                ->style(CardStyle::Filled)
+                ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
+                ->cornerRadius(get_inner_radius(config))
+                ->elevation(0)
+                ->addView(unplugged_box)
+                ->build();
+            profile_card->add_view(u_card);
         }
 
         add_preview_card(profile_card);
     }
 
-    // 3. Hardware & Link Telemetry
+    // 3. Hardware & Link Telemetry (Live telemetry from backend)
     if (!item->telemetry.empty()) {
         add_preview_card(create_telemetry_card(item->telemetry, config, "Hardware & link specifications"));
     }
 
     return;
 }
+
 
 void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
     // 1. Airplane Mode Primary Switch Card

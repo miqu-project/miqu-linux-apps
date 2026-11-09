@@ -1,6 +1,7 @@
 #include "settings_model.hpp"
 #include "wifi_backend.hpp"
 #include "display_backend.hpp"
+#include "ethernet_backend.hpp"
 
 namespace miqu {
 
@@ -81,6 +82,9 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
 
         // 1.3 Ethernet (Leaf)
         auto eth = SettingItem::create_leaf("net_ethernet", "Ethernet", "", "󰈀");
+        eth->has_switch = true;
+        eth->switch_val = true;
+        eth->switch_label = "Ethernet";
         eth->eth_profile = {
             "Wired Connection 1",
             "Connected",
@@ -88,15 +92,28 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             "255.255.255.0",
             "192.168.1.1",
             "1.1.1.1, 8.8.8.8",
-            "Automatic (DHCP)"
+            "Automatic (DHCP)",
+            "enp0s31f6",
+            "e4:54:e8:1b:9a:2c",
+            "24",
+            "",
+            1000,
+            "Full Duplex",
+            true,
+            true,
+            1500
         };
         eth->telemetry = {
-            {"Interface", "enp4s0 (Realtek RTL8125 2.5GbE)"},
+            {"Interface", "enp0s31f6"},
             {"MAC Address", "e4:54:e8:1b:9a:2c"},
-            {"Link Speed", "2500 Mbps (Full Duplex)"},
-            {"MTU", "1500 bytes"},
-            {"Carrier", "Active (CAT6)"}
+            {"Carrier Status", "Physical Link Active"},
+            {"Link Speed", "1000 Mbps (Full Duplex)"},
+            {"MTU", "1500 bytes"}
         };
+
+        if (EthernetBackend::is_networkmanager_available()) {
+            EthernetBackend::sync_item_state(eth);
+        }
 
         // 1.4 Airplane Mode (Leaf)
         auto airplane = SettingItem::create_leaf("net_airplane", "Airplane Mode", "", "󰀝");

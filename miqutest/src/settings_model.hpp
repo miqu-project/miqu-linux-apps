@@ -43,6 +43,15 @@ struct EthernetProfile {
     std::string gateway = "192.168.1.1";
     std::string dns = "1.1.1.1, 8.8.8.8";
     std::string mode = "Automatic (DHCP)";
+    std::string iface = "enp0s31f6";
+    std::string mac_address;
+    std::string ipv4_prefix = "24";
+    std::string ipv6_address;
+    int speed_mbps = 0;
+    std::string duplex = "Unknown";
+    bool has_carrier = false;
+    bool is_enabled = true;
+    int mtu = 1500;
 };
 
 struct MonitorConfig {
