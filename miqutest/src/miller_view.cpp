@@ -455,158 +455,294 @@ void MillerView::rebuild_columns() {
     request_redraw();
 }
 
+std::shared_ptr<View> MillerView::create_parent_hero_box(const std::shared_ptr<Config>& config) {
+    auto hero_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->gravity(Gravity::Center)
+        ->padding(16, 24)
+        ->spacing(10)
+        ->build();
+
+    auto hero_icon = TextViewBuilder::create()
+        ->text("⚙")
+        ->textSize(static_cast<int>(config->metrics.font_size * 2.8f))
+        ->textColor(config->colors.primary.with_alpha(0.6f))
+        ->center(true)
+        ->build();
+    hero_box->add_view(hero_icon);
+
+    auto hero_title = TextViewBuilder::create()
+        ->text("Settings")
+        ->textSize(static_cast<int>(config->metrics.font_size * 1.3f))
+        ->bold(true)
+        ->textColor(config->colors.on_surface)
+        ->center(true)
+        ->build();
+    hero_box->add_view(hero_title);
+
+    auto hero_hint = TextViewBuilder::create()
+        ->text("↑/↓ Navigate\nEnter Select\nEsc Back")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+        ->center(true)
+        ->build();
+    hero_box->add_view(hero_hint);
+
+    return hero_box;
+}
+
+std::shared_ptr<View> MillerView::create_empty_search_box(const std::shared_ptr<Config>& config) {
+    auto empty_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->gravity(Gravity::Center)
+        ->padding(16, 32)
+        ->spacing(8)
+        ->build();
+
+    auto empty_icon = TextViewBuilder::create()
+        ->text("🔍")
+        ->textSize(static_cast<int>(config->metrics.font_size * 2))
+        ->textColor(config->colors.on_surface_variant.with_alpha(0.5f))
+        ->build();
+    empty_box->add_view(empty_icon);
+
+    auto empty_text = TextViewBuilder::create()
+        ->text("No settings found")
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    empty_box->add_view(empty_text);
+
+    auto empty_hint = TextViewBuilder::create()
+        ->text("No matches for \"" + m_search_query + "\"")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+        ->build();
+    empty_box->add_view(empty_hint);
+
+    return empty_box;
+}
+
+std::shared_ptr<View> MillerView::create_parent_row_card(const std::shared_ptr<SettingItem>& item,
+                                                         bool is_active,
+                                                         size_t index,
+                                                         const std::shared_ptr<Config>& config) {
+    auto item_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->padding(10, 8)
+        ->spacing(10)
+        ->build();
+
+    auto icon_view = TextViewBuilder::create()
+        ->text(item->icon.empty() ? "⚙" : item->icon)
+        ->textSize(config->metrics.font_size)
+        ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant)
+        ->build();
+    LayoutParams icon_lp;
+    icon_lp.width = 24;
+    icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    icon_lp.gravity = Gravity::CenterVertical;
+    item_row->add_view(icon_view, icon_lp);
+
+    auto text_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(1)
+        ->build();
+
+    auto title_view = TextViewBuilder::create()
+        ->text(item->title)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->ellipsize(true)
+        ->build();
+    text_box->add_view(title_view);
+
+    if (!item->subtitle.empty()) {
+        auto sub_view = TextViewBuilder::create()
+            ->text(item->subtitle)
+            ->caption(true)
+            ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+            ->ellipsize(true)
+            ->build();
+        text_box->add_view(sub_view);
+    }
+
+    LayoutParams text_lp;
+    text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    text_lp.weight = 1.0f;
+    text_lp.gravity = Gravity::CenterVertical;
+    item_row->add_view(text_box, text_lp);
+
+    Color bg = is_active ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
+    int stroke_w = is_active ? 1 : 0;
+    Color stroke_col = is_active ? config->colors.primary.with_alpha(0.5f) : Color::transparent();
+
+    auto row_card = CardViewBuilder::create()
+        ->style(is_active ? CardStyle::Outlined : CardStyle::Filled)
+        ->backgroundColor(bg)
+        ->stroke(stroke_w, stroke_col)
+        ->cornerRadius(get_inner_radius(config))
+        ->elevation(0)
+        ->addView(item_row)
+        ->build();
+
+    row_card->set_on_click_listener([this, item, index]() {
+        auto now = std::chrono::steady_clock::now();
+        uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+        if (m_last_sibling_clicked_index == static_cast<int>(index) &&
+            (now_ms - m_last_sibling_click_time_ms) <= 280) {
+            cancel_pending_sibling_click();
+            execute_sibling_swap(item, index);
+        } else {
+            cancel_pending_sibling_click();
+            m_last_sibling_clicked_index = static_cast<int>(index);
+            m_last_sibling_click_time_ms = now_ms;
+
+            if (auto* eng = AppEngine::instance()) {
+                m_single_click_timer_id = eng->post_delayed(220, [this, index]() {
+                    m_single_click_timer_id = 0;
+                    m_last_sibling_clicked_index = -1;
+                    m_last_sibling_click_time_ms = 0;
+                    execute_shift_up(index);
+                });
+            } else {
+                execute_shift_up(index);
+            }
+        }
+    });
+
+    return row_card;
+}
+
+std::shared_ptr<View> MillerView::create_current_row_card(const std::shared_ptr<SettingItem>& item,
+                                                         bool is_selected,
+                                                         size_t index,
+                                                         const std::shared_ptr<Config>& config) {
+    auto item_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->padding(10, 8)
+        ->spacing(10)
+        ->build();
+
+    Color icon_color = config->colors.on_surface_variant;
+    if (is_selected) {
+        icon_color = m_preview_focused ? config->colors.on_surface_variant : config->colors.primary;
+    }
+
+    auto icon_view = TextViewBuilder::create()
+        ->text(item->icon.empty() ? "⚙" : item->icon)
+        ->textSize(config->metrics.font_size)
+        ->textColor(icon_color)
+        ->build();
+    LayoutParams icon_lp;
+    icon_lp.width = 24;
+    icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    icon_lp.gravity = Gravity::CenterVertical;
+    item_row->add_view(icon_view, icon_lp);
+
+    auto text_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(1)
+        ->build();
+
+    auto title_view = TextViewBuilder::create()
+        ->text(item->title)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->ellipsize(true)
+        ->build();
+    text_box->add_view(title_view);
+
+    if (!item->subtitle.empty()) {
+        Color sub_color = config->colors.on_surface_variant.with_alpha(0.7f);
+        if (is_selected) {
+            sub_color = m_preview_focused ? config->colors.on_surface_variant.with_alpha(0.7f) : config->colors.primary;
+        }
+
+        auto sub_view = TextViewBuilder::create()
+            ->text(item->subtitle)
+            ->caption(true)
+            ->textColor(sub_color)
+            ->ellipsize(true)
+            ->build();
+        text_box->add_view(sub_view);
+    }
+
+    LayoutParams text_lp;
+    text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    text_lp.weight = 1.0f;
+    text_lp.gravity = Gravity::CenterVertical;
+    item_row->add_view(text_box, text_lp);
+
+    Color bg = Color::transparent();
+    int stroke_w = 0;
+    Color stroke_col = Color::transparent();
+
+    if (is_selected) {
+        if (m_preview_focused) {
+            bg = config->colors.surface_variant.with_alpha(0.50f);
+            stroke_w = 1;
+            stroke_col = config->colors.outline.with_alpha(0.35f);
+        } else {
+            bg = config->colors.primary_container.with_alpha(0.65f);
+            stroke_w = 1;
+            stroke_col = config->colors.primary.with_alpha(0.70f);
+        }
+    }
+
+    auto row_card = CardViewBuilder::create()
+        ->style(is_selected ? CardStyle::Outlined : CardStyle::Filled)
+        ->backgroundColor(bg)
+        ->stroke(stroke_w, stroke_col)
+        ->cornerRadius(get_inner_radius(config))
+        ->elevation(0)
+        ->addView(item_row)
+        ->build();
+
+    row_card->set_on_click_listener([this, index, item]() {
+        if (static_cast<int>(index) != m_current_index) {
+            m_current_index = static_cast<int>(index);
+            m_preview_focused = false;
+            if (m_preview_expanded) {
+                set_preview_expanded(false);
+            }
+            if (m_window) {
+                m_window->clear_focus();
+            }
+            rebuild_columns();
+            notify_state_changed();
+        } else {
+            navigate_enter();
+        }
+    });
+
+    return row_card;
+}
+
 void MillerView::rebuild_parent_column() {
     m_parent_layout->clear_views();
     auto config = Config::get();
 
     if (m_path.empty() && m_search_query.empty()) {
         m_parent_layout->set_gravity(Gravity::Center);
-
-        auto hero_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->gravity(Gravity::Center)
-            ->padding(16, 24)
-            ->spacing(10)
-            ->build();
-
-        auto hero_icon = TextViewBuilder::create()
-            ->text("⚙")
-            ->textSize(static_cast<int>(config->metrics.font_size * 2.8f))
-            ->textColor(config->colors.primary.with_alpha(0.6f))
-            ->center(true)
-            ->build();
-        hero_box->add_view(hero_icon);
-
-        auto hero_title = TextViewBuilder::create()
-            ->text("Settings")
-            ->textSize(static_cast<int>(config->metrics.font_size * 1.3f))
-            ->bold(true)
-            ->textColor(config->colors.on_surface)
-            ->center(true)
-            ->build();
-        hero_box->add_view(hero_title);
-
-        auto hero_hint = TextViewBuilder::create()
-            ->text("↑/↓ Navigate\nEnter Select\nEsc Back")
-            ->caption(true)
-            ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-            ->center(true)
-            ->build();
-        hero_box->add_view(hero_hint);
-
-        m_parent_layout->add_view(hero_box);
+        m_parent_layout->add_view(create_parent_hero_box(config));
         return;
     }
 
     m_parent_layout->set_gravity(Gravity::None);
 
-    // Depth > 0 or Search Mode: Show categories for spatial context
-    const std::vector<std::shared_ptr<SettingItem>>* parent_siblings = nullptr;
-    if (!m_search_query.empty() || m_path.size() == 1) {
-        parent_siblings = &m_root_tree;
-    } else {
-        parent_siblings = &(m_path[m_path.size() - 2]->children);
-    }
+    const auto* parent_siblings = (!m_search_query.empty() || m_path.size() == 1)
+        ? &m_root_tree
+        : &(m_path[m_path.size() - 2]->children);
 
     auto active_parent = (!m_search_query.empty() || m_path.empty()) ? nullptr : m_path.back();
     for (size_t i = 0; i < parent_siblings->size(); ++i) {
         const auto& item = (*parent_siblings)[i];
         bool is_active = (item == active_parent);
-
-        auto item_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->padding(10, 8)
-            ->spacing(10)
-            ->build();
-
-        // Left Icon
-        auto icon_view = TextViewBuilder::create()
-            ->text(item->icon.empty() ? "⚙" : item->icon)
-            ->textSize(config->metrics.font_size)
-            ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant)
-            ->build();
-        LayoutParams icon_lp;
-        icon_lp.width = 24;
-        icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        icon_lp.gravity = Gravity::CenterVertical;
-        item_row->add_view(icon_view, icon_lp);
-
-        // Text container (Title and optional contextual Subtitle)
-        auto text_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(1)
-            ->build();
-
-        auto title_view = TextViewBuilder::create()
-            ->text(item->title)
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->ellipsize(true)
-            ->build();
-        text_box->add_view(title_view);
-
-        if (!item->subtitle.empty()) {
-            auto sub_view = TextViewBuilder::create()
-                ->text(item->subtitle)
-                ->caption(true)
-                ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
-                ->ellipsize(true)
-                ->build();
-            text_box->add_view(sub_view);
-        }
-
-        LayoutParams text_lp;
-        text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        text_lp.weight = 1.0f;
-        text_lp.gravity = Gravity::CenterVertical;
-        item_row->add_view(text_box, text_lp);
-
-
-
-        Color bg = is_active ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
-        int stroke_w = is_active ? 1 : 0;
-        Color stroke_col = is_active ? config->colors.primary.with_alpha(0.5f) : Color::transparent();
-        auto row_card = CardViewBuilder::create()
-            ->style(is_active ? CardStyle::Outlined : CardStyle::Filled)
-            ->backgroundColor(bg)
-            ->stroke(stroke_w, stroke_col)
-            ->cornerRadius(get_inner_radius(config))
-            ->elevation(0)
-            ->addView(item_row)
-            ->build();
-
-        // Hybrid Interaction: Single-click shifts up one level (Option A)
-        // Double-click directly swaps active branch at current depth (Option B)
-        row_card->set_on_click_listener([this, item, i]() {
-            auto now = std::chrono::steady_clock::now();
-            uint64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-            if (m_last_sibling_clicked_index == static_cast<int>(i) &&
-                (now_ms - m_last_sibling_click_time_ms) <= 280) {
-                // Double Click: cancel pending single-click and swap sibling branch
-                cancel_pending_sibling_click();
-                execute_sibling_swap(item, i);
-            } else {
-                // First Click: schedule single-click shift up after debounce
-                cancel_pending_sibling_click();
-                m_last_sibling_clicked_index = static_cast<int>(i);
-                m_last_sibling_click_time_ms = now_ms;
-
-                if (auto* eng = AppEngine::instance()) {
-                    m_single_click_timer_id = eng->post_delayed(220, [this, i]() {
-                        m_single_click_timer_id = 0;
-                        m_last_sibling_clicked_index = -1;
-                        m_last_sibling_click_time_ms = 0;
-                        execute_shift_up(i);
-                    });
-                } else {
-                    execute_shift_up(i);
-                }
-            }
-        });
-
-        m_parent_layout->add_view(row_card);
+        m_parent_layout->add_view(create_parent_row_card(item, is_active, i, config));
     }
 }
 
@@ -617,157 +753,20 @@ void MillerView::rebuild_current_column() {
     const auto& list = get_current_list();
     if (list.empty()) {
         if (!m_search_query.empty()) {
-            auto empty_box = LinearLayoutBuilder::create()
-                ->orientation(Orientation::Vertical)
-                ->gravity(Gravity::Center)
-                ->padding(16, 32)
-                ->spacing(8)
-                ->build();
-
-            auto empty_icon = TextViewBuilder::create()
-                ->text("🔍")
-                ->textSize(static_cast<int>(config->metrics.font_size * 2))
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.5f))
-                ->build();
-            empty_box->add_view(empty_icon);
-
-            auto empty_text = TextViewBuilder::create()
-                ->text("No settings found")
-                ->textSize(config->metrics.font_size)
-                ->textColor(config->colors.on_surface)
-                ->build();
-            empty_box->add_view(empty_text);
-
-            auto empty_hint = TextViewBuilder::create()
-                ->text("No matches for \"" + m_search_query + "\"")
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-                ->build();
-            empty_box->add_view(empty_hint);
-
-            m_current_layout->add_view(empty_box);
+            m_current_layout->add_view(create_empty_search_box(config));
         }
         return;
     }
 
     m_current_index = std::clamp(m_current_index, 0, static_cast<int>(list.size()) - 1);
 
-    // List items
     for (size_t i = 0; i < list.size(); ++i) {
         const auto& item = list[i];
         bool is_selected = (static_cast<int>(i) == m_current_index);
-
-        auto item_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->padding(10, 8)
-            ->spacing(10)
-            ->build();
-
-        // Left Icon
-        Color icon_color = config->colors.on_surface_variant;
-        if (is_selected) {
-            icon_color = m_preview_focused ? config->colors.on_surface_variant : config->colors.primary;
-        }
-
-        auto icon_view = TextViewBuilder::create()
-            ->text(item->icon.empty() ? "⚙" : item->icon)
-            ->textSize(config->metrics.font_size)
-            ->textColor(icon_color)
-            ->build();
-        LayoutParams icon_lp;
-        icon_lp.width = 24;
-        icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        icon_lp.gravity = Gravity::CenterVertical;
-        item_row->add_view(icon_view, icon_lp);
-
-        // Text container (Title and optional contextual Subtitle)
-        auto text_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(1)
-            ->build();
-
-        auto title_view = TextViewBuilder::create()
-            ->text(item->title)
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->ellipsize(true)
-            ->build();
-        text_box->add_view(title_view);
-
-        if (!item->subtitle.empty()) {
-            Color sub_color = config->colors.on_surface_variant.with_alpha(0.7f);
-            if (is_selected) {
-                sub_color = m_preview_focused ? config->colors.on_surface_variant.with_alpha(0.7f) : config->colors.primary;
-            }
-
-            auto sub_view = TextViewBuilder::create()
-                ->text(item->subtitle)
-                ->caption(true)
-                ->textColor(sub_color)
-                ->ellipsize(true)
-                ->build();
-            text_box->add_view(sub_view);
-        }
-
-        LayoutParams text_lp;
-        text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        text_lp.weight = 1.0f;
-        text_lp.gravity = Gravity::CenterVertical;
-        item_row->add_view(text_box, text_lp);
-
-        // Wrap in CardView for selection styling
-        Color bg = Color::transparent();
-        int stroke_w = 0;
-        Color stroke_col = Color::transparent();
-
-        if (is_selected) {
-            if (m_preview_focused) {
-                // Inactive / dormant selection while focus is in preview controls
-                bg = config->colors.surface_variant.with_alpha(0.50f);
-                stroke_w = 1;
-                stroke_col = config->colors.outline.with_alpha(0.35f);
-            } else {
-                // Active vibrant selection
-                bg = config->colors.primary_container.with_alpha(0.65f);
-                stroke_w = 1;
-                stroke_col = config->colors.primary.with_alpha(0.70f);
-            }
-        }
-
-        auto row_card = CardViewBuilder::create()
-            ->style(is_selected ? CardStyle::Outlined : CardStyle::Filled)
-            ->backgroundColor(bg)
-            ->stroke(stroke_w, stroke_col)
-            ->cornerRadius(get_inner_radius(config))
-            ->elevation(0)
-            ->addView(item_row)
-            ->build();
-
+        auto row_card = create_current_row_card(item, is_selected, i, config);
         if (is_selected) {
             m_selected_row_card = row_card;
         }
-
-        // Click handler
-        row_card->set_on_click_listener([this, i, item]() {
-            if (static_cast<int>(i) != m_current_index) {
-                m_current_index = static_cast<int>(i);
-                m_preview_focused = false;
-                if (m_preview_expanded) {
-                    set_preview_expanded(false);
-                }
-                if (m_window) {
-                    m_window->clear_focus();
-                }
-                rebuild_columns();
-                notify_state_changed();
-            } else if (item->is_category) {
-                navigate_enter();
-            } else {
-                navigate_enter();
-            }
-        });
-
         m_current_layout->add_view(row_card);
     }
 

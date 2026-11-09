@@ -55,6 +55,12 @@ private:
     void deferred_rebuild_preview(int delay_ms = 15);
     void add_preview_card(std::shared_ptr<View> card);
 
+    // Column Element Builders (Modular Single-Responsibility Helpers)
+    std::shared_ptr<View> create_parent_hero_box(const std::shared_ptr<Config>& config);
+    std::shared_ptr<View> create_empty_search_box(const std::shared_ptr<Config>& config);
+    std::shared_ptr<View> create_parent_row_card(const std::shared_ptr<SettingItem>& item, bool is_active, size_t index, const std::shared_ptr<Config>& config);
+    std::shared_ptr<View> create_current_row_card(const std::shared_ptr<SettingItem>& item, bool is_selected, size_t index, const std::shared_ptr<Config>& config);
+
     // Reusable Form Builders
     std::shared_ptr<LinearLayout> create_form_card(const std::shared_ptr<Config>& config);
     void add_form_divider(const std::shared_ptr<LinearLayout>& card, const std::shared_ptr<Config>& config);
