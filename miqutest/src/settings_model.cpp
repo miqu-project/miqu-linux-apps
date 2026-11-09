@@ -82,9 +82,6 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
 
         // 1.3 Ethernet (Leaf)
         auto eth = SettingItem::create_leaf("net_ethernet", "Ethernet", "", "󰈀");
-        eth->has_switch = true;
-        eth->switch_val = true;
-        eth->switch_label = "Ethernet";
         eth->eth_profile = {
             "Wired Connection 1",
             "Connected",

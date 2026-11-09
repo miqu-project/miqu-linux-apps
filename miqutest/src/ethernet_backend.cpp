@@ -280,7 +280,6 @@ void EthernetBackend::sync_item_state(const std::shared_ptr<SettingItem>& item) 
     item->eth_profile.is_enabled = dev.is_enabled;
     item->eth_profile.mtu = dev.mtu;
 
-    item->switch_val = dev.is_enabled;
     item->subtitle = dev.state_str;
 
     // Telemetry

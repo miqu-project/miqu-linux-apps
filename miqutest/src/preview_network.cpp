@@ -888,9 +888,7 @@ void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& ite
 
     bool is_conn = (item->eth_profile.status == "Connected");
     bool has_carrier = item->eth_profile.has_carrier;
-    bool is_enabled = item->eth_profile.is_enabled;
-
-    // 1. Primary Ethernet Switch & Status Card
+    // 1. Primary Ethernet Status Card
     auto eth_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Horizontal)
         ->padding(16, 14)
@@ -924,9 +922,7 @@ void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& ite
     eth_lbl_box->add_view(eth_title);
 
     std::string eth_hint_str;
-    if (!is_enabled) {
-        eth_hint_str = item->eth_profile.iface + " • Interface Disabled";
-    } else if (is_conn) {
+    if (is_conn) {
         eth_hint_str = item->eth_profile.iface + " • Connected (" + item->eth_profile.ip_address + ")";
         if (item->eth_profile.speed_mbps > 0) {
             eth_hint_str += " • " + std::to_string(item->eth_profile.speed_mbps) + " Mbps";
@@ -951,43 +947,35 @@ void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& ite
     elbl_lp.gravity = Gravity::CenterVertical;
     eth_card->add_view(eth_lbl_box, elbl_lp);
 
-    auto primary_sw = SwitchBuilder::create()
-        ->checked(is_enabled)
-        ->onCheckedChanged([this, item](bool checked) {
-            item->eth_profile.is_enabled = checked;
-            item->switch_val = checked;
-            item->last_action_message = checked ? ("Enabling " + item->eth_profile.iface + "...") : ("Disabling " + item->eth_profile.iface + "...");
-            std::thread([this, item, checked]() {
-                EthernetBackend::set_device_enabled(item->eth_profile.iface, checked);
-                std::this_thread::sleep_for(std::chrono::milliseconds(800));
-                if (auto* eng = AppEngine::instance()) {
-                    eng->post_delayed(0, [this, item]() {
-                        EthernetBackend::sync_item_state(item);
-                        item->last_action_message = "";
-                        rebuild_current_column();
-                        deferred_rebuild_preview();
-                        notify_state_changed();
-                    });
-                }
-            }).detach();
-            rebuild_current_column();
-            deferred_rebuild_preview();
-            notify_state_changed();
-        })
+    // Status Badge
+    std::string badge_text = is_conn ? "✓ Connected" : (has_carrier ? "Link Active" : "Unplugged");
+    auto badge_tv = TextViewBuilder::create()
+        ->text(badge_text)
+        ->caption(true)
+        ->textColor(is_conn ? config->colors.primary : config->colors.on_surface_variant)
         ->build();
 
-    LayoutParams sw_lp;
-    sw_lp.width = 44;
-    sw_lp.height = 24;
-    sw_lp.gravity = Gravity::CenterVertical;
-    eth_card->add_view(primary_sw, sw_lp);
+    auto badge_card = CardViewBuilder::create()
+        ->style(CardStyle::Filled)
+        ->backgroundColor(is_conn ? config->colors.primary_container.with_alpha(0.35f) : config->colors.surface_variant.with_alpha(0.5f))
+        ->cornerRadius(get_inner_radius(config))
+        ->elevation(0)
+        ->padding(8, 4)
+        ->addView(badge_tv)
+        ->build();
+    LayoutParams badge_lp;
+    badge_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+    badge_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    badge_lp.gravity = Gravity::CenterVertical;
+    eth_card->add_view(badge_card, badge_lp);
+
     add_preview_card(eth_card);
 
-    // 2. Wired Connection & Configuration Card (Visible when interface is enabled)
-    if (is_enabled) {
-        auto profile_card = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(10)
+    // 2. Wired Connection & Configuration Card
+    auto profile_card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(10)
+
             ->padding(16, 14)
             ->backgroundColor(config->colors.surface)
             ->stroke(1, config->colors.outline.with_alpha(0.3f))
@@ -1577,7 +1565,6 @@ void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& ite
         }
 
         add_preview_card(profile_card);
-    }
 
     // 3. Hardware & Link Telemetry (Live telemetry from backend)
     if (!item->telemetry.empty()) {
