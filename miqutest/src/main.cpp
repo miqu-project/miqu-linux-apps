@@ -19,13 +19,11 @@ int main(int argc, char* argv[]) {
                       << "  --auto-exit      Initialize UI components and exit immediately without entering event loop\n"
                       << "  -h, --help       Display this help message and exit\n\n"
                       << "Keybindings:\n"
-                      << "  [h / Left / Backspace]  Go back to parent directory or leave preview\n"
+                      << "  [h / Left]              Go back to parent directory or leave preview\n"
                       << "  [l / Right / Enter]     Enter folder / category or focus preview controls\n"
                       << "  [j / Down]              Navigate down in list or controls\n"
                       << "  [k / Up]                Navigate up in list or controls\n"
-                      << "  [Space]                 Toggle switch for active setting\n"
-                      << "  [- / + or [ / ]]        Adjust slider value for active setting\n"
-                      << "  [Tab / Shift+Tab]       Cycle preview controls\n"
+                      << "  [z]                     Toggle expand / restore full-width view\n"
                       << "  [q / Escape]            Quit or step back\n";
             return 0;
         } else if (arg == "--init-config") {

@@ -248,19 +248,11 @@ void TestApp::handle_key_press(const KeyPressEvent& event) {
                 if (m_miller_view && m_miller_view->is_searching()) {
                     m_miller_view->set_search_query("");
                 }
-            } else if (m_miller_view && m_miller_view->is_preview_focused()) {
-                m_miller_view->navigate_back();
+            }
+            if (m_miller_view && m_miller_view->is_preview_focused()) {
+                m_miller_view->set_preview_focused(false);
             }
             if (m_window) m_window->schedule_redraw();
-            return;
-        }
-
-        if (event.keysym == XKB_KEY_Tab || event.keysym == XKB_KEY_ISO_Left_Tab) {
-            if (event.has_shift()) {
-                m_window->focus_prev();
-            } else {
-                m_window->focus_next();
-            }
             return;
         }
 
@@ -305,45 +297,11 @@ void TestApp::handle_key_press(const KeyPressEvent& event) {
             m_miller_view->navigate_enter();
             break;
 
-        case XKB_KEY_Tab:
-        case XKB_KEY_ISO_Left_Tab:
-            if (!m_miller_view->is_preview_focused()) {
-                m_miller_view->navigate_enter();
-            } else if (m_window) {
-                if (event.has_shift()) {
-                    m_window->focus_prev();
-                } else {
-                    m_window->focus_next();
-                }
-            }
-            break;
-
         case XKB_KEY_h:
         case XKB_KEY_Left:
-        case XKB_KEY_BackSpace:
             if (!event.has_shift()) {
                 m_miller_view->navigate_back();
             }
-            break;
-
-        case XKB_KEY_space:
-            m_miller_view->toggle_active();
-            break;
-
-        case XKB_KEY_minus:
-        case XKB_KEY_underscore:
-        case XKB_KEY_bracketleft:
-            m_miller_view->adjust_active_slider(-0.05f);
-            break;
-
-        case XKB_KEY_plus:
-        case XKB_KEY_equal:
-        case XKB_KEY_bracketright:
-            m_miller_view->adjust_active_slider(+0.05f);
-            break;
-
-        case XKB_KEY_q:
-            if (m_engine) m_engine->quit();
             break;
 
         case XKB_KEY_Escape:

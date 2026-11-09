@@ -23,18 +23,18 @@ public:
     bool on_scroll(double delta) override;
 
     void set_preview_focused(bool focused);
+    void set_preview_expanded(bool expanded);
+    bool is_preview_expanded() const { return m_preview_expanded; }
 
     // Navigation Controls
     bool navigate_up();
     bool navigate_down();
     bool navigate_enter();
     bool navigate_back();
-    bool toggle_active();
-    bool adjust_active_slider(float delta);
     bool trigger_active_action();
 
     // State Inspection
-    bool can_navigate_back() const { return !m_search_query.empty() || m_preview_focused || !m_path.empty(); }
+    bool can_navigate_back() const { return !m_search_query.empty() || m_preview_expanded || m_preview_focused || !m_path.empty(); }
     void set_search_query(const std::string& query);
     const std::string& get_search_query() const { return m_search_query; }
     bool is_searching() const { return !m_search_query.empty(); }
@@ -48,6 +48,7 @@ public:
 private:
     void rebuild_columns();
     void update_pillar_styles();
+    void update_preview_ribbon();
     void rebuild_parent_column();
     void rebuild_current_column();
     void rebuild_preview_column();
@@ -115,6 +116,7 @@ private:
 
     // Focus state: whether user has entered into the preview column controls
     bool m_preview_focused = false;
+    bool m_preview_expanded = false;
     int m_last_mouse_x = -1;
     int m_last_mouse_y = -1;
 
@@ -125,6 +127,11 @@ private:
     std::shared_ptr<ScrollView> m_current_scroll;
     std::shared_ptr<LinearLayout> m_current_layout;
     std::shared_ptr<View> m_selected_row_card;
+    std::shared_ptr<LinearLayout> m_preview_pillar;
+    std::shared_ptr<LinearLayout> m_preview_ribbon;
+    std::shared_ptr<CardView> m_preview_toggle_btn;
+    std::shared_ptr<TextView> m_preview_toggle_icon;
+    std::shared_ptr<TextView> m_preview_title;
     std::shared_ptr<ScrollView> m_preview_scroll;
     std::shared_ptr<LinearLayout> m_preview_layout;
 

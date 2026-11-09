@@ -108,11 +108,78 @@ void MillerView::init() {
     current_lp.height = static_cast<int>(LayoutDimension::MatchParent);
     add_view(m_current_scroll, current_lp);
 
-    // 3. Column 3: Preview (Right) Pillar
+    // 3. Column 3: Preview (Right) Pillar Container
+    m_preview_pillar = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(4)
+        ->backgroundColor(Color::transparent())
+        ->build();
+
+    auto config = Config::get();
+
+    // 3a. Header Ribbon for Interactive Pillar (sidebar collapse/expand icon + section title)
+    m_preview_ribbon = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->gravity(Gravity::CenterVertical)
+        ->padding(14, 2, 14, 2)
+        ->spacing(8)
+        ->backgroundColor(Color::transparent())
+        ->build();
+
+    m_preview_toggle_icon = TextViewBuilder::create()
+        ->text("|‹")
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.primary)
+        ->build();
+
+    auto icon_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->padding(8, 2)
+        ->gravity(Gravity::Center)
+        ->addView(m_preview_toggle_icon)
+        ->build();
+
+    m_preview_toggle_btn = CardViewBuilder::create()
+        ->style(CardStyle::Filled)
+        ->backgroundColor(config->colors.surface_variant.with_alpha(0.35f))
+        ->elevation(0)
+        ->addView(icon_box)
+        ->build();
+    m_preview_toggle_btn->set_on_click_listener([this]() {
+        set_preview_expanded(!m_preview_expanded);
+    });
+    // Non-focusable: mouse/touch only so keyboard navigation is never interrupted
+    m_preview_toggle_btn->set_focusable(false);
+
+    m_preview_title = TextViewBuilder::create()
+        ->text("")
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface_variant)
+        ->ellipsize(true)
+        ->build();
+    LayoutParams title_lp;
+    title_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    title_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    title_lp.weight = 1.0f;
+    title_lp.gravity = Gravity::CenterVertical;
+    m_preview_ribbon->add_view(m_preview_title, title_lp);
+
+    LayoutParams toggle_lp;
+    toggle_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+    toggle_lp.height = 26;
+    toggle_lp.gravity = Gravity::CenterVertical;
+    m_preview_ribbon->add_view(m_preview_toggle_btn, toggle_lp);
+
+    LayoutParams ribbon_lp;
+    ribbon_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    ribbon_lp.height = 30;
+    m_preview_pillar->add_view(m_preview_ribbon, ribbon_lp);
+
+    // 3b. Scrollable Cards Container
     m_preview_layout = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->spacing(10)
-        ->padding(14, 14)
+        ->padding(14, 4, 14, 14)
         ->backgroundColor(Color::transparent())
         ->build();
 
@@ -121,17 +188,28 @@ void MillerView::init() {
         ->scrollbar(true)
         ->build();
 
-    LayoutParams preview_lp;
-    preview_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    preview_lp.height = static_cast<int>(LayoutDimension::MatchParent);
-    preview_lp.weight = 1.0f;
-    add_view(m_preview_scroll, preview_lp);
+    LayoutParams scroll_lp;
+    scroll_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    scroll_lp.height = static_cast<int>(LayoutDimension::MatchParent);
+    scroll_lp.weight = 1.0f;
+    m_preview_pillar->add_view(m_preview_scroll, scroll_lp);
+
+    LayoutParams pillar_lp;
+    pillar_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    pillar_lp.height = static_cast<int>(LayoutDimension::MatchParent);
+    pillar_lp.weight = 1.0f;
+    add_view(m_preview_pillar, pillar_lp);
 
     sync_theme();
     rebuild_columns();
 }
 
 void MillerView::sync_theme() {
+    auto config = Config::get();
+    if (config && m_preview_toggle_btn) {
+        m_preview_toggle_btn->set_card_background_color(config->colors.surface_variant.with_alpha(0.35f));
+    }
+    update_preview_ribbon();
     update_pillar_styles();
     request_redraw();
 }
@@ -157,11 +235,42 @@ void MillerView::update_pillar_styles() {
         m_current_scroll->set_background_color(Color::transparent());
     }
 
-    // 3. Column 3: Right (Preview) Pillar (Subtle border ONLY when actively focused, transparent background)
-    if (m_preview_scroll) {
-        m_preview_scroll->set_corner_radius(radius);
-        m_preview_scroll->set_stroke(m_preview_focused ? 1 : 0, m_preview_focused ? active_border : Color::transparent());
-        m_preview_scroll->set_background_color(Color::transparent());
+    // 3. Column 3: Right (Preview) Pillar Container (Subtle border ONLY when actively focused in 3-pillar mode)
+    if (m_preview_pillar) {
+        m_preview_pillar->set_corner_radius(radius);
+        bool show_border = m_preview_focused && !m_preview_expanded;
+        m_preview_pillar->set_stroke(show_border ? 1 : 0, show_border ? active_border : Color::transparent());
+        m_preview_pillar->set_background_color(Color::transparent());
+    }
+}
+
+void MillerView::update_preview_ribbon() {
+    if (!m_preview_ribbon) return;
+
+    auto config = Config::get();
+    auto item = get_current_selected_item();
+
+    // Only show the ribbon for leaf items (which have dedicated interactive pages)
+    if (!item || item->is_category) {
+        m_preview_ribbon->set_visibility(Visibility::Gone);
+        return;
+    }
+
+    m_preview_ribbon->set_visibility(Visibility::Visible);
+
+    if (m_preview_title) {
+        std::string title_str = item ? item->title : "";
+        m_preview_title->set_text(title_str);
+        if (config) {
+            m_preview_title->set_text_color(config->colors.on_surface_variant);
+        }
+    }
+
+    if (m_preview_toggle_icon) {
+        m_preview_toggle_icon->set_text(m_preview_expanded ? "|›" : "|‹");
+        if (config) {
+            m_preview_toggle_icon->set_text_color(config->colors.primary);
+        }
     }
 }
 
@@ -183,6 +292,29 @@ void MillerView::set_preview_focused(bool focused) {
     notify_state_changed();
 }
 
+void MillerView::set_preview_expanded(bool expanded) {
+    if (m_preview_expanded == expanded) return;
+    m_preview_expanded = expanded;
+
+    if (m_parent_layout) {
+        m_parent_layout->set_visibility(m_preview_expanded ? Visibility::Gone : Visibility::Visible);
+    }
+    if (m_current_scroll) {
+        m_current_scroll->set_visibility(m_preview_expanded ? Visibility::Gone : Visibility::Visible);
+    }
+
+    if (m_preview_expanded) {
+        set_preview_focused(true);
+    } else {
+        set_preview_focused(false);
+    }
+
+    update_preview_ribbon();
+    update_pillar_styles();
+    request_redraw();
+    notify_state_changed();
+}
+
 bool MillerView::on_mouse_move(int lx, int ly, const Rect& bounds) {
     m_last_mouse_x = lx;
     m_last_mouse_y = ly;
@@ -197,25 +329,14 @@ bool MillerView::on_mouse_button(int lx, int ly, MouseButton button, bool presse
 
     if (button == MouseButton::Left && pressed) {
         // 1. Click within Right Pillar (Preview Column)
-        if (m_preview_scroll && m_preview_scroll->get_bounds().contains(Point(lx, ly))) {
+        if (m_preview_pillar && m_preview_pillar->get_bounds().contains(Point(lx, ly))) {
             if (!m_preview_focused) {
                 set_preview_focused(true);
             }
 
             bool handled = LinearLayout::on_mouse_button(lx, ly, button, pressed, bounds);
             if (!handled) {
-                // Empty space in the right pillar was clicked:
-                // Focus first interactive control, or if none, focus the scroll container
-                if (m_preview_layout) {
-                    std::vector<View*> focusables;
-                    m_preview_layout->collect_focusable_views(focusables);
-                    if (!focusables.empty()) {
-                        focusables.front()->request_focus();
-                    } else if (m_window) {
-                        m_preview_scroll->set_focusable(true);
-                        m_preview_scroll->request_focus();
-                    }
-                }
+                // Empty space in the right pillar was clicked: maintain current scroll position
                 handled = true;
             }
             return handled;
@@ -632,6 +753,9 @@ void MillerView::rebuild_current_column() {
             if (static_cast<int>(i) != m_current_index) {
                 m_current_index = static_cast<int>(i);
                 m_preview_focused = false;
+                if (m_preview_expanded) {
+                    set_preview_expanded(false);
+                }
                 if (m_window) {
                     m_window->clear_focus();
                 }
@@ -640,9 +764,7 @@ void MillerView::rebuild_current_column() {
             } else if (item->is_category) {
                 navigate_enter();
             } else {
-                if (m_preview_focused) {
-                    set_preview_focused(false);
-                }
+                navigate_enter();
             }
         });
 
@@ -677,6 +799,21 @@ void MillerView::deferred_rebuild_preview(int delay_ms) {
     }
 }
 void MillerView::rebuild_preview_column() {
+    int focused_index = -1;
+    if (m_window && m_preview_layout) {
+        View* current_focus = m_window->get_focused_view();
+        if (current_focus) {
+            std::vector<View*> old_focusables;
+            m_preview_layout->collect_focusable_views(old_focusables);
+            for (size_t i = 0; i < old_focusables.size(); ++i) {
+                if (old_focusables[i] == current_focus) {
+                    focused_index = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+    }
+
     m_preview_layout->clear_views();
     m_active_slider = nullptr;
     m_active_slider_label = nullptr;
@@ -684,6 +821,8 @@ void MillerView::rebuild_preview_column() {
 
     auto config = Config::get();
     auto item = get_current_selected_item();
+
+    update_preview_ribbon();
 
     if (!item) {
         render_empty_preview(config);
@@ -696,7 +835,7 @@ void MillerView::rebuild_preview_column() {
     }
 
     // --- DEAD END PREVIEW: INTERACTIVE SETTINGS DETAIL PANEL ---
-    m_preview_layout->set_padding(Padding(14, 14));
+    m_preview_layout->set_padding(Padding(14, 4, 14, 14));
     m_preview_layout->set_divider_spacing(10);
 
     if (item->id == "sound_speaker" || item->id == "sound_mic") {
@@ -740,10 +879,32 @@ void MillerView::rebuild_preview_column() {
     } else {
         render_generic_fallback_preview(item, config);
     }
+
+    // Seamlessly preserve focus on the active control across live updates
+    if (m_window && m_preview_layout) {
+        if (focused_index >= 0) {
+            std::vector<View*> new_focusables;
+            m_preview_layout->collect_focusable_views(new_focusables);
+            if (focused_index < static_cast<int>(new_focusables.size())) {
+                m_window->set_focused_view(new_focusables[focused_index]);
+            } else if (!new_focusables.empty()) {
+                m_window->set_focused_view(new_focusables.front());
+            }
+        } else if (m_preview_focused && m_window->get_focused_view() == nullptr) {
+            std::vector<View*> new_focusables;
+            m_preview_layout->collect_focusable_views(new_focusables);
+            if (!new_focusables.empty()) {
+                m_window->set_focused_view(new_focusables.front());
+            }
+        }
+    }
 }
 
 bool MillerView::navigate_up() {
     cancel_pending_sibling_click();
+    if (m_preview_expanded) {
+        set_preview_expanded(false);
+    }
     if (m_preview_focused) {
         set_preview_focused(false);
     }
@@ -761,6 +922,9 @@ bool MillerView::navigate_up() {
 
 bool MillerView::navigate_down() {
     cancel_pending_sibling_click();
+    if (m_preview_expanded) {
+        set_preview_expanded(false);
+    }
     if (m_preview_focused) {
         set_preview_focused(false);
     }
@@ -786,6 +950,9 @@ bool MillerView::navigate_enter() {
         m_history_indices.push_back(m_current_index);
         m_current_index = 0;
         m_preview_focused = false;
+        if (m_preview_expanded) {
+            set_preview_expanded(false);
+        }
         if (m_current_scroll) {
             m_current_scroll->set_scroll_y(0);
         }
@@ -793,16 +960,13 @@ bool MillerView::navigate_enter() {
         notify_state_changed();
         return true;
     } else {
-        // Entering leaf setting: transfer keyboard focus to the first focusable widget in the preview column
-        set_preview_focused(true);
+        // Entering leaf setting: expand preview to full width!
+        set_preview_expanded(true);
         if (m_preview_layout) {
             std::vector<View*> focusables;
             m_preview_layout->collect_focusable_views(focusables);
-            if (!focusables.empty()) {
-                focusables.front()->request_focus();
-            } else if (m_window) {
-                m_preview_scroll->set_focusable(true);
-                m_preview_scroll->request_focus();
+            if (!focusables.empty() && m_window) {
+                m_window->set_focused_view(focusables.front());
             }
         }
         return true;
@@ -814,6 +978,9 @@ void MillerView::set_search_query(const std::string& query) {
     m_search_results.clear();
     m_current_index = 0;
     m_preview_focused = false;
+    if (m_preview_expanded) {
+        set_preview_expanded(false);
+    }
     if (m_current_scroll) {
         m_current_scroll->set_scroll_y(0);
     }
@@ -860,8 +1027,16 @@ bool MillerView::navigate_back() {
         m_search_results.clear();
         m_current_index = 0;
         m_preview_focused = false;
+        if (m_preview_expanded) {
+            set_preview_expanded(false);
+        }
         rebuild_columns();
         notify_state_changed();
+        return true;
+    }
+
+    if (m_preview_expanded) {
+        set_preview_expanded(false);
         return true;
     }
 
@@ -879,6 +1054,7 @@ bool MillerView::navigate_back() {
             m_current_index = 0;
         }
         m_preview_focused = false;
+        m_preview_expanded = false;
         rebuild_columns();
         notify_state_changed();
         return true;
@@ -887,31 +1063,6 @@ bool MillerView::navigate_back() {
     return false;
 }
 
-bool MillerView::toggle_active() {
-    auto item = get_current_selected_item();
-    if (item && !item->is_category && item->has_switch) {
-        item->switch_val = !item->switch_val;
-        rebuild_columns();
-        notify_state_changed();
-        return true;
-    }
-    return false;
-}
-
-bool MillerView::adjust_active_slider(float delta) {
-    auto item = get_current_selected_item();
-    if (item && !item->is_category && item->has_slider && !item->slider_read_only) {
-        item->slider_val = std::clamp(item->slider_val + delta, 0.0f, 1.0f);
-        if (m_active_slider) {
-            m_active_slider->set_value(item->slider_val);
-        }
-        rebuild_current_column();
-        rebuild_preview_column();
-        notify_state_changed();
-        return true;
-    }
-    return false;
-}
 
 bool MillerView::trigger_active_action() {
     auto item = get_current_selected_item();
