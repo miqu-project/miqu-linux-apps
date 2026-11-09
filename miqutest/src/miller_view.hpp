@@ -43,6 +43,7 @@ public:
 
 private:
     void rebuild_columns();
+    void update_pillar_styles();
     void rebuild_parent_column();
     void rebuild_current_column();
     void rebuild_preview_column();

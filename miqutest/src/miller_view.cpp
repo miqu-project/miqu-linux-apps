@@ -146,40 +146,41 @@ void MillerView::init() {
     m_root_tree = SettingsModel::build_default_tree();
 
     set_orientation(Orientation::Horizontal);
-    set_divider_spacing(0);
+    set_padding(12, 4, 12, 12);
+    set_divider_spacing(10);
     set_background_color(Color::transparent());
 
-    // 1. Column 1: Parent (Backgroundless LinearLayout)
+    // 1. Column 1: Parent Pillar
     m_parent_layout = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->spacing(4)
-        ->padding(12, 12)
+        ->padding(10, 10)
         ->backgroundColor(Color::transparent())
         ->build();
 
     LayoutParams parent_lp;
-    parent_lp.width = 320;
+    parent_lp.width = 280;
     parent_lp.height = static_cast<int>(LayoutDimension::MatchParent);
     add_view(m_parent_layout, parent_lp);
 
-    // 2. Column 2: Current (Backgroundless LinearLayout)
+    // 2. Column 2: Current (Center) Pillar
     m_current_layout = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->spacing(4)
-        ->padding(12, 12)
+        ->padding(10, 10)
         ->backgroundColor(Color::transparent())
         ->build();
 
     LayoutParams current_lp;
-    current_lp.width = 320;
+    current_lp.width = 300;
     current_lp.height = static_cast<int>(LayoutDimension::MatchParent);
     add_view(m_current_layout, current_lp);
 
-    // 3. Column 3: Preview (Backgroundless ScrollView / LinearLayout)
+    // 3. Column 3: Preview (Right) Pillar
     m_preview_layout = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->spacing(10)
-        ->padding(16, 16)
+        ->padding(14, 14)
         ->backgroundColor(Color::transparent())
         ->build();
 
@@ -199,7 +200,37 @@ void MillerView::init() {
 }
 
 void MillerView::sync_theme() {
+    update_pillar_styles();
     request_redraw();
+}
+
+void MillerView::update_pillar_styles() {
+    auto config = Config::get();
+    if (!config) return;
+
+    int radius = get_card_radius(config);
+    Color active_border = config->colors.primary.with_alpha(0.55f);
+
+    // 1. Column 1: Parent Pillar (Always transparent, zero border)
+    if (m_parent_layout) {
+        m_parent_layout->set_corner_radius(radius);
+        m_parent_layout->set_stroke(0, Color::transparent());
+        m_parent_layout->set_background_color(Color::transparent());
+    }
+
+    // 2. Column 2: Center Pillar (Subtle border ONLY when actively focused, transparent background)
+    if (m_current_layout) {
+        m_current_layout->set_corner_radius(radius);
+        m_current_layout->set_stroke(m_preview_focused ? 0 : 1, m_preview_focused ? Color::transparent() : active_border);
+        m_current_layout->set_background_color(Color::transparent());
+    }
+
+    // 3. Column 3: Right (Preview) Pillar (Subtle border ONLY when actively focused, transparent background)
+    if (m_preview_scroll) {
+        m_preview_scroll->set_corner_radius(radius);
+        m_preview_scroll->set_stroke(m_preview_focused ? 1 : 0, m_preview_focused ? active_border : Color::transparent());
+        m_preview_scroll->set_background_color(Color::transparent());
+    }
 }
 
 bool MillerView::on_key(const KeyPressEvent& event) {
@@ -225,6 +256,7 @@ std::shared_ptr<SettingItem> MillerView::get_current_selected_item() const {
 }
 
 void MillerView::notify_state_changed() {
+    update_pillar_styles();
     if (m_on_state_changed) {
         m_on_state_changed();
     }
@@ -232,6 +264,7 @@ void MillerView::notify_state_changed() {
 }
 
 void MillerView::rebuild_columns() {
+    update_pillar_styles();
     rebuild_parent_column();
     rebuild_current_column();
     rebuild_preview_column();
@@ -243,6 +276,41 @@ void MillerView::rebuild_parent_column() {
     auto config = Config::get();
 
     if (m_path.empty() && m_search_query.empty()) {
+        m_parent_layout->set_gravity(Gravity::Center);
+
+        auto hero_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->gravity(Gravity::Center)
+            ->padding(16, 24)
+            ->spacing(10)
+            ->build();
+
+        auto hero_icon = TextViewBuilder::create()
+            ->text("⚙")
+            ->textSize(static_cast<int>(config->metrics.font_size * 2.8f))
+            ->textColor(config->colors.primary.with_alpha(0.6f))
+            ->center(true)
+            ->build();
+        hero_box->add_view(hero_icon);
+
+        auto hero_title = TextViewBuilder::create()
+            ->text("Settings")
+            ->textSize(static_cast<int>(config->metrics.font_size * 1.3f))
+            ->bold(true)
+            ->textColor(config->colors.on_surface)
+            ->center(true)
+            ->build();
+        hero_box->add_view(hero_title);
+
+        auto hero_hint = TextViewBuilder::create()
+            ->text("↑/↓ Navigate\nEnter Select\nEsc Back")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
+            ->center(true)
+            ->build();
+        hero_box->add_view(hero_hint);
+
+        m_parent_layout->add_view(hero_box);
         return;
     }
 
@@ -412,10 +480,15 @@ void MillerView::rebuild_current_column() {
             ->build();
 
         // Left Icon
+        Color icon_color = config->colors.on_surface_variant;
+        if (is_selected) {
+            icon_color = m_preview_focused ? config->colors.on_surface_variant : config->colors.primary;
+        }
+
         auto icon_view = TextViewBuilder::create()
             ->text(item->icon.empty() ? "⚙" : item->icon)
             ->textSize(config->metrics.font_size)
-            ->textColor(is_selected ? config->colors.primary : config->colors.on_surface_variant)
+            ->textColor(icon_color)
             ->build();
         LayoutParams icon_lp;
         icon_lp.width = 24;
@@ -438,10 +511,15 @@ void MillerView::rebuild_current_column() {
         text_box->add_view(title_view);
 
         if (!item->subtitle.empty()) {
+            Color sub_color = config->colors.on_surface_variant.with_alpha(0.7f);
+            if (is_selected) {
+                sub_color = m_preview_focused ? config->colors.on_surface_variant.with_alpha(0.7f) : config->colors.primary;
+            }
+
             auto sub_view = TextViewBuilder::create()
                 ->text(item->subtitle)
                 ->caption(true)
-                ->textColor(is_selected ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
+                ->textColor(sub_color)
                 ->ellipsize(true)
                 ->build();
             text_box->add_view(sub_view);
@@ -454,12 +532,24 @@ void MillerView::rebuild_current_column() {
         text_lp.gravity = Gravity::CenterVertical;
         item_row->add_view(text_box, text_lp);
 
-
-
         // Wrap in CardView for selection styling
-        Color bg = is_selected ? config->colors.primary_container.with_alpha(0.65f) : Color::transparent();
-        int stroke_w = is_selected ? 1 : 0;
-        Color stroke_col = is_selected ? config->colors.primary.with_alpha(0.7f) : Color::transparent();
+        Color bg = Color::transparent();
+        int stroke_w = 0;
+        Color stroke_col = Color::transparent();
+
+        if (is_selected) {
+            if (m_preview_focused) {
+                // Inactive / dormant selection while focus is in preview controls
+                bg = config->colors.surface_variant.with_alpha(0.50f);
+                stroke_w = 1;
+                stroke_col = config->colors.outline.with_alpha(0.35f);
+            } else {
+                // Active vibrant selection
+                bg = config->colors.primary_container.with_alpha(0.65f);
+                stroke_w = 1;
+                stroke_col = config->colors.primary.with_alpha(0.70f);
+            }
+        }
 
         auto row_card = CardViewBuilder::create()
             ->style(is_selected ? CardStyle::Outlined : CardStyle::Filled)
@@ -481,6 +571,7 @@ void MillerView::rebuild_current_column() {
                 navigate_enter();
             } else {
                 m_preview_focused = !m_preview_focused;
+                rebuild_current_column();
                 rebuild_preview_column();
                 notify_state_changed();
             }
@@ -5311,6 +5402,7 @@ bool MillerView::navigate_enter() {
             if (!focusables.empty()) {
                 m_preview_focused = true;
                 focusables.front()->request_focus();
+                rebuild_current_column();
                 notify_state_changed();
                 return true;
             }
@@ -5374,6 +5466,7 @@ bool MillerView::navigate_back() {
 
     if (m_preview_focused) {
         m_preview_focused = false;
+        rebuild_current_column();
         notify_state_changed();
         return true;
     }
