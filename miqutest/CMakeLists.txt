@@ -17,6 +17,7 @@ add_executable(miqutest
     src/main.cpp
     src/settings_model.cpp
     src/miller_view.cpp
+    src/preview_renderers.cpp
     src/test_app.cpp
 )
 

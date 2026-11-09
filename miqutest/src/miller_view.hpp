@@ -18,6 +18,11 @@ public:
     void sync_theme();
 
     bool on_key(const KeyPressEvent& event) override;
+    bool on_mouse_move(int lx, int ly, const Rect& bounds) override;
+    bool on_mouse_button(int lx, int ly, MouseButton button, bool pressed, const Rect& bounds) override;
+    bool on_scroll(double delta) override;
+
+    void set_preview_focused(bool focused);
 
     // Navigation Controls
     bool navigate_up();
@@ -34,7 +39,6 @@ public:
     const std::string& get_search_query() const { return m_search_query; }
     bool is_searching() const { return !m_search_query.empty(); }
     std::string get_breadcrumb_path() const;
-    std::string get_status_text() const;
     bool is_preview_focused() const { return m_preview_focused; }
 
     void set_on_state_changed(std::function<void()> cb) {
@@ -64,13 +68,29 @@ private:
                          const std::vector<std::string>& items, int cur_idx,
                          std::function<void(int, const std::string&)> on_select);
 
-    // Focused Domain Preview Renderers
+    // Modular Domain Preview Renderers (preview_renderers.cpp)
     void render_empty_preview(const std::shared_ptr<Config>& config);
     void render_category_children_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_sound_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_wifi_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_bluetooth_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_ethernet_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_airplane_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_dns_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_firewall_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_app_network_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_brightness_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_tiling_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_wallpaper_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_keybindings_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_timeout_lock_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_night_light_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_battery_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_power_mode_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_monitors_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_installed_app_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_default_app_role_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
+    void render_generic_fallback_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
 
     std::shared_ptr<SettingItem> get_current_selected_item() const;
     const std::vector<std::shared_ptr<SettingItem>>& get_current_list() const;
@@ -95,21 +115,22 @@ private:
 
     // Focus state: whether user has entered into the preview column controls
     bool m_preview_focused = false;
+    int m_last_mouse_x = -1;
+    int m_last_mouse_y = -1;
 
     std::function<void()> m_on_state_changed;
 
-    // UI containers (Backgroundless LinearLayout pillars)
+    // UI containers (Backgroundless LinearLayout pillars with ScrollViews)
     std::shared_ptr<LinearLayout> m_parent_layout;
+    std::shared_ptr<ScrollView> m_current_scroll;
     std::shared_ptr<LinearLayout> m_current_layout;
+    std::shared_ptr<View> m_selected_row_card;
     std::shared_ptr<ScrollView> m_preview_scroll;
     std::shared_ptr<LinearLayout> m_preview_layout;
 
     // Reference to active widgets for direct manipulation
-    std::shared_ptr<Switch> m_active_primary_switch;
-    std::shared_ptr<Switch> m_active_secondary_switch;
     std::shared_ptr<Slider> m_active_slider;
     std::shared_ptr<TextView> m_active_slider_label;
-    std::shared_ptr<Button> m_active_action_btn;
     std::shared_ptr<TextView> m_active_action_feedback;
     std::string m_search_query;
     std::vector<std::shared_ptr<SettingItem>> m_search_results;

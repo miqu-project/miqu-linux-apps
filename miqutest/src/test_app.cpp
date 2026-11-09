@@ -242,14 +242,25 @@ void TestApp::handle_key_press(const KeyPressEvent& event) {
     if (m_window && m_window->get_focused_view() && m_window->get_focused_view()->has_focus()) {
         if (event.keysym == XKB_KEY_Escape) {
             m_window->clear_focus();
-            if (m_search_view) {
+            if (m_search_view && m_search_view->has_focus()) {
                 m_search_view->set_focused(false);
                 m_search_view->set_query("");
-            }
-            if (m_miller_view && m_miller_view->is_searching()) {
-                m_miller_view->set_search_query("");
+                if (m_miller_view && m_miller_view->is_searching()) {
+                    m_miller_view->set_search_query("");
+                }
+            } else if (m_miller_view && m_miller_view->is_preview_focused()) {
+                m_miller_view->navigate_back();
             }
             if (m_window) m_window->schedule_redraw();
+            return;
+        }
+
+        if (event.keysym == XKB_KEY_Tab || event.keysym == XKB_KEY_ISO_Left_Tab) {
+            if (event.has_shift()) {
+                m_window->focus_prev();
+            } else {
+                m_window->focus_next();
+            }
             return;
         }
 
@@ -292,6 +303,19 @@ void TestApp::handle_key_press(const KeyPressEvent& event) {
         case XKB_KEY_Return:
         case XKB_KEY_KP_Enter:
             m_miller_view->navigate_enter();
+            break;
+
+        case XKB_KEY_Tab:
+        case XKB_KEY_ISO_Left_Tab:
+            if (!m_miller_view->is_preview_focused()) {
+                m_miller_view->navigate_enter();
+            } else if (m_window) {
+                if (event.has_shift()) {
+                    m_window->focus_prev();
+                } else {
+                    m_window->focus_next();
+                }
+            }
             break;
 
         case XKB_KEY_h:
