@@ -1,6 +1,8 @@
 #include "miller_view.hpp"
 #include "preview_common.hpp"
 #include "wifi_backend.hpp"
+#include "bluetooth_backend.hpp"
+#include "bluetooth_agent.hpp"
 #include "ethernet_backend.hpp"
 #include "firewall_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
@@ -307,10 +309,11 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
             }
 
             Color row_bg = is_conn ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
+            int stroke_w = is_conn ? 1 : 0;
+            Color stroke_col = is_conn ? config->colors.primary.with_alpha(0.5f) : Color::transparent();
 
-            auto net_row_card = CardViewBuilder::create()
-                ->style(CardStyle::Filled)
-                ->backgroundColor(row_bg)
+            auto net_row_card = HoverCardViewBuilder::create()
+                ->selected(is_conn, row_bg, stroke_w, stroke_col)
                 ->cornerRadius(get_inner_radius(config))
                 ->elevation(0)
                 ->addView(row_content)
@@ -594,7 +597,489 @@ void MillerView::render_wifi_preview(const std::shared_ptr<SettingItem>& item, c
     return;
 }
 
+void MillerView::init_bluetooth_agent() {
+    if (!BluetoothBackend::is_bluetooth_installed() || !BluetoothBackend::is_bluetooth_available()) {
+        return;
+    }
+
+    if (!m_bt_agent) {
+        m_bt_agent = std::make_unique<BluetoothAgent>();
+    }
+
+    // 1. Numeric Comparison (SSP) pairing callback - standard for modern phones, tablets, PCs
+    m_bt_agent->set_on_request_confirmation([this](const std::string& dev_name, const std::string& mac, uint32_t passkey, BluetoothAgent::ConfirmCallback cb) {
+        show_numeric_comparison_dialog(dev_name, mac, passkey, cb);
+    });
+
+    // 2. Passkey Display callback - for typing passkey on wireless keyboards
+    m_bt_agent->set_on_display_passkey([this](const std::string& dev_name, const std::string& mac, uint32_t passkey) {
+        show_passkey_display_dialog(dev_name, mac, passkey);
+    });
+
+    // 3. Authorization callback - for incoming connection requests
+    m_bt_agent->set_on_request_authorization([this](const std::string& dev_name, const std::string& mac, BluetoothAgent::AuthorizationCallback cb) {
+        show_authorization_dialog(dev_name, mac, cb);
+    });
+
+    // 4. PIN code callback - for legacy devices or PIN verification (e.g. 0000 for headsets)
+    m_bt_agent->set_on_request_pin([this](const std::string& dev_name, const std::string& mac, BluetoothAgent::PinCallback cb) {
+        show_pin_request_dialog(dev_name, mac, cb);
+    });
+
+    // 5. Cancel callback - when pairing request expires or is cancelled on remote device
+    m_bt_agent->set_on_cancel([this]() {
+        if (m_active_pairing_popup) {
+            m_active_pairing_popup->dismiss();
+            m_active_pairing_popup = nullptr;
+        }
+        deferred_rebuild_preview();
+    });
+
+    m_bt_agent->start();
+}
+
+void MillerView::show_numeric_comparison_dialog(
+    const std::string& dev_name,
+    const std::string& mac,
+    uint32_t passkey,
+    std::function<void(bool)> cb
+) {
+    if (m_active_pairing_popup) {
+        m_active_pairing_popup->dismiss();
+        m_active_pairing_popup = nullptr;
+    }
+
+    auto config = Config::get();
+
+    // Format 6-digit passkey with leading zeros (e.g. "384 291")
+    std::ostringstream ss;
+    ss << std::setw(6) << std::setfill('0') << passkey;
+    std::string raw_code = ss.str();
+    std::string formatted_code = raw_code.substr(0, 3) + " " + raw_code.substr(3, 3);
+
+    auto card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(20, 18)
+        ->spacing(12)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.35f))
+        ->cornerRadius(get_card_radius(config))
+        ->build();
+
+    // Header row with Bluetooth icon and device info
+    auto hdr = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->spacing(10)
+        ->gravity(Gravity::CenterVertical)
+        ->build();
+
+    auto icon = TextViewBuilder::create()
+        ->text("󰂯")
+        ->textSize(config->metrics.font_size + 4)
+        ->textColor(config->colors.primary)
+        ->build();
+    hdr->add_view(icon);
+
+    auto title_col = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(2)
+        ->build();
+
+    auto title = TextViewBuilder::create()
+        ->text("Bluetooth Pairing Request")
+        ->bold(true)
+        ->textSize(config->metrics.font_size + 1)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    title_col->add_view(title);
+
+    auto subtitle = TextViewBuilder::create()
+        ->text(dev_name + " (" + mac + ")")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant)
+        ->build();
+    title_col->add_view(subtitle);
+
+    LayoutParams tcol_lp;
+    tcol_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    tcol_lp.weight = 1.0f;
+    hdr->add_view(title_col, tcol_lp);
+    card->add_view(hdr);
+
+    // Passkey display box
+    auto pass_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(14, 12)
+        ->spacing(4)
+        ->gravity(Gravity::CenterHorizontal)
+        ->backgroundColor(config->colors.surface_variant.with_alpha(0.5f))
+        ->cornerRadius(get_inner_radius(config))
+        ->build();
+
+    auto pass_lbl = TextViewBuilder::create()
+        ->text("CONFIRM PAIRING PASSKEY")
+        ->caption(true)
+        ->bold(true)
+        ->textColor(config->colors.on_surface_variant.with_alpha(0.8f))
+        ->build();
+    pass_box->add_view(pass_lbl);
+
+    auto pass_code = TextViewBuilder::create()
+        ->text(formatted_code)
+        ->bold(true)
+        ->textSize(config->metrics.font_size + 12)
+        ->textColor(config->colors.primary)
+        ->build();
+    pass_box->add_view(pass_code);
+    card->add_view(pass_box);
+
+    auto desc = TextViewBuilder::create()
+        ->text("Does the 6-digit code on " + dev_name + " match the passkey above? Confirm on both devices to authorize connection.")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant)
+        ->build();
+    card->add_view(desc);
+
+    // Button row
+    auto btn_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->spacing(8)
+        ->gravity(Gravity::End)
+        ->build();
+
+    auto cancel_btn = ButtonBuilder::create()
+        ->text("Reject")
+        ->style(ButtonStyle::Outlined)
+        ->padding(12, 6)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this, cb, dev_name]() {
+            if (m_active_pairing_popup) {
+                m_active_pairing_popup->dismiss();
+                m_active_pairing_popup = nullptr;
+            }
+            cb(false);
+            auto cur = get_current_selected_item();
+            if (cur) {
+                cur->last_action_message = "Pairing rejected with " + dev_name;
+                deferred_rebuild_preview();
+                notify_state_changed();
+            }
+        })
+        ->build();
+    btn_row->add_view(cancel_btn);
+
+    auto pair_btn = ButtonBuilder::create()
+        ->text("Confirm & Pair")
+        ->primary(true)
+        ->padding(14, 6)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this, cb, dev_name]() {
+            if (m_active_pairing_popup) {
+                m_active_pairing_popup->dismiss();
+                m_active_pairing_popup = nullptr;
+            }
+            cb(true);
+            auto cur = get_current_selected_item();
+            if (cur) {
+                cur->last_action_message = "Pairing confirmed with " + dev_name + " • Bonding...";
+                deferred_rebuild_preview();
+                notify_state_changed();
+            }
+        })
+        ->build();
+    btn_row->add_view(pair_btn);
+    card->add_view(btn_row);
+
+    m_active_pairing_popup = PopupWindowBuilder::create()
+        ->content(card)
+        ->width(360)
+        ->elevation(12)
+        ->cornerRadius(get_card_radius(config))
+        ->dismissOnOutsideClick(false)
+        ->dismissOnEscape(true)
+        ->build();
+
+    auto anchor = m_preview_ribbon ? m_preview_ribbon : (m_preview_pillar ? m_preview_pillar : shared_from_this());
+    m_active_pairing_popup->show_as_dropdown(anchor, PopupGravity::BottomCenter);
+    request_redraw();
+    if (auto* win = get_window()) {
+        win->schedule_redraw();
+    }
+}
+
+void MillerView::show_passkey_display_dialog(const std::string& dev_name, const std::string& mac, uint32_t passkey) {
+    if (m_active_pairing_popup) {
+        m_active_pairing_popup->dismiss();
+        m_active_pairing_popup = nullptr;
+    }
+    auto config = Config::get();
+    std::ostringstream ss;
+    ss << std::setw(6) << std::setfill('0') << passkey;
+    std::string raw_code = ss.str();
+    std::string formatted_code = raw_code.substr(0, 3) + " " + raw_code.substr(3, 3);
+
+    auto card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(20, 18)
+        ->spacing(12)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.35f))
+        ->cornerRadius(get_card_radius(config))
+        ->build();
+
+    auto title = TextViewBuilder::create()
+        ->text("Type Passkey on Keyboard")
+        ->bold(true)
+        ->textSize(config->metrics.font_size + 1)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    card->add_view(title);
+
+    auto pass_code = TextViewBuilder::create()
+        ->text(formatted_code)
+        ->bold(true)
+        ->textSize(config->metrics.font_size + 12)
+        ->textColor(config->colors.primary)
+        ->build();
+    card->add_view(pass_code);
+
+    auto desc = TextViewBuilder::create()
+        ->text("Type this 6-digit code on " + dev_name + " (" + mac + ") and press Return / Enter.")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant)
+        ->build();
+    card->add_view(desc);
+
+    auto close_btn = ButtonBuilder::create()
+        ->text("Dismiss")
+        ->style(ButtonStyle::Outlined)
+        ->padding(12, 6)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this]() {
+            if (m_active_pairing_popup) {
+                m_active_pairing_popup->dismiss();
+                m_active_pairing_popup = nullptr;
+            }
+        })
+        ->build();
+    card->add_view(close_btn);
+
+    m_active_pairing_popup = PopupWindowBuilder::create()
+        ->content(card)
+        ->width(340)
+        ->elevation(12)
+        ->cornerRadius(get_card_radius(config))
+        ->dismissOnOutsideClick(true)
+        ->dismissOnEscape(true)
+        ->build();
+
+    auto anchor = m_preview_ribbon ? m_preview_ribbon : (m_preview_pillar ? m_preview_pillar : shared_from_this());
+    m_active_pairing_popup->show_as_dropdown(anchor, PopupGravity::BottomCenter);
+    request_redraw();
+    if (auto* win = get_window()) {
+        win->schedule_redraw();
+    }
+}
+
+void MillerView::show_authorization_dialog(const std::string& dev_name, const std::string& mac, std::function<void(bool)> cb) {
+    if (m_active_pairing_popup) {
+        m_active_pairing_popup->dismiss();
+        m_active_pairing_popup = nullptr;
+    }
+    auto config = Config::get();
+
+    auto card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(18, 16)
+        ->spacing(12)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.35f))
+        ->cornerRadius(get_card_radius(config))
+        ->build();
+
+    auto title = TextViewBuilder::create()
+        ->text("Bluetooth Connection Request")
+        ->bold(true)
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    card->add_view(title);
+
+    auto desc = TextViewBuilder::create()
+        ->text("Device " + dev_name + " (" + mac + ") is requesting to connect. Authorize this connection?")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant)
+        ->build();
+    card->add_view(desc);
+
+    auto btn_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->spacing(8)
+        ->gravity(Gravity::End)
+        ->build();
+
+    auto btn_deny = ButtonBuilder::create()
+        ->text("Deny")
+        ->style(ButtonStyle::Outlined)
+        ->padding(10, 4)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this, cb]() {
+            if (m_active_pairing_popup) {
+                m_active_pairing_popup->dismiss();
+                m_active_pairing_popup = nullptr;
+            }
+            cb(false);
+        })
+        ->build();
+    btn_row->add_view(btn_deny);
+
+    auto btn_allow = ButtonBuilder::create()
+        ->text("Allow")
+        ->primary(true)
+        ->padding(12, 4)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this, cb]() {
+            if (m_active_pairing_popup) {
+                m_active_pairing_popup->dismiss();
+                m_active_pairing_popup = nullptr;
+            }
+            cb(true);
+        })
+        ->build();
+    btn_row->add_view(btn_allow);
+    card->add_view(btn_row);
+
+    m_active_pairing_popup = PopupWindowBuilder::create()
+        ->content(card)
+        ->width(320)
+        ->elevation(12)
+        ->cornerRadius(get_card_radius(config))
+        ->dismissOnOutsideClick(false)
+        ->dismissOnEscape(true)
+        ->build();
+
+    auto anchor = m_preview_ribbon ? m_preview_ribbon : (m_preview_pillar ? m_preview_pillar : shared_from_this());
+    m_active_pairing_popup->show_as_dropdown(anchor, PopupGravity::BottomCenter);
+    request_redraw();
+    if (auto* win = get_window()) {
+        win->schedule_redraw();
+    }
+}
+
+void MillerView::show_pin_request_dialog(
+    const std::string& dev_name,
+    const std::string& mac,
+    std::function<void(const std::string&)> cb
+) {
+    if (m_active_pairing_popup) {
+        m_active_pairing_popup->dismiss();
+        m_active_pairing_popup = nullptr;
+    }
+    auto config = Config::get();
+
+    auto card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->padding(18, 16)
+        ->spacing(12)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.35f))
+        ->cornerRadius(get_card_radius(config))
+        ->build();
+
+    auto title = TextViewBuilder::create()
+        ->text("Bluetooth PIN Request")
+        ->bold(true)
+        ->textSize(config->metrics.font_size + 1)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    card->add_view(title);
+
+    auto subtitle = TextViewBuilder::create()
+        ->text(dev_name + " (" + mac + ") requires a PIN code to pair. Standard audio accessories typically use 0000.")
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant)
+        ->build();
+    card->add_view(subtitle);
+
+    auto btn_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->spacing(8)
+        ->gravity(Gravity::End)
+        ->build();
+
+    auto btn_reject = ButtonBuilder::create()
+        ->text("Reject")
+        ->style(ButtonStyle::Outlined)
+        ->padding(12, 6)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this, cb, dev_name]() {
+            if (m_active_pairing_popup) {
+                m_active_pairing_popup->dismiss();
+                m_active_pairing_popup = nullptr;
+            }
+            cb("");
+            auto cur = get_current_selected_item();
+            if (cur) {
+                cur->last_action_message = "PIN entry rejected for " + dev_name;
+                deferred_rebuild_preview();
+                notify_state_changed();
+            }
+        })
+        ->build();
+    btn_row->add_view(btn_reject);
+
+    auto btn_default_pin = ButtonBuilder::create()
+        ->text("Pair (0000)")
+        ->primary(true)
+        ->padding(14, 6)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this, cb, dev_name]() {
+            if (m_active_pairing_popup) {
+                m_active_pairing_popup->dismiss();
+                m_active_pairing_popup = nullptr;
+            }
+            cb("0000");
+            auto cur = get_current_selected_item();
+            if (cur) {
+                cur->last_action_message = "Pairing with " + dev_name + " • Sending PIN 0000...";
+                deferred_rebuild_preview();
+                notify_state_changed();
+            }
+        })
+        ->build();
+    btn_row->add_view(btn_default_pin);
+    card->add_view(btn_row);
+
+    m_active_pairing_popup = PopupWindowBuilder::create()
+        ->content(card)
+        ->width(340)
+        ->elevation(12)
+        ->cornerRadius(get_card_radius(config))
+        ->dismissOnOutsideClick(false)
+        ->dismissOnEscape(true)
+        ->build();
+
+    auto anchor = m_preview_ribbon ? m_preview_ribbon : (m_preview_pillar ? m_preview_pillar : shared_from_this());
+    m_active_pairing_popup->show_as_dropdown(anchor, PopupGravity::BottomCenter);
+    request_redraw();
+    if (auto* win = get_window()) {
+        win->schedule_redraw();
+    }
+}
+
 void MillerView::render_bluetooth_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    init_bluetooth_agent();
+    if (BluetoothBackend::is_bluetooth_installed() && BluetoothBackend::is_bluetooth_available()) {
+        if (item->last_action_message.find("Connecting") == std::string::npos &&
+            item->last_action_message.find("Scanning") == std::string::npos &&
+            item->last_action_message.find("Pairing") == std::string::npos &&
+            item->last_action_message.find("Removing") == std::string::npos &&
+            item->last_action_message.find("Disconnecting") == std::string::npos &&
+            item->last_action_message.find("Turning") == std::string::npos) {
+            BluetoothBackend::sync_item_state(item);
+        }
+    }
+
     // 1. Bluetooth Power Toggle Card
     auto bt_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Horizontal)
@@ -641,7 +1126,12 @@ void MillerView::render_bluetooth_preview(const std::shared_ptr<SettingItem>& it
     } else if (!connected_device_name.empty()) {
         bt_hint_str = "Connected to " + connected_device_name;
     } else {
-        bt_hint_str = "Discoverable as Miqu-Desktop";
+        BluetoothAdapterInfo adapter = BluetoothBackend::get_adapter_info();
+        if (!adapter.name.empty()) {
+            bt_hint_str = "Discoverable as " + adapter.name;
+        } else {
+            bt_hint_str = "Discoverable as Miqu-Desktop";
+        }
     }
 
     auto bt_hint = TextViewBuilder::create()
@@ -662,6 +1152,31 @@ void MillerView::render_bluetooth_preview(const std::shared_ptr<SettingItem>& it
         ->checked(item->switch_val)
         ->onCheckedChanged([this, item](bool checked) {
             item->switch_val = checked;
+            item->last_action_message = checked ? "Turning Bluetooth on..." : "Turning Bluetooth off...";
+            std::thread([this, item, checked]() {
+                if (BluetoothBackend::is_bluetooth_installed() && BluetoothBackend::is_bluetooth_available()) {
+                    BluetoothBackend::set_powered(checked);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+                    if (auto* eng = AppEngine::instance()) {
+                        eng->post_delayed(0, [this, item]() {
+                            BluetoothBackend::sync_item_state(item);
+                            item->last_action_message = "";
+                            rebuild_current_column();
+                            deferred_rebuild_preview();
+                            notify_state_changed();
+                        });
+                    }
+                } else {
+                    if (auto* eng = AppEngine::instance()) {
+                        eng->post_delayed(300, [this, item]() {
+                            item->last_action_message = "";
+                            rebuild_current_column();
+                            deferred_rebuild_preview();
+                            notify_state_changed();
+                        });
+                    }
+                }
+            }).detach();
             rebuild_current_column();
             deferred_rebuild_preview();
             notify_state_changed();
@@ -704,37 +1219,62 @@ void MillerView::render_bluetooth_preview(const std::shared_ptr<SettingItem>& it
         dev_header_row->add_view(dev_title, dt_lp);
 
         auto on_scan = [this, item]() {
-            bool found_new = false;
-            bool already_has_bose = false;
-            for (const auto& d : item->bt_devices) {
-                if (d.name == "Bose QuietComfort 45") {
-                    already_has_bose = true;
-                    break;
-                }
-            }
-            if (!already_has_bose) {
-                item->bt_devices.push_back({"Bose QuietComfort 45", "Tap to pair", "󰋋", ""});
-                item->last_action_message = "Scan completed • Found Bose QuietComfort 45";
-                found_new = true;
-            } else {
-                bool already_has_mx = false;
-                for (const auto& d : item->bt_devices) {
-                    if (d.name == "MX Anywhere 3S") {
-                        already_has_mx = true;
-                        break;
-                    }
-                }
-                if (!already_has_mx) {
-                    item->bt_devices.push_back({"MX Anywhere 3S", "Tap to pair", "󰍽", ""});
-                    item->last_action_message = "Scan completed • Found MX Anywhere 3S";
-                    found_new = true;
-                }
-            }
-            if (!found_new) {
-                item->last_action_message = "Scan completed • All nearby devices discovered";
-            }
+            item->last_action_message = "Scanning for nearby Bluetooth devices...";
             rebuild_preview_column();
             notify_state_changed();
+
+            std::thread([this, item]() {
+                if (BluetoothBackend::is_bluetooth_installed() && BluetoothBackend::is_bluetooth_available()) {
+                    BluetoothBackend::start_scan();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(3500));
+                    BluetoothBackend::stop_scan();
+                    if (auto* eng = AppEngine::instance()) {
+                        eng->post_delayed(0, [this, item]() {
+                            BluetoothBackend::sync_item_state(item);
+                            item->last_action_message = "Scan completed";
+                            rebuild_preview_column();
+                            notify_state_changed();
+                        });
+                    }
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    if (auto* eng = AppEngine::instance()) {
+                        eng->post_delayed(0, [this, item]() {
+                            bool found_new = false;
+                            bool already_has_bose = false;
+                            for (const auto& d : item->bt_devices) {
+                                if (d.name == "Bose QuietComfort 45") {
+                                    already_has_bose = true;
+                                    break;
+                                }
+                            }
+                            if (!already_has_bose) {
+                                item->bt_devices.push_back({"Bose QuietComfort 45", "Tap to pair", "󰋋", ""});
+                                item->last_action_message = "Scan completed • Found Bose QuietComfort 45";
+                                found_new = true;
+                            } else {
+                                bool already_has_mx = false;
+                                for (const auto& d : item->bt_devices) {
+                                    if (d.name == "MX Anywhere 3S") {
+                                        already_has_mx = true;
+                                        break;
+                                    }
+                                }
+                                if (!already_has_mx) {
+                                    item->bt_devices.push_back({"MX Anywhere 3S", "Tap to pair", "󰍽", ""});
+                                    item->last_action_message = "Scan completed • Found MX Anywhere 3S";
+                                    found_new = true;
+                                }
+                            }
+                            if (!found_new) {
+                                item->last_action_message = "Scan completed • All nearby devices discovered";
+                            }
+                            rebuild_preview_column();
+                            notify_state_changed();
+                        });
+                    }
+                }
+            }).detach();
         };
 
         auto scan_btn = ButtonBuilder::create()
@@ -834,17 +1374,227 @@ void MillerView::render_bluetooth_preview(const std::shared_ptr<SettingItem>& it
             }
 
             Color row_bg = is_conn ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
+            int stroke_w = is_conn ? 1 : 0;
+            Color stroke_col = is_conn ? config->colors.primary.with_alpha(0.5f) : Color::transparent();
 
-            auto dev_row_card = CardViewBuilder::create()
-                ->style(CardStyle::Filled)
-                ->backgroundColor(row_bg)
+            auto dev_row_card = HoverCardViewBuilder::create()
+                ->selected(is_conn, row_bg, stroke_w, stroke_col)
                 ->cornerRadius(get_inner_radius(config))
                 ->elevation(0)
                 ->addView(row_content)
                 ->build();
 
-            auto on_dev_connect = [this, item, di]() {
+            auto on_dev_connect = [this, item, di, dev_row_card]() {
                 if (di >= item->bt_devices.size()) return;
+                auto dev = item->bt_devices[di];
+
+                if (BluetoothBackend::is_bluetooth_installed() && BluetoothBackend::is_bluetooth_available() && !dev.mac.empty()) {
+                    auto config = Config::get();
+                    auto popup_col = LinearLayoutBuilder::create()
+                        ->orientation(Orientation::Vertical)
+                        ->padding(16, 14)
+                        ->spacing(10)
+                        ->backgroundColor(config->colors.surface)
+                        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+                        ->cornerRadius(get_card_radius(config))
+                        ->build();
+
+                    auto title = TextViewBuilder::create()
+                        ->text(dev.name)
+                        ->bold(true)
+                        ->textSize(config->metrics.font_size)
+                        ->textColor(config->colors.on_surface)
+                        ->build();
+                    popup_col->add_view(title);
+
+                    std::string sub_info = dev.mac;
+                    if (!dev.battery.empty()) {
+                        sub_info += " • Battery " + dev.battery;
+                    }
+                    sub_info += " • " + dev.status;
+
+                    auto sub = TextViewBuilder::create()
+                        ->text(sub_info)
+                        ->caption(true)
+                        ->textColor(config->colors.on_surface_variant)
+                        ->build();
+                    popup_col->add_view(sub);
+
+                    auto btn_row = LinearLayoutBuilder::create()
+                        ->orientation(Orientation::Horizontal)
+                        ->spacing(8)
+                        ->gravity(Gravity::End)
+                        ->build();
+
+                    if (dev.is_paired) {
+                        auto btn_forget = ButtonBuilder::create()
+                            ->text("Forget")
+                            ->style(ButtonStyle::Outlined)
+                            ->padding(10, 4)
+                            ->cornerRadius(get_btn_radius(config))
+                            ->onClick([this, item, dev]() {
+                                if (m_active_popup) {
+                                    m_active_popup->dismiss();
+                                    m_active_popup = nullptr;
+                                }
+                                item->last_action_message = "Removing " + dev.name + "...";
+                                rebuild_preview_column();
+                                std::thread([this, item, dev]() {
+                                    BluetoothBackend::forget_device(dev.mac);
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                    if (auto* eng = AppEngine::instance()) {
+                                        eng->post_delayed(0, [this, item, dev]() {
+                                            BluetoothBackend::sync_item_state(item);
+                                            item->last_action_message = "Removed device " + dev.name;
+                                            deferred_rebuild_preview();
+                                            notify_state_changed();
+                                        });
+                                    }
+                                }).detach();
+                            })
+                            ->build();
+                        btn_row->add_view(btn_forget);
+                    }
+
+                    if (dev.status == "Connected") {
+                        auto btn_disc = ButtonBuilder::create()
+                            ->text("Disconnect")
+                            ->style(ButtonStyle::Standard)
+                            ->textColor(config->colors.primary)
+                            ->padding(10, 4)
+                            ->cornerRadius(get_btn_radius(config))
+                            ->onClick([this, item, dev]() {
+                                if (m_active_popup) {
+                                    m_active_popup->dismiss();
+                                    m_active_popup = nullptr;
+                                }
+                                item->last_action_message = "Disconnecting " + dev.name + "...";
+                                rebuild_preview_column();
+                                std::thread([this, item, dev]() {
+                                    BluetoothBackend::disconnect_device(dev.mac);
+                                    std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                                    if (auto* eng = AppEngine::instance()) {
+                                        eng->post_delayed(0, [this, item]() {
+                                            BluetoothBackend::sync_item_state(item);
+                                            item->last_action_message = "Disconnected";
+                                            deferred_rebuild_preview();
+                                            notify_state_changed();
+                                        });
+                                    }
+                                }).detach();
+                            })
+                            ->build();
+                        btn_row->add_view(btn_disc);
+                    } else if (dev.is_paired) {
+                        auto btn_conn = ButtonBuilder::create()
+                            ->text("Connect")
+                            ->primary(true)
+                            ->padding(10, 4)
+                            ->cornerRadius(get_btn_radius(config))
+                            ->onClick([this, item, dev]() {
+                                if (m_active_popup) {
+                                    m_active_popup->dismiss();
+                                    m_active_popup = nullptr;
+                                }
+                                item->last_action_message = "Connecting to " + dev.name + "...";
+                                rebuild_preview_column();
+                                std::thread([this, item, dev]() {
+                                    BluetoothBackend::connect_device(dev.mac);
+                                    bool is_conn = false;
+                                    for (int step = 0; step < 6; ++step) {
+                                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                        if (BluetoothBackend::is_device_connected(dev.mac)) {
+                                            is_conn = true;
+                                            break;
+                                        }
+                                    }
+                                    if (auto* eng = AppEngine::instance()) {
+                                        eng->post_delayed(0, [this, item, dev, is_conn]() {
+                                            BluetoothBackend::sync_item_state(item);
+                                            if (is_conn) {
+                                                item->last_action_message = "Connected to " + dev.name;
+                                            } else {
+                                                item->last_action_message = "Connection failed to " + dev.name + " • Ensure device is powered on";
+                                            }
+                                            deferred_rebuild_preview();
+                                            notify_state_changed();
+                                        });
+                                    }
+                                }).detach();
+                            })
+                            ->build();
+                        btn_row->add_view(btn_conn);
+                    } else {
+                        // "Tap to pair"
+                        auto btn_pair = ButtonBuilder::create()
+                            ->text("Pair & Connect")
+                            ->primary(true)
+                            ->padding(10, 4)
+                            ->cornerRadius(get_btn_radius(config))
+                            ->onClick([this, item, dev]() {
+                                if (m_active_popup) {
+                                    m_active_popup->dismiss();
+                                    m_active_popup = nullptr;
+                                }
+                                BluetoothAgent::cache_device_name(dev.mac, dev.name);
+                                item->last_action_message = "Pairing with " + dev.name + " • Confirm PIN on both devices...";
+                                rebuild_preview_column();
+                                std::thread([this, item, dev]() {
+                                    BluetoothBackend::pair_and_connect(dev.mac);
+                                    bool conn = false;
+                                    for (int step = 0; step < 12; ++step) {
+                                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                        if (BluetoothBackend::is_device_connected(dev.mac)) {
+                                            conn = true;
+                                            break;
+                                        }
+                                    }
+                                    if (auto* eng = AppEngine::instance()) {
+                                        eng->post_delayed(0, [this, item, dev, conn]() {
+                                            BluetoothBackend::sync_item_state(item);
+                                            if (conn) {
+                                                item->last_action_message = "Successfully paired and connected to " + dev.name;
+                                            } else {
+                                                bool is_p = false;
+                                                for (const auto& d : item->bt_devices) {
+                                                    if (d.mac == dev.mac && d.is_paired) {
+                                                        is_p = true;
+                                                        break;
+                                                    }
+                                                }
+                                                if (is_p) {
+                                                    item->last_action_message = "Paired with " + dev.name;
+                                                } else if (!item->last_action_message.empty() && item->last_action_message.find("rejected") != std::string::npos) {
+                                                    // Retain user rejection message
+                                                } else {
+                                                    item->last_action_message = "Pairing incomplete with " + dev.name;
+                                                }
+                                            }
+                                            deferred_rebuild_preview();
+                                            notify_state_changed();
+                                        });
+                                    }
+                                }).detach();
+                            })
+                            ->build();
+                        btn_row->add_view(btn_pair);
+                    }
+
+                    popup_col->add_view(btn_row);
+
+                    m_active_popup = PopupWindowBuilder::create()
+                        ->content(popup_col)
+                        ->width(280)
+                        ->elevation(6)
+                        ->cornerRadius(get_card_radius(config))
+                        ->dismissOnOutsideClick(true)
+                        ->dismissOnEscape(true)
+                        ->build();
+                    m_active_popup->show_as_dropdown(dev_row_card, PopupGravity::BottomCenter);
+                    return;
+                }
+
+                // Mock fallback
                 for (size_t k = 0; k < item->bt_devices.size(); ++k) {
                     if (k == di) {
                         item->bt_devices[k].status = "Connected";
@@ -859,9 +1609,7 @@ void MillerView::render_bluetooth_preview(const std::shared_ptr<SettingItem>& it
                 notify_state_changed();
             };
 
-            // Clicking device: connects it (or pairs & connects if Tap to pair)
             dev_row_card->set_on_click_listener(on_dev_connect);
-
             dev_card->add_view(dev_row_card);
         }
 
@@ -2013,7 +2761,8 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
             item->last_action_message.find("Disabling") == std::string::npos &&
             item->last_action_message.find("Applying") == std::string::npos &&
             item->last_action_message.find("Updating") == std::string::npos &&
-            item->last_action_message.find("Adding") == std::string::npos) {
+            item->last_action_message.find("Adding") == std::string::npos &&
+            item->last_action_message.find("Deleting") == std::string::npos) {
             FirewallBackend::sync_item_state(item);
         }
     }
@@ -2686,7 +3435,7 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
                     item->last_action_message = "Deleting rule " + crule.port_proto + " (authenticating)...";
                     rebuild_preview_column();
                     std::thread([this, item, crule]() {
-                        bool ok = FirewallBackend::delete_custom_rule(crule.port_proto);
+                        bool ok = FirewallBackend::delete_custom_rule(crule);
                         if (auto* eng = AppEngine::instance()) {
                             eng->post_delayed(800, [this, item, ok]() {
                                 FirewallBackend::sync_item_state(item);
@@ -2839,6 +3588,27 @@ void MillerView::render_firewall_preview(const std::shared_ptr<SettingItem>& ite
                 mrow->add_view(mv, mv_lp);
 
                 monitor_card->add_view(mrow);
+            }
+
+            if (!item->firewall_cfg.recent_blocks.empty()) {
+                auto r_hdr = TextViewBuilder::create()
+                    ->text("Recent Blocked Events")
+                    ->caption(true)
+                    ->bold(true)
+                    ->textColor(config->colors.on_surface_variant.with_alpha(0.8f))
+                    ->build();
+                r_hdr->set_margin(0, 6, 0, 2);
+                monitor_card->add_view(r_hdr);
+
+                for (const auto& blk : item->firewall_cfg.recent_blocks) {
+                    auto b_tv = TextViewBuilder::create()
+                        ->text(blk)
+                        ->caption(true)
+                        ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+                        ->ellipsize(true)
+                        ->build();
+                    monitor_card->add_view(b_tv);
+                }
             }
         }
 

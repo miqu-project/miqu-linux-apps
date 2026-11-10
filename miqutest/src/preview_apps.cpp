@@ -20,7 +20,7 @@ void MillerView::render_empty_preview(const std::shared_ptr<Config>& config) {
 }
 
 void MillerView::render_category_children_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    m_preview_layout->set_padding(Padding(12, 12));
+    m_preview_layout->set_padding(Padding(10, 10));
     m_preview_layout->set_divider_spacing(4);
 
     for (size_t i = 0; i < item->children.size(); ++i) {
@@ -56,16 +56,6 @@ void MillerView::render_category_children_preview(const std::shared_ptr<SettingI
             ->build();
         text_box->add_view(title_view);
 
-        if (!child->subtitle.empty()) {
-            auto sub_view = TextViewBuilder::create()
-                ->text(child->subtitle)
-                ->caption(true)
-                ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-                ->ellipsize(true)
-                ->build();
-            text_box->add_view(sub_view);
-        }
-
         LayoutParams text_lp;
         text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
         text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
@@ -73,9 +63,7 @@ void MillerView::render_category_children_preview(const std::shared_ptr<SettingI
         text_lp.gravity = Gravity::CenterVertical;
         item_row->add_view(text_box, text_lp);
 
-        auto row_card = CardViewBuilder::create()
-            ->style(CardStyle::Filled)
-            ->backgroundColor(Color::transparent())
+        auto row_card = HoverCardViewBuilder::create()
             ->cornerRadius(get_inner_radius(config))
             ->elevation(0)
             ->addView(item_row)
@@ -701,9 +689,10 @@ void MillerView::render_default_app_role_preview(const std::shared_ptr<SettingIt
         }
 
         Color row_bg = is_def ? config->colors.primary_container.with_alpha(0.35f) : Color::transparent();
-        auto cand_row_card = CardViewBuilder::create()
-            ->style(CardStyle::Filled)
-            ->backgroundColor(row_bg)
+        int stroke_w = is_def ? 1 : 0;
+        Color stroke_col = is_def ? config->colors.primary.with_alpha(0.5f) : Color::transparent();
+        auto cand_row_card = HoverCardViewBuilder::create()
+            ->selected(is_def, row_bg, stroke_w, stroke_col)
             ->cornerRadius(get_inner_radius(config))
             ->elevation(0)
             ->addView(row_content)
@@ -753,11 +742,13 @@ auto title_text = TextViewBuilder::create()
 title_row->add_view(title_text);
 left_info->add_view(title_row);
 
-auto sub_text = TextViewBuilder::create()
-    ->text(item->subtitle)
-    ->textColor(config->colors.on_surface_variant)
-    ->build();
-left_info->add_view(sub_text);
+if (!item->subtitle.empty()) {
+    auto sub_text = TextViewBuilder::create()
+        ->text(item->subtitle)
+        ->textColor(config->colors.on_surface_variant)
+        ->build();
+    left_info->add_view(sub_text);
+}
 
 LayoutParams left_lp;
 left_lp.width = static_cast<int>(LayoutDimension::MatchParent);

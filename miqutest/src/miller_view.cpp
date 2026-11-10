@@ -1,5 +1,6 @@
 #include "miller_view.hpp"
 #include "preview_common.hpp"
+#include "bluetooth_agent.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iomanip>
@@ -14,6 +15,10 @@ MillerView::MillerView() : LinearLayout(Orientation::Horizontal) {}
 
 MillerView::~MillerView() {
     cancel_pending_sibling_click();
+    if (m_bt_agent) {
+        m_bt_agent->stop();
+        m_bt_agent.reset();
+    }
 }
 
 void MillerView::cancel_pending_sibling_click() {
@@ -318,7 +323,30 @@ void MillerView::set_preview_expanded(bool expanded) {
 bool MillerView::on_mouse_move(int lx, int ly, const Rect& bounds) {
     m_last_mouse_x = lx;
     m_last_mouse_y = ly;
-    return LinearLayout::on_mouse_move(lx, ly, bounds);
+
+    bool handled = LinearLayout::on_mouse_move(lx, ly, bounds);
+
+    bool in_parent = m_parent_layout && m_parent_layout->is_visible() &&
+                     m_parent_layout->get_bounds().contains(Point(lx, ly));
+    bool in_current = m_current_scroll && m_current_scroll->is_visible() &&
+                      m_current_scroll->get_bounds().contains(Point(lx, ly));
+    bool in_preview = m_preview_scroll && m_preview_scroll->is_visible() &&
+                      m_preview_scroll->get_bounds().contains(Point(lx, ly));
+
+    auto dispatch_pillar = [&](const std::shared_ptr<ViewGroup>& layout, bool is_active) {
+        if (!layout || !layout->is_visible()) return;
+        int x = is_active ? lx : -999;
+        int y = is_active ? ly : -999;
+        if (layout->on_mouse_move(x, y, layout->get_bounds())) {
+            handled = true;
+        }
+    };
+
+    dispatch_pillar(m_parent_layout, in_parent);
+    dispatch_pillar(m_current_layout, in_current);
+    dispatch_pillar(m_preview_layout, in_preview);
+
+    return handled;
 }
 
 bool MillerView::on_mouse_button(int lx, int ly, MouseButton button, bool pressed, const Rect& bounds) {
@@ -557,16 +585,6 @@ std::shared_ptr<View> MillerView::create_parent_row_card(const std::shared_ptr<S
         ->build();
     text_box->add_view(title_view);
 
-    if (!item->subtitle.empty()) {
-        auto sub_view = TextViewBuilder::create()
-            ->text(item->subtitle)
-            ->caption(true)
-            ->textColor(is_active ? config->colors.primary : config->colors.on_surface_variant.with_alpha(0.7f))
-            ->ellipsize(true)
-            ->build();
-        text_box->add_view(sub_view);
-    }
-
     LayoutParams text_lp;
     text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
     text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
@@ -578,10 +596,8 @@ std::shared_ptr<View> MillerView::create_parent_row_card(const std::shared_ptr<S
     int stroke_w = is_active ? 1 : 0;
     Color stroke_col = is_active ? config->colors.primary.with_alpha(0.5f) : Color::transparent();
 
-    auto row_card = CardViewBuilder::create()
-        ->style(is_active ? CardStyle::Outlined : CardStyle::Filled)
-        ->backgroundColor(bg)
-        ->stroke(stroke_w, stroke_col)
+    auto row_card = HoverCardViewBuilder::create()
+        ->selected(is_active, bg, stroke_w, stroke_col)
         ->cornerRadius(get_inner_radius(config))
         ->elevation(0)
         ->addView(item_row)
@@ -655,21 +671,6 @@ std::shared_ptr<View> MillerView::create_current_row_card(const std::shared_ptr<
         ->build();
     text_box->add_view(title_view);
 
-    if (!item->subtitle.empty()) {
-        Color sub_color = config->colors.on_surface_variant.with_alpha(0.7f);
-        if (is_selected) {
-            sub_color = m_preview_focused ? config->colors.on_surface_variant.with_alpha(0.7f) : config->colors.primary;
-        }
-
-        auto sub_view = TextViewBuilder::create()
-            ->text(item->subtitle)
-            ->caption(true)
-            ->textColor(sub_color)
-            ->ellipsize(true)
-            ->build();
-        text_box->add_view(sub_view);
-    }
-
     LayoutParams text_lp;
     text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
     text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
@@ -693,10 +694,8 @@ std::shared_ptr<View> MillerView::create_current_row_card(const std::shared_ptr<
         }
     }
 
-    auto row_card = CardViewBuilder::create()
-        ->style(is_selected ? CardStyle::Outlined : CardStyle::Filled)
-        ->backgroundColor(bg)
-        ->stroke(stroke_w, stroke_col)
+    auto row_card = HoverCardViewBuilder::create()
+        ->selected(is_selected, bg, stroke_w, stroke_col)
         ->cornerRadius(get_inner_radius(config))
         ->elevation(0)
         ->addView(item_row)

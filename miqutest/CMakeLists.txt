@@ -12,6 +12,7 @@ find_package(PkgConfig REQUIRED)
 find_package(Threads REQUIRED)
 
 pkg_check_modules(MIQUTOOLKIT REQUIRED IMPORTED_TARGET miqutoolkit)
+pkg_check_modules(SDBUSCPP REQUIRED IMPORTED_TARGET sdbus-c++)
 
 add_executable(miqutest
     src/main.cpp
@@ -24,6 +25,8 @@ add_executable(miqutest
     src/preview_apps.cpp
     src/test_app.cpp
     src/wifi_backend.cpp
+    src/bluetooth_backend.cpp
+    src/bluetooth_agent.cpp
     src/display_backend.cpp
     src/ethernet_backend.cpp
     src/firewall_backend.cpp
@@ -35,6 +38,7 @@ target_include_directories(miqutest PRIVATE
 
 target_link_libraries(miqutest PRIVATE
     PkgConfig::MIQUTOOLKIT
+    PkgConfig::SDBUSCPP
     Threads::Threads
     stdc++fs
 )

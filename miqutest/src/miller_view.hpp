@@ -9,6 +9,8 @@
 
 namespace miqu {
 
+class BluetoothAgent;
+
 class MillerView : public LinearLayout {
 public:
     MillerView();
@@ -148,6 +150,15 @@ private:
     std::string m_search_query;
     std::vector<std::shared_ptr<SettingItem>> m_search_results;
     std::shared_ptr<PopupWindow> m_active_popup;
+    std::shared_ptr<PopupWindow> m_active_pairing_popup;
+
+    void init_bluetooth_agent();
+    void show_numeric_comparison_dialog(const std::string& dev_name, const std::string& mac, uint32_t passkey, std::function<void(bool)> cb);
+    void show_passkey_display_dialog(const std::string& dev_name, const std::string& mac, uint32_t passkey);
+    void show_authorization_dialog(const std::string& dev_name, const std::string& mac, std::function<void(bool)> cb);
+    void show_pin_request_dialog(const std::string& dev_name, const std::string& mac, std::function<void(const std::string&)> cb);
+
+    std::unique_ptr<BluetoothAgent> m_bt_agent;
 };
 
 } // namespace miqu

@@ -30,9 +30,14 @@ struct WifiNetwork {
 
 struct BluetoothDevice {
     std::string name;
-    std::string status; // "Connected", "Paired", "Pair"
+    std::string status = "Paired"; // "Connected", "Paired", "Tap to pair", "Ready to pair"
     std::string icon = "󰂯";
     std::string battery = "";
+    std::string mac = "";
+    bool is_connected = false;
+    bool is_paired = true;
+    int battery_percentage = -1;
+    std::string category = "Other";
 };
 
 struct EthernetProfile {
@@ -147,8 +152,13 @@ struct BatteryConfig {
 };
 
 struct FirewallCustomRule {
+    int id = 0;
     std::string name;
     std::string port_proto;
+    std::string port;
+    std::string protocol = "tcp";
+    std::string action = "ALLOW";
+    std::string source = "Anywhere";
     bool enabled = true;
 };
 
@@ -170,10 +180,11 @@ struct FirewallConfig {
 
     // Monitor card
     bool monitor_enabled = true;
-    int blocked_today = 1842;
-    int active_connections = 28;
-    std::string monitored_interfaces = "wlan0, eth0";
-    std::string last_blocked_probe = "203.0.113.45:445 (SMB Probe) -> DROP";
+    int blocked_today = 0;
+    int active_connections = 0;
+    std::string monitored_interfaces = "None";
+    std::string last_blocked_probe = "None";
+    std::vector<std::string> recent_blocks;
 };
 
 struct ScreenTimeoutLockConfig {
@@ -290,6 +301,9 @@ class SettingItem {
 public:
     std::string id;
     std::string title;
+    // Role-specific value or default app candidate name (e.g. "Firefox").
+    // Note: Navigation pillars (Parent, Current, Category Overview) do NOT render
+    // subtitles to enforce clean navigation hierarchy and ensure zero eager querying.
     std::string subtitle;
     std::string icon;
     bool is_category = false;

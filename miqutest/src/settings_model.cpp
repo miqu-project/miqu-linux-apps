@@ -1,5 +1,6 @@
 #include "settings_model.hpp"
 #include "wifi_backend.hpp"
+#include "bluetooth_backend.hpp"
 #include "display_backend.hpp"
 #include "ethernet_backend.hpp"
 #include "firewall_backend.hpp"
@@ -59,10 +60,6 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Signal Strength", "-46 dBm (Excellent)"}
         };
 
-        if (WifiBackend::is_wifi_available()) {
-            WifiBackend::sync_item_state(wifi);
-        }
-
         // 1.2 Bluetooth (Leaf)
         auto bt = SettingItem::create_leaf("net_bluetooth", "Bluetooth", "", "󰂯");
         bt->has_switch = true;
@@ -109,10 +106,6 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"MTU", "1500 bytes"}
         };
 
-        if (EthernetBackend::is_networkmanager_available()) {
-            EthernetBackend::sync_item_state(eth);
-        }
-
         // 1.4 Airplane Mode (Leaf)
         auto airplane = SettingItem::create_leaf("net_airplane", "Airplane Mode", "", "󰀝");
         airplane->has_switch = true;
@@ -151,9 +144,6 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         firewall->firewall_cfg.allow_samba = false;
         firewall->firewall_cfg.allow_cups = true;
         firewall->firewall_cfg.monitor_enabled = true;
-        if (FirewallBackend::is_available()) {
-            FirewallBackend::sync_item_state(firewall);
-        }
 
         // 1.7 Per App Network Access (Leaf)
         auto per_app_net = SettingItem::create_leaf("net_per_app", "Per App Network Access", "", "󰀻");
@@ -565,7 +555,6 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
             {"Minimum Brightness", "1% (Prevents full blackout)"},
             {"PWM Frequency", "20000 Hz (Flicker-Free)"}
         };
-        DisplayBackend::sync_item_state(disp_bright);
 
         // 5.2 Screen Timeout & Lock (Unified Inactivity & Security)
         auto disp_timeout_lock = SettingItem::create_leaf("disp_timeout_lock", "Screen Timeout & Lock", "", "󰌾");
