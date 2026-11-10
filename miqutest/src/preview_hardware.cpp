@@ -342,7 +342,12 @@ void MillerView::render_brightness_preview(const std::shared_ptr<SettingItem>& i
     return;
 }
 
-std::shared_ptr<View> MillerView::create_night_light_hero_card(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+void MillerView::render_night_light_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    if (DisplayBackend::is_available()) {
+        DisplayBackend::sync_nightlight_state(item);
+    }
+
+    // 1. Hero switch card (Enable or Disable)
     bool is_nl_on = item->nightlight_cfg.enabled;
     auto hero_sw_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Horizontal)
@@ -375,11 +380,8 @@ std::shared_ptr<View> MillerView::create_night_light_hero_card(const std::shared
         ->build();
     nl_box->add_view(nl_title);
 
-    std::string hint = is_nl_on
-        ? ("Active at " + std::to_string(item->nightlight_cfg.temperature_k) + " K • Filtering blue wavelengths")
-        : "Disabled • Normal display color temperature (6500 K)";
     auto nl_hint = TextViewBuilder::create()
-        ->text(hint)
+        ->text(is_nl_on ? "Screen tinted amber to reduce blue light" : "Disabled • Normal display color temperature")
         ->caption(true)
         ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
         ->build();
@@ -399,7 +401,7 @@ std::shared_ptr<View> MillerView::create_night_light_hero_card(const std::shared
             int k = DisplayBackend::kelvin_from_warmth(item->nightlight_cfg.warmth);
             DisplayBackend::set_night_light_enabled(checked, k);
             DisplayBackend::sync_nightlight_state(item);
-            rebuild_preview_column();
+            deferred_rebuild_preview();
             notify_state_changed();
         })
         ->build();
@@ -410,235 +412,88 @@ std::shared_ptr<View> MillerView::create_night_light_hero_card(const std::shared
     nlsw_lp.gravity = Gravity::CenterVertical;
     hero_sw_card->add_view(nl_switch, nlsw_lp);
 
-    return hero_sw_card;
-}
+    add_preview_card(hero_sw_card);
 
-std::shared_ptr<View> MillerView::create_night_light_warmth_card(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    auto warmth_card = LinearLayoutBuilder::create()
-        ->orientation(Orientation::Vertical)
-        ->padding(16, 14)
-        ->spacing(10)
-        ->backgroundColor(config->colors.surface)
-        ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(get_card_radius(config))
-        ->build();
+    // 2. If enabled, adjust warmth card
+    if (is_nl_on) {
+        auto warmth_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->padding(16, 14)
+            ->spacing(10)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
+            ->build();
 
-    auto w_header = LinearLayoutBuilder::create()
-        ->orientation(Orientation::Horizontal)
-        ->gravity(Gravity::CenterVertical)
-        ->build();
+        auto w_header = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Horizontal)
+            ->gravity(Gravity::CenterVertical)
+            ->build();
 
-    auto w_box = LinearLayoutBuilder::create()
-        ->orientation(Orientation::Vertical)
-        ->spacing(2)
-        ->build();
+        auto w_box = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(2)
+            ->build();
 
-    auto w_title = TextViewBuilder::create()
-        ->text("Color Warmth")
-        ->textSize(config->metrics.font_size)
-        ->textColor(config->colors.on_surface)
-        ->build();
-    w_box->add_view(w_title);
+        auto w_title = TextViewBuilder::create()
+            ->text("Color Warmth")
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.on_surface)
+            ->build();
+        w_box->add_view(w_title);
 
-    auto w_hint = TextViewBuilder::create()
-        ->text("Warmer screen colors reduce eye strain and promote restful sleep")
-        ->caption(true)
-        ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-        ->build();
-    w_box->add_view(w_hint);
+        auto w_hint = TextViewBuilder::create()
+            ->text("Warmer colors appear amber and soft on the eyes")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        w_box->add_view(w_hint);
 
-    LayoutParams wbox_lp;
-    wbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    wbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-    wbox_lp.weight = 1.0f;
-    wbox_lp.gravity = Gravity::CenterVertical;
-    w_header->add_view(w_box, wbox_lp);
+        LayoutParams wbox_lp;
+        wbox_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        wbox_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+        wbox_lp.weight = 1.0f;
+        wbox_lp.gravity = Gravity::CenterVertical;
+        w_header->add_view(w_box, wbox_lp);
 
-    auto w_label = TextViewBuilder::create()
-        ->text(std::to_string(item->nightlight_cfg.temperature_k) + " K")
-        ->textSize(config->metrics.font_size)
-        ->textColor(config->colors.primary)
-        ->bold(true)
-        ->build();
-    LayoutParams wlbl_lp;
-    wlbl_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-    wlbl_lp.gravity = Gravity::CenterVertical;
-    w_header->add_view(w_label, wlbl_lp);
+        auto format_kelvin = [](float warmth) -> std::string {
+            int k = DisplayBackend::kelvin_from_warmth(warmth);
+            return std::to_string(k) + " K";
+        };
 
-    warmth_card->add_view(w_header);
+        auto w_label = TextViewBuilder::create()
+            ->text(format_kelvin(item->nightlight_cfg.warmth))
+            ->textSize(config->metrics.font_size)
+            ->textColor(config->colors.primary)
+            ->build();
+        LayoutParams wlbl_lp;
+        wlbl_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        wlbl_lp.gravity = Gravity::CenterVertical;
+        w_header->add_view(w_label, wlbl_lp);
 
-    auto w_slider = SliderBuilder::create()
-        ->value(item->nightlight_cfg.warmth)
-        ->onValueChanged([this, item, w_label](float val, bool user) {
-            (void)user;
-            item->nightlight_cfg.warmth = val;
-            int k = DisplayBackend::kelvin_from_warmth(val);
-            item->nightlight_cfg.temperature_k = k;
-            w_label->set_text(std::to_string(k) + " K");
-            w_label->request_redraw();
-            if (item->nightlight_cfg.enabled) {
-                DisplayBackend::set_gamma_temperature(k);
-            }
-        })
-        ->build();
+        warmth_card->add_view(w_header);
 
-    LayoutParams wsl_lp;
-    wsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    wsl_lp.height = 24;
-    warmth_card->add_view(w_slider, wsl_lp);
-
-    // Range Labels
-    auto labels_row = LinearLayoutBuilder::create()
-        ->orientation(Orientation::Horizontal)
-        ->build();
-
-    auto cool_lbl = TextViewBuilder::create()
-        ->text("Cool (6500 K Daylight)")
-        ->caption(true)
-        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-        ->build();
-    LayoutParams cl_lp;
-    cl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    cl_lp.weight = 1.0f;
-    labels_row->add_view(cool_lbl, cl_lp);
-
-    auto warm_lbl = TextViewBuilder::create()
-        ->text("Warm (2700 K Candle)")
-        ->caption(true)
-        ->textColor(config->colors.on_surface_variant.with_alpha(0.6f))
-        ->build();
-    LayoutParams wl_lp;
-    wl_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-    labels_row->add_view(warm_lbl, wl_lp);
-    warmth_card->add_view(labels_row);
-
-    // Presets Row
-    auto presets_row = LinearLayoutBuilder::create()
-        ->orientation(Orientation::Horizontal)
-        ->spacing(8)
-        ->build();
-
-    struct PresetInfo {
-        const char* label;
-        int kelvin;
-    };
-    const std::vector<PresetInfo> presets = {
-        {"5500 K Mild", 5500},
-        {"4500 K Balanced", 4500},
-        {"3500 K Sunset", 3500},
-        {"2700 K Candle", 2700}
-    };
-
-    for (const auto& p : presets) {
-        bool is_sel = (std::abs(item->nightlight_cfg.temperature_k - p.kelvin) < 250);
-        auto btn = ButtonBuilder::create()
-            ->text(p.label)
-            ->flat(!is_sel)
-            ->textSize(config->metrics.font_size - 1)
-            ->textColor(is_sel ? config->colors.on_primary : config->colors.on_surface)
-            ->backgroundColor(is_sel ? config->colors.primary : config->colors.surface_variant)
-            ->cornerRadius(get_btn_radius(config))
-            ->padding(8, 4)
-            ->onClick([this, item, k = p.kelvin]() {
-                item->nightlight_cfg.temperature_k = k;
-                item->nightlight_cfg.warmth = DisplayBackend::warmth_from_kelvin(k);
+        auto w_slider = SliderBuilder::create()
+            ->value(item->nightlight_cfg.warmth)
+            ->onValueChanged([this, item, w_label, format_kelvin](float val, bool user) {
+                (void)user;
+                item->nightlight_cfg.warmth = val;
+                w_label->set_text(format_kelvin(val));
+                w_label->request_redraw();
                 if (item->nightlight_cfg.enabled) {
-                    DisplayBackend::set_gamma_temperature(k);
+                    DisplayBackend::set_gamma_temperature(DisplayBackend::kelvin_from_warmth(val));
                 }
                 DisplayBackend::sync_nightlight_state(item);
-                rebuild_preview_column();
                 notify_state_changed();
             })
             ->build();
 
-        LayoutParams bp_lp;
-        bp_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        bp_lp.weight = 1.0f;
-        bp_lp.height = 30;
-        presets_row->add_view(btn, bp_lp);
-    }
-    warmth_card->add_view(presets_row);
+        LayoutParams wsl_lp;
+        wsl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+        wsl_lp.height = 24;
+        warmth_card->add_view(w_slider, wsl_lp);
 
-    return warmth_card;
-}
-
-std::shared_ptr<View> MillerView::create_night_light_schedule_card(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    auto sched_card = LinearLayoutBuilder::create()
-        ->orientation(Orientation::Vertical)
-        ->padding(16, 14)
-        ->spacing(10)
-        ->backgroundColor(config->colors.surface)
-        ->stroke(1, config->colors.outline.with_alpha(0.3f))
-        ->cornerRadius(get_card_radius(config))
-        ->build();
-
-    auto title = TextViewBuilder::create()
-        ->text("Sunset Schedule")
-        ->caption(true)
-        ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
-        ->build();
-    sched_card->add_view(title);
-
-    auto row = LinearLayoutBuilder::create()
-        ->orientation(Orientation::Horizontal)
-        ->spacing(8)
-        ->build();
-
-    bool is_solar = (item->nightlight_cfg.schedule_mode == 0);
-
-    auto btn_solar = ButtonBuilder::create()
-        ->text(is_solar ? "●  🌅 Sunset to Sunrise" : "○  🌅 Sunset to Sunrise")
-        ->textSize(config->metrics.font_size)
-        ->textColor(is_solar ? config->colors.primary : config->colors.on_surface)
-        ->backgroundColor(is_solar ? config->colors.surface_variant : config->colors.surface)
-        ->cornerRadius(get_btn_radius(config))
-        ->padding(10, 6)
-        ->onClick([this, item]() {
-            item->nightlight_cfg.schedule_mode = 0;
-            DisplayBackend::sync_nightlight_state(item);
-            rebuild_preview_column();
-            notify_state_changed();
-        })
-        ->build();
-    LayoutParams s_lp;
-    s_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    s_lp.weight = 1.0f;
-    s_lp.height = 36;
-    row->add_view(btn_solar, s_lp);
-
-    auto btn_manual = ButtonBuilder::create()
-        ->text(!is_solar ? "●  🌙 Always On (Manual)" : "○  🌙 Always On (Manual)")
-        ->textSize(config->metrics.font_size)
-        ->textColor(!is_solar ? config->colors.primary : config->colors.on_surface)
-        ->backgroundColor(!is_solar ? config->colors.surface_variant : config->colors.surface)
-        ->cornerRadius(get_btn_radius(config))
-        ->padding(10, 6)
-        ->onClick([this, item]() {
-            item->nightlight_cfg.schedule_mode = 1;
-            DisplayBackend::sync_nightlight_state(item);
-            rebuild_preview_column();
-            notify_state_changed();
-        })
-        ->build();
-    LayoutParams m_lp;
-    m_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-    m_lp.weight = 1.0f;
-    m_lp.height = 36;
-    row->add_view(btn_manual, m_lp);
-
-    sched_card->add_view(row);
-    return sched_card;
-}
-
-void MillerView::render_night_light_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    if (DisplayBackend::is_available()) {
-        DisplayBackend::sync_nightlight_state(item);
-    }
-
-    add_preview_card(create_night_light_hero_card(item, config));
-    if (item->nightlight_cfg.enabled) {
-        add_preview_card(create_night_light_warmth_card(item, config));
-        add_preview_card(create_night_light_schedule_card(item, config));
+        add_preview_card(warmth_card);
     }
 
     if (!item->telemetry.empty()) {

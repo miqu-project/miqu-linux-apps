@@ -184,7 +184,6 @@ void DisplayBackend::sync_nightlight_state(const std::shared_ptr<SettingItem>& i
     int temp_k = get_gamma_temperature();
 
     item->nightlight_cfg.enabled = active;
-    item->nightlight_cfg.temperature_k = temp_k;
     item->nightlight_cfg.warmth = warmth_from_kelvin(temp_k);
 
     std::string temp_desc;
@@ -200,8 +199,7 @@ void DisplayBackend::sync_nightlight_state(const std::shared_ptr<SettingItem>& i
         {"Daylight Target", "6500 K (CIE Standard Illuminant D65)"},
         {"Wayland Protocol", "wlr-gamma-control-v1 (Direct Hardware DRM)"},
         {"Compositor Engine", "miquland Native (Planckian Blackbody LUT)"},
-        {"IPC Controller", "miquctl gamma [temp|on|off|toggle]"},
-        {"Schedule Mode", (item->nightlight_cfg.schedule_mode == 0) ? "Sunset to Sunrise (Astronomical Solar)" : "Always On (Continuous Manual)"}
+        {"IPC Controller", "miquctl gamma [temp|on|off|toggle]"}
     };
     item->telemetry_title = "Gamma & color specifications";
 }

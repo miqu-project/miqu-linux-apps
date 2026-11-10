@@ -93,9 +93,6 @@ private:
     void render_keybindings_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_timeout_lock_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_night_light_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
-    std::shared_ptr<View> create_night_light_hero_card(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
-    std::shared_ptr<View> create_night_light_warmth_card(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
-    std::shared_ptr<View> create_night_light_schedule_card(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_battery_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_power_mode_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
     void render_monitors_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);

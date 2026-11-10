@@ -219,8 +219,6 @@ struct ScreenTimeoutLockConfig {
 struct NightLightConfig {
     bool enabled = false;
     float warmth = 0.53f;
-    int temperature_k = 4500;
-    int schedule_mode = 0;
 };
 
 struct TilingConfig {
