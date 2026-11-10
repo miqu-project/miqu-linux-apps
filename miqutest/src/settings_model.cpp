@@ -580,15 +580,8 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         // 5.3 Night Light
         auto disp_nightlight = SettingItem::create_leaf("disp_nightlight", "Night Light", "", "󰃟");
         disp_nightlight->is_display_nightlight = true;
-        disp_nightlight->nightlight_cfg.enabled = true;
-        disp_nightlight->nightlight_cfg.warmth = 0.65f;
         disp_nightlight->telemetry_title = "Gamma & color specifications";
-        disp_nightlight->telemetry = {
-            {"Gamma Protocol", "wlr-gamma-control-v1"},
-            {"Night Temperature", "3400 K (Warm Amber)"},
-            {"Day Temperature", "6500 K (Standard D65)"},
-            {"Sunset Schedule", "Sunset 18:15 • Sunrise 06:20"}
-        };
+        DisplayBackend::sync_nightlight_state(disp_nightlight);
 
         root.push_back(SettingItem::create_category(
             "cat_display", "Display", "󰍹",

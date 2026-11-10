@@ -123,4 +123,87 @@ void DisplayBackend::sync_item_state(const std::shared_ptr<SettingItem>& item) {
     item->telemetry_title = "Backlight & panel specifications";
 }
 
+bool DisplayBackend::is_available() {
+    std::error_code ec;
+    return fs::exists("/usr/bin/miquctl", ec) || fs::exists("/sys/class/backlight", ec);
+}
+
+bool DisplayBackend::is_night_light_active() {
+    std::string out = run_cmd("miquctl -j gamma 2>/dev/null");
+    if (out.find("\"enabled\":true") != std::string::npos) {
+        return true;
+    }
+    std::string gs = run_cmd("pgrep -x gammastep");
+    return !gs.empty();
+}
+
+int DisplayBackend::get_gamma_temperature() {
+    std::string out = run_cmd("miquctl -j gamma 2>/dev/null");
+    size_t tpos = out.find("\"temperature\":");
+    if (tpos != std::string::npos) {
+        try {
+            return std::clamp(std::stoi(out.substr(tpos + 14)), 1000, 10000);
+        } catch (...) {}
+    }
+    return 4500;
+}
+
+void DisplayBackend::set_night_light_enabled(bool enabled, int temp_k) {
+    if (enabled) {
+        int k = std::clamp(temp_k, 1000, 10000);
+        std::string cmd = "miquctl gamma " + std::to_string(k) + " >/dev/null 2>&1 &";
+        std::system(cmd.c_str());
+    } else {
+        std::system("miquctl gamma off >/dev/null 2>&1 &");
+    }
+}
+
+void DisplayBackend::set_gamma_temperature(int temp_k) {
+    int k = std::clamp(temp_k, 1000, 10000);
+    static int s_last_k = -1;
+    if (s_last_k == k) return;
+    s_last_k = k;
+    std::string cmd = "miquctl gamma " + std::to_string(k) + " >/dev/null 2>&1 &";
+    std::system(cmd.c_str());
+}
+
+int DisplayBackend::kelvin_from_warmth(float warmth) {
+    warmth = std::clamp(warmth, 0.0f, 1.0f);
+    return std::clamp(static_cast<int>(std::round(6500.0f - warmth * 3800.0f)), 2700, 6500);
+}
+
+float DisplayBackend::warmth_from_kelvin(int kelvin) {
+    kelvin = std::clamp(kelvin, 2700, 6500);
+    return std::clamp((6500.0f - static_cast<float>(kelvin)) / 3800.0f, 0.0f, 1.0f);
+}
+
+void DisplayBackend::sync_nightlight_state(const std::shared_ptr<SettingItem>& item) {
+    if (!item) return;
+
+    bool active = is_night_light_active();
+    int temp_k = get_gamma_temperature();
+
+    item->nightlight_cfg.enabled = active;
+    item->nightlight_cfg.temperature_k = temp_k;
+    item->nightlight_cfg.warmth = warmth_from_kelvin(temp_k);
+
+    std::string temp_desc;
+    if (temp_k >= 6000) temp_desc = "Daylight (Standard D65)";
+    else if (temp_k >= 5000) temp_desc = "Mild Soft White";
+    else if (temp_k >= 4000) temp_desc = "Balanced Warm Neutral";
+    else if (temp_k >= 3000) temp_desc = "Sunset Amber";
+    else temp_desc = "Deep Candle Glow";
+
+    item->telemetry = {
+        {"Active State", active ? "Enabled (Filtering blue wavelengths)" : "Disabled (Standard Daylight)"},
+        {"Color Temperature", std::to_string(temp_k) + " K (" + temp_desc + ")"},
+        {"Daylight Target", "6500 K (CIE Standard Illuminant D65)"},
+        {"Wayland Protocol", "wlr-gamma-control-v1 (Direct Hardware DRM)"},
+        {"Compositor Engine", "miquland Native (Planckian Blackbody LUT)"},
+        {"IPC Controller", "miquctl gamma [temp|on|off|toggle]"},
+        {"Schedule Mode", (item->nightlight_cfg.schedule_mode == 0) ? "Sunset to Sunrise (Astronomical Solar)" : "Always On (Continuous Manual)"}
+    };
+    item->telemetry_title = "Gamma & color specifications";
+}
+
 } // namespace miqu
