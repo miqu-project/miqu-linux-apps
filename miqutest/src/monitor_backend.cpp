@@ -105,6 +105,23 @@ static void parse_monitor_property(const std::string& l, MonitorInfo* cur) {
     }
 }
 
+static MonitorInfo* parse_header_line(const std::string& line, std::vector<MonitorInfo>& monitors) {
+    size_t sp = line.find(' ');
+    if (sp == std::string::npos) return nullptr;
+
+    MonitorInfo mon;
+    mon.name = line.substr(0, sp);
+    size_t q1 = line.find('"', sp);
+    size_t q2 = (q1 != std::string::npos) ? line.rfind('"') : std::string::npos;
+    if (q1 != std::string::npos && q2 != std::string::npos && q2 > q1) {
+        mon.description = line.substr(q1 + 1, q2 - q1 - 1);
+    } else {
+        mon.description = trim(line.substr(sp + 1));
+    }
+    monitors.push_back(mon);
+    return &monitors.back();
+}
+
 std::vector<MonitorInfo> MonitorBackend::get_monitors() {
     std::vector<MonitorInfo> monitors;
     std::string out = run_cmd("wlr-randr");
@@ -123,20 +140,7 @@ std::vector<MonitorInfo> MonitorBackend::get_monitors() {
         if (line.empty()) continue;
 
         if (line[0] != ' ' && line[0] != '\t') {
-            size_t sp = line.find(' ');
-            if (sp != std::string::npos) {
-                MonitorInfo mon;
-                mon.name = line.substr(0, sp);
-                size_t q1 = line.find('"', sp);
-                size_t q2 = (q1 != std::string::npos) ? line.rfind('"') : std::string::npos;
-                if (q1 != std::string::npos && q2 != std::string::npos && q2 > q1) {
-                    mon.description = line.substr(q1 + 1, q2 - q1 - 1);
-                } else {
-                    mon.description = trim(line.substr(sp + 1));
-                }
-                monitors.push_back(mon);
-                cur = &monitors.back();
-            }
+            cur = parse_header_line(line, monitors);
         } else if (cur) {
             parse_monitor_property(trim(line), cur);
         }
@@ -316,6 +320,23 @@ std::vector<std::string> MonitorBackend::get_available_refresh_rates(const std::
     return rates;
 }
 
+static std::vector<TelemetryEntry> build_telemetry(const MonitorInfo& info, const MonitorConfig& cfg) {
+    std::vector<TelemetryEntry> t;
+    t.push_back({"Connector", info.name});
+    if (!info.make.empty() || !info.model.empty()) {
+        t.push_back({"Panel Model", (info.make.empty() ? "" : info.make + " ") + info.model});
+    }
+    t.push_back({"Current Mode", cfg.current_resolution + " @" + cfg.current_refresh_rate});
+    if (info.physical_width_mm > 0 && info.physical_height_mm > 0) {
+        t.push_back({"Physical Dimensions", std::to_string(info.physical_width_mm) + " × " + std::to_string(info.physical_height_mm) + " mm"});
+    }
+    t.push_back({"Scale Factor", cfg.current_scale + " (" + std::to_string(info.scale).substr(0, 4) + "x)"});
+    t.push_back({"Orientation", cfg.current_orientation});
+    t.push_back({"Position", std::to_string(info.pos_x) + ", " + std::to_string(info.pos_y) + (info.is_primary ? " (Primary)" : "")});
+    t.push_back({"Adaptive Sync", info.adaptive_sync ? "Enabled" : "Disabled"});
+    return t;
+}
+
 void MonitorBackend::sync_monitor_item(const std::shared_ptr<SettingItem>& item, const MonitorInfo& info) {
     if (!item) return;
     item->is_monitor = true;
@@ -351,20 +372,7 @@ void MonitorBackend::sync_monitor_item(const std::shared_ptr<SettingItem>& item,
 
     item->monitor_cfg.current_orientation = transform_to_ui(info.transform);
     item->monitor_cfg.available_orientations = {"Standard (0°)", "90° (Portrait)", "180°", "270° (Portrait)"};
-
-    item->telemetry.clear();
-    item->telemetry.push_back({"Connector", info.name});
-    if (!info.make.empty() || !info.model.empty()) {
-        item->telemetry.push_back({"Panel Model", (info.make.empty() ? "" : info.make + " ") + info.model});
-    }
-    item->telemetry.push_back({"Current Mode", item->monitor_cfg.current_resolution + " @" + item->monitor_cfg.current_refresh_rate});
-    if (info.physical_width_mm > 0 && info.physical_height_mm > 0) {
-        item->telemetry.push_back({"Physical Dimensions", std::to_string(info.physical_width_mm) + " × " + std::to_string(info.physical_height_mm) + " mm"});
-    }
-    item->telemetry.push_back({"Scale Factor", item->monitor_cfg.current_scale + " (" + std::to_string(info.scale).substr(0, 4) + "x)"});
-    item->telemetry.push_back({"Orientation", item->monitor_cfg.current_orientation});
-    item->telemetry.push_back({"Position", std::to_string(info.pos_x) + ", " + std::to_string(info.pos_y) + (info.is_primary ? " (Primary)" : "")});
-    item->telemetry.push_back({"Adaptive Sync", info.adaptive_sync ? "Enabled" : "Disabled"});
+    item->telemetry = build_telemetry(info, item->monitor_cfg);
 }
 
 } // namespace miqu
