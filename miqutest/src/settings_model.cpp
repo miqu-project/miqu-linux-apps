@@ -265,20 +265,27 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // 3. Applications (Depth 1)
     // ==============================================================================
     {
-        // 3.1 Installed Apps (Category)
-        std::vector<std::shared_ptr<SettingItem>> app_items = AppsBackend::get_installed_app_items();
-        if (app_items.empty()) {
+        // 3.1 Desktop Applications (Category)
+        std::vector<std::shared_ptr<SettingItem>> desktop_items = AppsBackend::get_desktop_app_items();
+        if (desktop_items.empty()) {
             auto app_firefox = SettingItem::create_leaf("app_firefox", "Firefox Web Browser", "", "󰈹");
             app_firefox->is_installed_app = true;
             app_firefox->app_info.app_name = "Firefox Web Browser";
             app_firefox->app_info.desktop_file = "/usr/share/applications/firefox.desktop";
             app_firefox->app_info.binary_path = "/usr/bin/firefox";
-            app_items.push_back(app_firefox);
+            desktop_items.push_back(app_firefox);
         }
 
-        auto cat_installed_apps = SettingItem::create_category(
-            "cat_installed_apps", "Installed Apps", "󰏖",
-            app_items
+        auto cat_desktop_apps = SettingItem::create_category(
+            "cat_desktop_apps", "Desktop Applications", "󰀻",
+            desktop_items
+        );
+
+        // 3.2 System Packages (Category)
+        std::vector<std::shared_ptr<SettingItem>> sys_pkg_items = AppsBackend::get_system_package_items();
+        auto cat_system_packages = SettingItem::create_category(
+            "cat_system_packages", "System Packages", "󰒓",
+            sys_pkg_items
         );
 
         // 3.2 Default Applications (Category)
@@ -401,7 +408,7 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
 
         root.push_back(SettingItem::create_category(
             "cat_applications", "Applications", "󰀻",
-            {cat_installed_apps, cat_default_apps}
+            {cat_desktop_apps, cat_system_packages, cat_default_apps}
         ));
     }
 

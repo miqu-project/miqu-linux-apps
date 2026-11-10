@@ -1,10 +1,10 @@
 #include "apps_backend.hpp"
-#include <miqutoolkit/system/app_manager.hpp>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <unordered_set>
 #include <cstdio>
 #include <cstdlib>
 #include <csignal>
@@ -18,6 +18,18 @@ struct PipeCloser {
     void operator()(FILE* fp) const {
         if (fp) pclose(fp);
     }
+};
+
+struct DesktopEntry {
+    std::string id;
+    std::string name;
+    std::string generic_name;
+    std::string comment;
+    std::string exec_cmd;
+    std::string icon_name;
+    std::string categories;
+    std::string desktop_path;
+    bool no_display = false;
 };
 
 std::string AppsBackend::run_cmd(const std::string& cmd) {
@@ -35,21 +47,51 @@ std::string AppsBackend::run_cmd(const std::string& cmd) {
     return result;
 }
 
+static bool parse_desktop_file(const std::string& path, DesktopEntry& entry) {
+    std::ifstream file(path);
+    if (!file.is_open()) return false;
+
+    std::string line;
+    bool in_entry = false;
+    while (std::getline(file, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+
+        if (line[0] == '[') {
+            in_entry = (line == "[Desktop Entry]");
+            continue;
+        }
+        if (!in_entry) continue;
+
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+
+        if (key == "Name") entry.name = val;
+        else if (key == "GenericName") entry.generic_name = val;
+        else if (key == "Comment") entry.comment = val;
+        else if (key == "Exec") entry.exec_cmd = val;
+        else if (key == "Icon") entry.icon_name = val;
+        else if (key == "Categories") entry.categories = val;
+        else if (key == "NoDisplay" && val == "true") entry.no_display = true;
+    }
+    entry.desktop_path = path;
+    return !entry.name.empty() && !entry.no_display;
+}
+
 std::string AppsBackend::resolve_desktop_path(const std::string& desktop_id) {
     const char* home = getenv("HOME");
     std::vector<std::string> search_dirs;
-    if (home) {
-        search_dirs.push_back(std::string(home) + "/.local/share/applications");
-    }
+    if (home) search_dirs.push_back(std::string(home) + "/.local/share/applications");
     search_dirs.push_back("/usr/share/applications");
     search_dirs.push_back("/usr/local/share/applications");
     search_dirs.push_back("/var/lib/flatpak/exports/share/applications");
 
     for (const auto& dir : search_dirs) {
         std::string path = dir + "/" + desktop_id;
-        if (fs::exists(path)) {
-            return path;
-        }
+        if (fs::exists(path)) return path;
     }
     return "";
 }
@@ -111,47 +153,84 @@ std::string AppsBackend::get_icon_for_app(const std::string& categories, const s
     return "󰏖";
 }
 
-std::vector<std::shared_ptr<SettingItem>> AppsBackend::get_installed_app_items(bool force_refresh) {
-    const auto& toolkit_apps = AppManager::get()->get_installed_apps(force_refresh);
+std::string AppsBackend::get_icon_for_pkg(const std::string& pkg_name) {
+    std::string lower = pkg_name;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    if (lower.find("git") != std::string::npos || lower.find("clang") != std::string::npos ||
+        lower.find("gcc") != std::string::npos || lower.find("cmake") != std::string::npos ||
+        lower.find("python") != std::string::npos || lower.find("rust") != std::string::npos) return "󰘦";
+    if (lower.find("zsh") != std::string::npos || lower.find("bash") != std::string::npos ||
+        lower.find("tmux") != std::string::npos || lower.find("fish") != std::string::npos) return "󰆍";
+    if (lower.find("bluez") != std::string::npos || lower.find("network") != std::string::npos ||
+        lower.find("curl") != std::string::npos || lower.find("wget") != std::string::npos ||
+        lower.find("opensnitch") != std::string::npos || lower.find("ssh") != std::string::npos) return "󰒍";
+    if (lower.find("alsa") != std::string::npos || lower.find("audio") != std::string::npos ||
+        lower.find("pipewire") != std::string::npos || lower.find("sound") != std::string::npos) return "󰝚";
+    if (lower.find("acpi") != std::string::npos || lower.find("systemd") != std::string::npos ||
+        lower.find("brightness") != std::string::npos || lower.find("btop") != std::string::npos ||
+        lower.find("htop") != std::string::npos) return "󰍹";
+    return "󰏖";
+}
+
+std::vector<std::shared_ptr<SettingItem>> AppsBackend::get_desktop_app_items(bool force_refresh) {
+    static std::vector<std::shared_ptr<SettingItem>> s_cached_desktop_apps;
+    if (!s_cached_desktop_apps.empty() && !force_refresh) {
+        return s_cached_desktop_apps;
+    }
+
+    const char* home = getenv("HOME");
+    std::vector<std::string> search_dirs;
+    if (home) search_dirs.push_back(std::string(home) + "/.local/share/applications");
+    search_dirs.push_back("/usr/share/applications");
+    search_dirs.push_back("/usr/local/share/applications");
+    search_dirs.push_back("/var/lib/flatpak/exports/share/applications");
+
+    std::unordered_set<std::string> seen_ids;
     std::vector<std::shared_ptr<SettingItem>> items;
-    items.reserve(toolkit_apps.size());
+    std::error_code ec;
 
-    for (const auto& app : toolkit_apps) {
-        if (app.no_display) continue;
+    for (const auto& dir : search_dirs) {
+        if (!fs::exists(dir, ec)) continue;
+        for (const auto& entry : fs::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".desktop") continue;
+            std::string id = entry.path().filename().string();
+            if (seen_ids.count(id)) continue;
 
-        std::string safe_id = "app_" + app.id;
-        for (char& c : safe_id) {
-            if (!std::isalnum(c) && c != '_') c = '_';
-        }
+            DesktopEntry de;
+            if (!parse_desktop_file(entry.path().string(), de)) continue;
+            seen_ids.insert(id);
 
-        std::string icon = get_icon_for_app(app.categories, app.name, app.id);
-        auto item = SettingItem::create_leaf(safe_id, app.name, "", icon);
-        item->is_installed_app = true;
+            std::string safe_id = "app_" + id;
+            for (char& c : safe_id) {
+                if (!std::isalnum(c) && c != '_') c = '_';
+            }
 
-        item->app_info.app_name = app.name;
-        item->app_info.description = !app.comment.empty() ? app.comment : app.generic_name;
-        item->app_info.category = app.categories;
-        item->app_info.desktop_file = resolve_desktop_path(app.id);
-        item->app_info.exec_cmd = app.exec_cmd;
-        item->app_info.binary_path = resolve_binary_path(app.exec_cmd);
-        item->app_info.permissions = "Wayland Protocol, PipeWire Audio, Storage (~/)";
-        item->app_info.publisher = "Arch Linux / Open Source";
+            std::string icon = get_icon_for_app(de.categories, de.name, id);
+            auto item = SettingItem::create_leaf(safe_id, de.name, "", icon);
+            item->is_installed_app = true;
 
-        if (!item->app_info.desktop_file.empty()) {
-            if (item->app_info.desktop_file.find("/.local/share/applications") != std::string::npos) {
+            item->app_info.app_name = de.name;
+            item->app_info.description = !de.comment.empty() ? de.comment : de.generic_name;
+            item->app_info.category = de.categories;
+            item->app_info.desktop_file = de.desktop_path;
+            item->app_info.exec_cmd = de.exec_cmd;
+            item->app_info.binary_path = resolve_binary_path(de.exec_cmd);
+            item->app_info.permissions = "Wayland Protocol, PipeWire Audio, Storage (~/)";
+            item->app_info.publisher = "Arch Linux / Open Source";
+
+            if (de.desktop_path.find("/.local/share/applications") != std::string::npos) {
                 item->app_info.package_type = "User Application";
                 item->app_info.is_user_app = true;
-            } else if (item->app_info.desktop_file.find("/flatpak/") != std::string::npos) {
+            } else if (de.desktop_path.find("/flatpak/") != std::string::npos) {
                 item->app_info.package_type = "Flatpak";
                 item->app_info.is_flatpak = true;
             } else {
                 item->app_info.package_type = "Arch Linux Package (pacman)";
             }
-        } else {
-            item->app_info.package_type = "System Application";
-        }
 
-        items.push_back(std::move(item));
+            items.push_back(std::move(item));
+        }
     }
 
     std::sort(items.begin(), items.end(), [](const std::shared_ptr<SettingItem>& a, const std::shared_ptr<SettingItem>& b) {
@@ -162,16 +241,77 @@ std::vector<std::shared_ptr<SettingItem>> AppsBackend::get_installed_app_items(b
         return a_lower < b_lower;
     });
 
+    s_cached_desktop_apps = items;
+    return items;
+}
+
+std::vector<std::shared_ptr<SettingItem>> AppsBackend::get_system_package_items(bool force_refresh) {
+    static std::vector<std::shared_ptr<SettingItem>> s_cached_pkgs;
+    if (!s_cached_pkgs.empty() && !force_refresh) {
+        return s_cached_pkgs;
+    }
+
+    std::string out = run_cmd("pacman -Qe 2>/dev/null");
+    std::stringstream ss(out);
+    std::string line;
+    std::vector<std::shared_ptr<SettingItem>> items;
+
+    while (std::getline(ss, line)) {
+        if (line.empty()) continue;
+        std::stringstream line_ss(line);
+        std::string pkg_name, pkg_version;
+        line_ss >> pkg_name >> pkg_version;
+        if (pkg_name.empty()) continue;
+
+        std::string safe_id = "pkg_" + pkg_name;
+        for (char& c : safe_id) {
+            if (!std::isalnum(c) && c != '_') c = '_';
+        }
+
+        std::string icon = get_icon_for_pkg(pkg_name);
+        auto item = SettingItem::create_leaf(safe_id, pkg_name, "", icon);
+        item->is_installed_app = true;
+
+        item->app_info.app_name = pkg_name;
+        item->app_info.version = pkg_version;
+        item->app_info.package_name = pkg_name;
+        item->app_info.package_type = "Arch Linux System Package (pacman)";
+        item->app_info.category = "System & Command Line";
+        item->app_info.permissions = "System Process, POSIX System Calls";
+        item->app_info.publisher = "Arch Linux Packaging Team";
+
+        std::string bin_path;
+        if (fs::exists("/usr/bin/" + pkg_name)) {
+            bin_path = "/usr/bin/" + pkg_name;
+        } else if (fs::exists("/usr/local/bin/" + pkg_name)) {
+            bin_path = "/usr/local/bin/" + pkg_name;
+        } else {
+            std::string ql = run_cmd("pacman -Ql " + pkg_name + " 2>/dev/null | grep '/usr/bin/' | head -n 1");
+            size_t sp = ql.find(' ');
+            if (sp != std::string::npos) {
+                std::string candidate = ql.substr(sp + 1);
+                if (fs::is_regular_file(candidate)) bin_path = candidate;
+            }
+        }
+        item->app_info.binary_path = bin_path;
+        item->app_info.exec_cmd = bin_path;
+
+        items.push_back(std::move(item));
+    }
+
+    s_cached_pkgs = items;
     return items;
 }
 
 void AppsBackend::populate_app_details(InstalledAppInfo& info, std::vector<TelemetryEntry>& telemetry) {
-    if (info.version.empty()) {
+    if (info.package_name.empty() && !info.desktop_file.empty()) {
         if (info.is_flatpak) {
             query_flatpak_metadata(info, telemetry);
         } else if (!info.is_user_app) {
             query_pacman_metadata(info, telemetry);
         }
+    } else if (!info.package_name.empty() && telemetry.empty()) {
+        query_pacman_metadata(info, telemetry);
     }
     calculate_storage_sizes(info);
 }
@@ -197,19 +337,22 @@ void AppsBackend::query_flatpak_metadata(InstalledAppInfo& info, std::vector<Tel
 }
 
 void AppsBackend::query_pacman_metadata(InstalledAppInfo& info, std::vector<TelemetryEntry>& telemetry) {
-    if (info.desktop_file.empty()) return;
-    std::string q_out = run_cmd("pacman -Qo " + info.desktop_file + " 2>/dev/null");
-    size_t owned_pos = q_out.find("is owned by ");
-    if (owned_pos == std::string::npos) return;
-
-    std::string pkg_str = q_out.substr(owned_pos + 12);
-    size_t sp = pkg_str.find(' ');
-    if (sp != std::string::npos) {
-        info.package_name = pkg_str.substr(0, sp);
-        info.version = pkg_str.substr(sp + 1);
-    } else {
-        info.package_name = pkg_str;
+    if (info.package_name.empty() && !info.desktop_file.empty()) {
+        std::string q_out = run_cmd("pacman -Qo " + info.desktop_file + " 2>/dev/null");
+        size_t owned_pos = q_out.find("is owned by ");
+        if (owned_pos != std::string::npos) {
+            std::string pkg_str = q_out.substr(owned_pos + 12);
+            size_t sp = pkg_str.find(' ');
+            if (sp != std::string::npos) {
+                info.package_name = pkg_str.substr(0, sp);
+                info.version = pkg_str.substr(sp + 1);
+            } else {
+                info.package_name = pkg_str;
+            }
+        }
     }
+
+    if (info.package_name.empty()) return;
 
     std::string i_out = run_cmd("pacman -Qi " + info.package_name + " 2>/dev/null");
     std::stringstream ss(i_out);
@@ -218,6 +361,9 @@ void AppsBackend::query_pacman_metadata(InstalledAppInfo& info, std::vector<Tele
         if (line.rfind("Installed Size  :", 0) == 0) {
             info.size_total = line.substr(17);
             while (!info.size_total.empty() && info.size_total.front() == ' ') info.size_total.erase(0, 1);
+        } else if (line.rfind("Description     :", 0) == 0 && info.description.empty()) {
+            info.description = line.substr(17);
+            while (!info.description.empty() && info.description.front() == ' ') info.description.erase(0, 1);
         } else if (line.rfind("Packager        :", 0) == 0) {
             packager = line.substr(17);
             while (!packager.empty() && packager.front() == ' ') packager.erase(0, 1);
@@ -311,15 +457,31 @@ int AppsBackend::find_running_pid(const std::string& binary_path) {
 }
 
 bool AppsBackend::launch_app(const InstalledAppInfo& info) {
-    if (!info.exec_cmd.empty()) {
-        AppManager::launch_command(info.exec_cmd, false);
-        return true;
+    std::string cmd = !info.exec_cmd.empty() ? info.exec_cmd : info.binary_path;
+    if (cmd.empty()) return false;
+
+    // Strip XDG field codes (%u, %F, etc.)
+    size_t pct = cmd.find('%');
+    while (pct != std::string::npos) {
+        size_t next_sp = cmd.find(' ', pct);
+        if (next_sp != std::string::npos) {
+            cmd.erase(pct, next_sp - pct + 1);
+        } else {
+            cmd.erase(pct);
+        }
+        pct = cmd.find('%');
     }
-    if (!info.binary_path.empty()) {
-        AppManager::launch_command(info.binary_path, false);
-        return true;
+
+    // If CLI tool / system package without desktop file, launch in terminal
+    if (info.desktop_file.empty() && fs::exists("/usr/bin/kitty")) {
+        std::string launch_cmd = "kitty --hold -e " + cmd + " &";
+        int ret = std::system(launch_cmd.c_str());
+        return ret == 0;
     }
-    return false;
+
+    std::string launch_cmd = cmd + " &";
+    int ret = std::system(launch_cmd.c_str());
+    return ret == 0;
 }
 
 bool AppsBackend::kill_app(const InstalledAppInfo& info) {
@@ -344,7 +506,7 @@ bool AppsBackend::uninstall_app(const InstalledAppInfo& info, std::string& error
                 error_msg = ec.message();
                 return false;
             }
-            AppManager::get()->invalidate();
+            get_desktop_app_items(true);
             return true;
         }
         error_msg = "Desktop file not found on disk.";
@@ -356,7 +518,7 @@ bool AppsBackend::uninstall_app(const InstalledAppInfo& info, std::string& error
         std::string cmd = "flatpak uninstall -y " + flatpak_id;
         int ret = std::system(cmd.c_str());
         if (ret == 0) {
-            AppManager::get()->invalidate();
+            get_desktop_app_items(true);
             return true;
         }
         error_msg = "Flatpak uninstallation failed.";
@@ -367,7 +529,8 @@ bool AppsBackend::uninstall_app(const InstalledAppInfo& info, std::string& error
         std::string cmd = "pkexec pacman -R --noconfirm " + info.package_name;
         int ret = std::system(cmd.c_str());
         if (ret == 0) {
-            AppManager::get()->invalidate();
+            get_desktop_app_items(true);
+            get_system_package_items(true);
             return true;
         }
         error_msg = "pacman removal exited with code " + std::to_string(ret);

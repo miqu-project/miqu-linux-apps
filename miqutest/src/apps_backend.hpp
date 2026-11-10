@@ -10,7 +10,9 @@ namespace miqu {
 
 class AppsBackend {
 public:
-    static std::vector<std::shared_ptr<SettingItem>> get_installed_app_items(bool force_refresh = false);
+    static std::vector<std::shared_ptr<SettingItem>> get_desktop_app_items(bool force_refresh = false);
+    static std::vector<std::shared_ptr<SettingItem>> get_system_package_items(bool force_refresh = false);
+
     static void populate_app_details(InstalledAppInfo& info, std::vector<TelemetryEntry>& telemetry);
     static int find_running_pid(const std::string& binary_path);
     static bool launch_app(const InstalledAppInfo& info);
@@ -27,6 +29,7 @@ public:
 
 private:
     static std::string get_icon_for_app(const std::string& categories, const std::string& name, const std::string& id);
+    static std::string get_icon_for_pkg(const std::string& pkg_name);
     static void query_pacman_metadata(InstalledAppInfo& info, std::vector<TelemetryEntry>& telemetry);
     static void query_flatpak_metadata(InstalledAppInfo& info, std::vector<TelemetryEntry>& telemetry);
     static void calculate_storage_sizes(InstalledAppInfo& info);
