@@ -5,6 +5,7 @@
 #include "ethernet_backend.hpp"
 #include "firewall_backend.hpp"
 #include "airplane_backend.hpp"
+#include "dns_backend.hpp"
 
 namespace miqu {
 
@@ -116,17 +117,8 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         // 1.5 Private DNS (Leaf)
         auto private_dns = SettingItem::create_leaf("net_private_dns", "Private DNS", "", "󰒍");
         private_dns->is_private_dns = true;
-        private_dns->private_dns_cfg.selected_option = "Cloudflare (1.1.1.1)";
-        private_dns->private_dns_cfg.custom_hostname = "dns.nextdns.io";
         private_dns->telemetry_title = "DNS & encryption specifications";
-        private_dns->telemetry = {
-            {"Protocol Standard", "DNS-over-TLS (RFC 7858 / Port 853)"},
-            {"Active Resolver", "1.1.1.1#one.one.one.one"},
-            {"Transport Security", "TLSv1.3 (ChaCha20-Poly1305 / X25519)"},
-            {"System Resolver", "systemd-resolved.service"},
-            {"DNSSEC Validation", "Enabled (Strict verification)"},
-            {"Resolution Latency", "4.2 ms (Cached / Encrypted)"}
-        };
+        DnsBackend::sync_item_state(private_dns);
 
         // 1.6 Firewall (Leaf)
         auto firewall = SettingItem::create_leaf("net_firewall", "Firewall", "", "󰒃");

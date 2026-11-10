@@ -132,6 +132,7 @@ struct PrivateDnsConfig {
         {"Mullvad (Zero-Log Privacy)", "dns.mullvad.net", "Strict zero-logging privacy DNS hosted in Sweden", "194.242.2.2 • 193.19.108.2"},
         {"Custom Hostname", "", "User-specified encrypted DNS-over-TLS upstream resolver endpoint", "Custom TLS endpoint (Port 853)"}
     };
+    bool dot_engine_active = false;
 };
 
 struct BatteryConfig {

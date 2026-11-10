@@ -6,6 +6,7 @@
 #include "ethernet_backend.hpp"
 #include "firewall_backend.hpp"
 #include "airplane_backend.hpp"
+#include "dns_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
 #include <miqutoolkit/view/edit_text.hpp>
 #include <miqutoolkit/core/app_engine.hpp>
@@ -2576,7 +2577,95 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
 }
 
 void MillerView::render_dns_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    // 1. Configuration Card (Single Spinner on new line, Hostname EditText on new line)
+    // 0. Live synchronization with backend if available and not actively applying or testing
+    if (DnsBackend::is_available()) {
+        if (item->last_action_message.find("Applying") == std::string::npos &&
+            item->last_action_message.find("Testing") == std::string::npos &&
+            item->last_action_message.find("authenticating") == std::string::npos) {
+            DnsBackend::sync_item_state(item);
+        }
+    }
+
+    // 1. Top Card: Master DNS-over-TLS System Engine Switch (Polkit Privileged)
+    auto engine_card = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->padding(16, 14)
+        ->spacing(12)
+        ->backgroundColor(config->colors.surface)
+        ->stroke(1, config->colors.outline.with_alpha(0.3f))
+        ->cornerRadius(get_card_radius(config))
+        ->build();
+
+    auto engine_icon = TextViewBuilder::create()
+        ->text("󰒍")
+        ->textSize(config->metrics.font_size + 4)
+        ->textColor(item->private_dns_cfg.dot_engine_active ? config->colors.primary : config->colors.on_surface_variant)
+        ->build();
+    LayoutParams eicon_lp;
+    eicon_lp.width = 30;
+    eicon_lp.gravity = Gravity::CenterVertical;
+    engine_card->add_view(engine_icon, eicon_lp);
+
+    auto engine_lbl_box = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Vertical)
+        ->spacing(2)
+        ->build();
+
+    auto engine_title = TextViewBuilder::create()
+        ->text("DNS-over-TLS Encryption Engine")
+        ->textSize(config->metrics.font_size)
+        ->textColor(config->colors.on_surface)
+        ->build();
+    engine_lbl_box->add_view(engine_title);
+
+    std::string engine_hint = item->private_dns_cfg.dot_engine_active
+        ? "Active (Port 853) • systemd-resolved TLS tunnel enforcing strict encryption"
+        : "Inactive (Port 53) • Toggle switch to enable systemd-resolved TLS tunnel (auth required)";
+    auto engine_sub = TextViewBuilder::create()
+        ->text(engine_hint)
+        ->caption(true)
+        ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+        ->build();
+    engine_lbl_box->add_view(engine_sub);
+
+    LayoutParams elbl_lp;
+    elbl_lp.width = static_cast<int>(LayoutDimension::MatchParent);
+    elbl_lp.height = static_cast<int>(LayoutDimension::WrapContent);
+    elbl_lp.weight = 1.0f;
+    elbl_lp.gravity = Gravity::CenterVertical;
+    engine_card->add_view(engine_lbl_box, elbl_lp);
+
+    auto engine_sw = SwitchBuilder::create()
+        ->checked(item->private_dns_cfg.dot_engine_active)
+        ->onCheckedChanged([this, item](bool checked) {
+            item->last_action_message = checked
+                ? "Activating DNS-over-TLS encryption engine (authenticating)..."
+                : "Deactivating DNS-over-TLS encryption engine (authenticating)...";
+            rebuild_preview_column();
+            std::thread([this, item, checked]() {
+                bool ok = DnsBackend::enable_dot_engine(checked);
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(1000, [this, item, ok, checked]() {
+                        DnsBackend::sync_item_state(item);
+                        item->last_action_message = ok
+                            ? (checked ? "DNS-over-TLS engine activated (Port 853)" : "DNS-over-TLS engine deactivated")
+                            : "Authentication failed or cancelled";
+                        rebuild_preview_column();
+                        notify_state_changed();
+                    });
+                }
+            }).detach();
+        })
+        ->build();
+
+    LayoutParams esw_lp;
+    esw_lp.width = 44;
+    esw_lp.height = 24;
+    esw_lp.gravity = Gravity::CenterVertical;
+    engine_card->add_view(engine_sw, esw_lp);
+    add_preview_card(engine_card);
+
+    // 2. Configuration Card (Single Spinner on new line, Hostname EditText on new line)
     auto cfg_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
         ->spacing(10)
@@ -2715,6 +2804,46 @@ void MillerView::render_dns_preview(const std::shared_ptr<SettingItem>& item, co
     edit_lp.height = 38;
     cfg_card->add_view(custom_edit, edit_lp);
 
+    // Action Row: Apply button
+    auto apply_row = LinearLayoutBuilder::create()
+        ->orientation(Orientation::Horizontal)
+        ->gravity(Gravity::Right | Gravity::CenterVertical)
+        ->build();
+
+    auto apply_btn = ButtonBuilder::create()
+        ->text("Apply Configuration")
+        ->style(ButtonStyle::Standard)
+        ->primary(true)
+        ->textColor(config->colors.on_primary)
+        ->backgroundColor(config->colors.primary)
+        ->padding(14, 6)
+        ->cornerRadius(get_btn_radius(config))
+        ->onClick([this, item, custom_edit]() {
+            std::string opt = item->private_dns_cfg.selected_option;
+            std::string host = custom_edit ? custom_edit->get_text() : "";
+            item->private_dns_cfg.custom_hostname = host;
+            item->last_action_message = "Applying " + opt + "...";
+            rebuild_preview_column();
+            std::thread([this, item, opt, host]() {
+                bool ok = DnsBackend::apply_preset(opt, host);
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(500, [this, item, ok, opt]() {
+                        DnsBackend::sync_item_state(item);
+                        item->last_action_message = ok ? (opt + " applied successfully") : "Failed to apply DNS configuration";
+                        rebuild_preview_column();
+                        notify_state_changed();
+                    });
+                }
+            }).detach();
+        })
+        ->build();
+
+    LayoutParams ab_lp;
+    ab_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+    ab_lp.height = 32;
+    apply_row->add_view(apply_btn, ab_lp);
+    cfg_card->add_view(apply_row);
+
     add_preview_card(cfg_card);
 
     // 3. Active Endpoint & Verification Card
@@ -2751,9 +2880,27 @@ void MillerView::render_dns_preview(const std::shared_ptr<SettingItem>& item, co
         ->padding(10, 4)
         ->cornerRadius(get_btn_radius(config))
         ->onClick([this, item]() {
-            item->last_action_message = "DNS handshake verified • Latency: 3.8 ms";
+            item->last_action_message = "Testing resolution against active DNS...";
             rebuild_preview_column();
-            notify_state_changed();
+            std::thread([this, item]() {
+                float latency_ms = -1.0f;
+                std::string details;
+                bool ok = DnsBackend::test_resolution("cloudflare.com", &latency_ms, &details);
+                if (auto* eng = AppEngine::instance()) {
+                    eng->post_delayed(100, [this, item, ok, latency_ms, details]() {
+                        DnsBackend::sync_item_state(item);
+                        if (ok) {
+                            std::ostringstream ss;
+                            ss << std::fixed << std::setprecision(1) << latency_ms;
+                            item->last_action_message = "DNS handshake verified • Latency: " + ss.str() + " ms (" + details + ")";
+                        } else {
+                            item->last_action_message = "DNS resolution failed: " + details;
+                        }
+                        rebuild_preview_column();
+                        notify_state_changed();
+                    });
+                }
+            }).detach();
         })
         ->build();
     LayoutParams tb_lp;
@@ -2764,10 +2911,12 @@ void MillerView::render_dns_preview(const std::shared_ptr<SettingItem>& item, co
     ep_card->add_view(ep_header);
 
     if (!item->last_action_message.empty()) {
+        bool is_error = (item->last_action_message.find("failed") != std::string::npos ||
+                         item->last_action_message.find("Failed") != std::string::npos);
         auto test_feedback = TextViewBuilder::create()
             ->text(item->last_action_message)
             ->caption(true)
-            ->textColor(config->colors.primary)
+            ->textColor(is_error ? Color(0.9f, 0.3f, 0.3f, 1.0f) : config->colors.primary)
             ->build();
         ep_card->add_view(test_feedback);
     }
