@@ -60,8 +60,7 @@ private:
     // Column Element Builders (Modular Single-Responsibility Helpers)
     std::shared_ptr<View> create_parent_hero_box(const std::shared_ptr<Config>& config);
     std::shared_ptr<View> create_empty_search_box(const std::shared_ptr<Config>& config);
-    std::shared_ptr<View> create_parent_row_card(const std::shared_ptr<SettingItem>& item, bool is_active, size_t index, const std::shared_ptr<Config>& config);
-    std::shared_ptr<View> create_current_row_card(const std::shared_ptr<SettingItem>& item, bool is_selected, size_t index, const std::shared_ptr<Config>& config);
+    std::shared_ptr<View> create_list_row_item(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config);
 
     // Reusable Form Builders
     std::shared_ptr<LinearLayout> create_form_card(const std::shared_ptr<Config>& config);
@@ -105,6 +104,7 @@ private:
     const std::vector<std::shared_ptr<SettingItem>>& get_current_list() const;
     void notify_state_changed();
 
+    void handle_parent_item_click(size_t idx);
     void execute_sibling_swap(const std::shared_ptr<SettingItem>& item, size_t index);
     void execute_shift_up(size_t index);
     void cancel_pending_sibling_click();
@@ -130,16 +130,22 @@ private:
 
     std::function<void()> m_on_state_changed;
 
-    // UI containers (Backgroundless LinearLayout pillars with ScrollViews)
-    std::shared_ptr<LinearLayout> m_parent_layout;
-    std::shared_ptr<ScrollView> m_current_scroll;
-    std::shared_ptr<LinearLayout> m_current_layout;
-    std::shared_ptr<View> m_selected_row_card;
+    // UI containers (Backgroundless LinearLayout pillars with ListView / ScrollView)
+    std::shared_ptr<LinearLayout> m_parent_pillar;
+    std::shared_ptr<ListView> m_parent_list;
+    std::shared_ptr<View> m_parent_hero;
+
+    std::shared_ptr<LinearLayout> m_current_pillar;
+    std::shared_ptr<ListView> m_current_list;
+    std::shared_ptr<View> m_empty_search_box;
+
     std::shared_ptr<LinearLayout> m_preview_pillar;
     std::shared_ptr<LinearLayout> m_preview_ribbon;
     std::shared_ptr<CardView> m_preview_toggle_btn;
     std::shared_ptr<TextView> m_preview_toggle_icon;
     std::shared_ptr<TextView> m_preview_title;
+
+    std::shared_ptr<ListView> m_category_list;
     std::shared_ptr<ScrollView> m_preview_scroll;
     std::shared_ptr<LinearLayout> m_preview_layout;
 

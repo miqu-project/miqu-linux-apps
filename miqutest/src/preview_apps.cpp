@@ -20,63 +20,15 @@ void MillerView::render_empty_preview(const std::shared_ptr<Config>& config) {
 }
 
 void MillerView::render_category_children_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
-    m_preview_layout->set_padding(Padding(10, 10));
-    m_preview_layout->set_divider_spacing(4);
-
-    for (size_t i = 0; i < item->children.size(); ++i) {
-        const auto& child = item->children[i];
-
-        auto item_row = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Horizontal)
-            ->padding(10, 8)
-            ->spacing(10)
-            ->build();
-
-        auto icon_view = TextViewBuilder::create()
-            ->text(child->icon.empty() ? "⚙" : child->icon)
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface_variant)
-            ->build();
-        LayoutParams icon_lp;
-        icon_lp.width = 24;
-        icon_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        icon_lp.gravity = Gravity::CenterVertical;
-        item_row->add_view(icon_view, icon_lp);
-
-        auto text_box = LinearLayoutBuilder::create()
-            ->orientation(Orientation::Vertical)
-            ->spacing(1)
-            ->build();
-
-        auto title_view = TextViewBuilder::create()
-            ->text(child->title)
-            ->textSize(config->metrics.font_size)
-            ->textColor(config->colors.on_surface)
-            ->ellipsize(true)
-            ->build();
-        text_box->add_view(title_view);
-
-        LayoutParams text_lp;
-        text_lp.width = static_cast<int>(LayoutDimension::MatchParent);
-        text_lp.height = static_cast<int>(LayoutDimension::WrapContent);
-        text_lp.weight = 1.0f;
-        text_lp.gravity = Gravity::CenterVertical;
-        item_row->add_view(text_box, text_lp);
-
-        auto row_card = HoverCardViewBuilder::create()
-            ->cornerRadius(get_inner_radius(config))
-            ->elevation(0)
-            ->addView(item_row)
-            ->build();
-
-        row_card->set_on_click_listener([this, i]() {
-            navigate_enter();
-            m_current_index = static_cast<int>(i);
-            rebuild_columns();
-            notify_state_changed();
-        });
-
-        m_preview_layout->add_view(row_card);
+    if (m_category_list) {
+        m_category_list->clear_items();
+        m_category_list->set_visibility(Visibility::Visible);
+        for (const auto& child : item->children) {
+            m_category_list->add_item(create_list_row_item(child, config));
+        }
+    }
+    if (m_preview_scroll) {
+        m_preview_scroll->set_visibility(Visibility::Gone);
     }
 }
 
