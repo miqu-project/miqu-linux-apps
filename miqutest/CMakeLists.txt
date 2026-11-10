@@ -28,6 +28,7 @@ add_executable(miqutest
     src/bluetooth_backend.cpp
     src/bluetooth_agent.cpp
     src/display_backend.cpp
+    src/monitor_backend.cpp
     src/ethernet_backend.cpp
     src/firewall_backend.cpp
     src/airplane_backend.cpp

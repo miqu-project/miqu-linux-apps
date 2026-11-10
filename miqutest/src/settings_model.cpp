@@ -6,6 +6,7 @@
 #include "firewall_backend.hpp"
 #include "airplane_backend.hpp"
 #include "dns_backend.hpp"
+#include "monitor_backend.hpp"
 
 namespace miqu {
 
@@ -236,53 +237,26 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // 3. Monitors & Displays (Depth 1)
     // ==============================================================================
     {
-        // 2.1 Monitor 1 (Primary 4K 144Hz)
-        auto mon1 = SettingItem::create_leaf("mon_dp1", "Dell U2723QE", "", "󰍹");
-        mon1->is_monitor = true;
-        mon1->monitor_cfg.connector = "DP-1";
-        mon1->monitor_cfg.model_name = "Dell UltraSharp U2723QE";
-        mon1->monitor_cfg.is_primary = true;
-        mon1->monitor_cfg.current_resolution = "3840 × 2160";
-        mon1->monitor_cfg.available_resolutions = {"3840 × 2160", "2560 × 1440", "1920 × 1080"};
-        mon1->monitor_cfg.current_refresh_rate = "144 Hz";
-        mon1->monitor_cfg.available_refresh_rates = {"144 Hz", "120 Hz", "60 Hz"};
-        mon1->monitor_cfg.current_scale = "125%";
-        mon1->monitor_cfg.available_scales = {"100%", "125%", "150%", "200%"};
-        mon1->monitor_cfg.current_orientation = "Standard (0°)";
-        mon1->monitor_cfg.available_orientations = {"Standard (0°)", "90° (Portrait)", "180°", "270°"};
-        mon1->telemetry = {
-            {"Connector", "DP-1 (DisplayPort 1.4)"},
-            {"Panel Type", "27\" IPS Black (3840 × 2160)"},
-            {"Color Space", "DCI-P3 98% / sRGB 100%"},
-            {"HDR Support", "VESA DisplayHDR 400 (Active)"},
-            {"VRR / FreeSync", "AMD FreeSync Premium (48-144 Hz)"}
-        };
+        std::vector<std::shared_ptr<SettingItem>> mon_items;
+        auto connected_monitors = MonitorBackend::get_monitors();
+        for (const auto& mon_info : connected_monitors) {
+            std::string id = "mon_" + mon_info.name;
+            std::string title = !mon_info.description.empty() ? mon_info.description : mon_info.name;
+            auto mon_item = SettingItem::create_leaf(id, title, "", "󰍹");
+            MonitorBackend::sync_monitor_item(mon_item, mon_info);
+            mon_items.push_back(mon_item);
+        }
 
-        // 2.2 Monitor 2 (Secondary 4K 60Hz)
-        auto mon2 = SettingItem::create_leaf("mon_hdmi1", "LG UltraFine 27", "", "󰍹");
-        mon2->is_monitor = true;
-        mon2->monitor_cfg.connector = "HDMI-A-1";
-        mon2->monitor_cfg.model_name = "LG UltraFine 27UP850";
-        mon2->monitor_cfg.is_primary = false;
-        mon2->monitor_cfg.current_resolution = "3840 × 2160";
-        mon2->monitor_cfg.available_resolutions = {"3840 × 2160", "2560 × 1440", "1920 × 1080"};
-        mon2->monitor_cfg.current_refresh_rate = "60 Hz";
-        mon2->monitor_cfg.available_refresh_rates = {"60 Hz", "50 Hz", "30 Hz"};
-        mon2->monitor_cfg.current_scale = "150%";
-        mon2->monitor_cfg.available_scales = {"100%", "125%", "150%", "200%"};
-        mon2->monitor_cfg.current_orientation = "Standard (0°)";
-        mon2->monitor_cfg.available_orientations = {"Standard (0°)", "90° (Portrait)", "180°", "270°"};
-        mon2->telemetry = {
-            {"Connector", "HDMI-A-1 (HDMI 2.0b)"},
-            {"Panel Type", "27\" IPS (3840 × 2160)"},
-            {"Color Space", "DCI-P3 95% / sRGB 99%"},
-            {"HDR Support", "HDR10 (Active)"},
-            {"VRR / FreeSync", "AMD FreeSync (40-60 Hz)"}
-        };
+        if (mon_items.empty()) {
+            auto def_item = SettingItem::create_leaf("mon_edp1", "eDP-1", "", "󰍹");
+            MonitorInfo def_info;
+            MonitorBackend::sync_monitor_item(def_item, def_info);
+            mon_items.push_back(def_item);
+        }
 
         root.push_back(SettingItem::create_category(
             "cat_monitors", "Monitors", "󰍹",
-            {mon1, mon2}
+            mon_items
         ));
     }
 

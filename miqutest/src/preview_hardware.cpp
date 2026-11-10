@@ -1,6 +1,7 @@
 #include "miller_view.hpp"
 #include "preview_common.hpp"
 #include "display_backend.hpp"
+#include "monitor_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
 #include <algorithm>
 #include <chrono>
@@ -780,6 +781,7 @@ void MillerView::render_monitors_preview(const std::shared_ptr<SettingItem>& ite
         mon_card->add_view(pill_card, pill_lp);
     } else {
         auto on_make_primary = [this, item]() {
+            MonitorBackend::set_primary(item->monitor_cfg.connector);
             const auto& list = get_current_list();
             for (auto& m : list) {
                 if (m->is_monitor) {
@@ -887,26 +889,51 @@ void MillerView::render_monitors_preview(const std::shared_ptr<SettingItem>& ite
     };
 
     // Resolution Spinner
-    cfg_card->add_view(create_spinner_row("Resolution", item->monitor_cfg.available_resolutions, item->monitor_cfg.current_resolution, [item, update_mon_sub](const std::string& val) {
+    cfg_card->add_view(create_spinner_row("Resolution", item->monitor_cfg.available_resolutions, item->monitor_cfg.current_resolution, [this, item, update_mon_sub](const std::string& val) {
         item->monitor_cfg.current_resolution = val;
+        auto [w, h] = MonitorBackend::parse_resolution(val);
+        auto new_rates = MonitorBackend::get_available_refresh_rates(item->monitor_cfg.connector, w, h);
+        if (!new_rates.empty()) {
+            item->monitor_cfg.available_refresh_rates = new_rates;
+            bool found = false;
+            for (const auto& r : new_rates) {
+                if (r == item->monitor_cfg.current_refresh_rate) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                item->monitor_cfg.current_refresh_rate = new_rates.front();
+            }
+        }
+        float hz = MonitorBackend::parse_refresh_rate(item->monitor_cfg.current_refresh_rate);
+        MonitorBackend::set_mode(item->monitor_cfg.connector, w, h, hz);
         update_mon_sub();
+        rebuild_preview_column();
     }));
 
     // Refresh Rate Spinner
     cfg_card->add_view(create_spinner_row("Refresh Rate", item->monitor_cfg.available_refresh_rates, item->monitor_cfg.current_refresh_rate, [item, update_mon_sub](const std::string& val) {
         item->monitor_cfg.current_refresh_rate = val;
+        auto [w, h] = MonitorBackend::parse_resolution(item->monitor_cfg.current_resolution);
+        float hz = MonitorBackend::parse_refresh_rate(val);
+        MonitorBackend::set_mode(item->monitor_cfg.connector, w, h, hz);
         update_mon_sub();
     }));
 
     // Display Scaling Spinner
     cfg_card->add_view(create_spinner_row("Display Scaling", item->monitor_cfg.available_scales, item->monitor_cfg.current_scale, [this, item](const std::string& val) {
         item->monitor_cfg.current_scale = val;
+        float sc = MonitorBackend::parse_scale(val);
+        MonitorBackend::set_scale(item->monitor_cfg.connector, sc);
         rebuild_current_column();
     }));
 
     // Orientation Spinner
     cfg_card->add_view(create_spinner_row("Orientation", item->monitor_cfg.available_orientations, item->monitor_cfg.current_orientation, [this, item](const std::string& val) {
         item->monitor_cfg.current_orientation = val;
+        std::string tr = MonitorBackend::ui_to_transform(val);
+        MonitorBackend::set_transform(item->monitor_cfg.connector, tr);
         rebuild_current_column();
     }));
 
