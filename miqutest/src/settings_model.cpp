@@ -4,6 +4,7 @@
 #include "display_backend.hpp"
 #include "ethernet_backend.hpp"
 #include "firewall_backend.hpp"
+#include "airplane_backend.hpp"
 
 namespace miqu {
 
@@ -109,13 +110,8 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
         // 1.4 Airplane Mode (Leaf)
         auto airplane = SettingItem::create_leaf("net_airplane", "Airplane Mode", "", "󰀝");
         airplane->has_switch = true;
-        airplane->switch_val = false;
         airplane->switch_label = "Airplane Mode";
-        airplane->telemetry = {
-            {"Wi-Fi Radio", "Enabled"},
-            {"Bluetooth Radio", "Enabled"},
-            {"Cellular Radio", "Disabled"}
-        };
+        AirplaneBackend::sync_item_state(airplane);
 
         // 1.5 Private DNS (Leaf)
         auto private_dns = SettingItem::create_leaf("net_private_dns", "Private DNS", "", "󰒍");

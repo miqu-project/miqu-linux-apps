@@ -30,6 +30,7 @@ add_executable(miqutest
     src/display_backend.cpp
     src/ethernet_backend.cpp
     src/firewall_backend.cpp
+    src/airplane_backend.cpp
 )
 
 target_include_directories(miqutest PRIVATE

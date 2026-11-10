@@ -5,6 +5,7 @@
 #include "bluetooth_agent.hpp"
 #include "ethernet_backend.hpp"
 #include "firewall_backend.hpp"
+#include "airplane_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
 #include <miqutoolkit/view/edit_text.hpp>
 #include <miqutoolkit/core/app_engine.hpp>
@@ -2325,6 +2326,10 @@ void MillerView::render_ethernet_preview(const std::shared_ptr<SettingItem>& ite
 
 
 void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    // 1. Live synchronization with AirplaneBackend
+    AirplaneBackend::sync_item_state(item);
+    auto state = AirplaneBackend::get_state();
+
     // 1. Airplane Mode Primary Switch Card
     auto airplane_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Horizontal)
@@ -2338,7 +2343,7 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
     auto plane_icon = TextViewBuilder::create()
         ->text("󰀝")
         ->textSize(config->metrics.font_size + 4)
-        ->textColor(item->switch_val ? config->colors.primary : config->colors.on_surface_variant)
+        ->textColor(state.is_airplane_mode ? config->colors.primary : config->colors.on_surface_variant)
         ->build();
     LayoutParams picon_lp;
     picon_lp.width = 30;
@@ -2357,7 +2362,9 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
         ->build();
     plane_lbl_box->add_view(plane_title);
 
-    std::string plane_sub = item->switch_val ? "All wireless communications disabled" : "Wireless communications enabled";
+    std::string plane_sub = state.is_airplane_mode
+        ? "Ultimate air-gapped isolation • Outer network connectivity severed"
+        : "Standard operational mode • Wireless & wired communications active";
     auto plane_hint = TextViewBuilder::create()
         ->text(plane_sub)
         ->caption(true)
@@ -2373,11 +2380,12 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
     airplane_card->add_view(plane_lbl_box, plbl_lp);
 
     auto primary_sw = SwitchBuilder::create()
-        ->checked(item->switch_val)
+        ->checked(state.is_airplane_mode)
         ->onCheckedChanged([this, item](bool checked) {
-            item->switch_val = checked;
+            AirplaneBackend::set_airplane_mode(checked);
+            AirplaneBackend::sync_item_state(item);
             rebuild_current_column();
-            deferred_rebuild_preview();
+            deferred_rebuild_preview(50);
             notify_state_changed();
         })
         ->build();
@@ -2389,10 +2397,10 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
     airplane_card->add_view(primary_sw, sw_lp);
     add_preview_card(airplane_card);
 
-    // 2. Bottom Info Card: What things are going to be disabled
+    // 2. Subsystems Protection & Isolation Grid Card
     auto info_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
-        ->spacing(10)
+        ->spacing(8)
         ->padding(16, 14)
         ->backgroundColor(config->colors.surface)
         ->stroke(1, config->colors.outline.with_alpha(0.3f))
@@ -2400,37 +2408,39 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
         ->build();
 
     auto info_title = TextViewBuilder::create()
-        ->text("Affected Wireless Radios")
+        ->text("Communications Subsystems & Isolation")
         ->caption(true)
         ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
         ->build();
     info_card->add_view(info_title);
 
-    struct RadioImpact {
+    struct SubsystemImpact {
         std::string name;
         std::string icon;
         std::string desc;
+        bool is_blocked;
     };
 
-    std::vector<RadioImpact> radios = {
-        {"Wi-Fi Radio", "󰤨", "Disables 802.11 Wi-Fi networks, local connections, and scanning"},
-        {"Bluetooth", "󰂯", "Disconnects wireless audio, peripherals, keyboards, and discovery"},
-        {"Cellular & Mobile", "󰄡", "Suspends WWAN mobile data modems and SIM network connectivity"},
-        {"GPS & Location", "󰍎", "Powers down satellite positioning and location-sensing hardware"}
+    std::vector<SubsystemImpact> subsystems = {
+        {"Wi-Fi Radio (802.11)", "󰤨", "Shuts down wireless transmitters, background probe requests, and AP associations", state.wifi_blocked || state.is_airplane_mode},
+        {"Bluetooth Controller", "󰂯", "Powers off Bluetooth hardware, halts BLE advertising, peripherals, and discovery", state.bluetooth_blocked || state.is_airplane_mode},
+        {"Wired Ethernet & LAN", "󰈀", "Drops physical network links, releases DHCP leases, and flushes default routes", !state.global_networking_enabled || state.is_airplane_mode},
+        {"Cellular & WWAN", "󰄡", "Powers down mobile broadband modems, SIM card interfaces, and packet data", state.wwan_blocked || state.is_airplane_mode},
+        {"Global Network Stack", "󰒃", "Halts NetworkManager daemon sockets, active VPN tunnels, and wireguard bridges", !state.global_networking_enabled || state.is_airplane_mode}
     };
 
-    for (const auto& radio : radios) {
+    for (const auto& sub : subsystems) {
         auto row_content = LinearLayoutBuilder::create()
             ->orientation(Orientation::Horizontal)
             ->padding(10, 8)
             ->spacing(12)
+            ->gravity(Gravity::CenterVertical)
             ->build();
 
-        // Radio icon
         auto r_icon = TextViewBuilder::create()
-            ->text(radio.icon)
+            ->text(sub.icon)
             ->textSize(config->metrics.font_size)
-            ->textColor(item->switch_val ? config->colors.on_surface_variant.with_alpha(0.6f) : config->colors.primary)
+            ->textColor(sub.is_blocked ? config->colors.on_surface_variant.with_alpha(0.6f) : config->colors.primary)
             ->build();
         LayoutParams ricon_lp;
         ricon_lp.width = 24;
@@ -2443,14 +2453,14 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
             ->build();
 
         auto r_name = TextViewBuilder::create()
-            ->text(radio.name)
+            ->text(sub.name)
             ->textSize(config->metrics.font_size)
             ->textColor(config->colors.on_surface)
             ->build();
         text_box->add_view(r_name);
 
         auto r_desc = TextViewBuilder::create()
-            ->text(radio.desc)
+            ->text(sub.desc)
             ->caption(true)
             ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
             ->build();
@@ -2462,10 +2472,9 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
         tb_lp.gravity = Gravity::CenterVertical;
         row_content->add_view(text_box, tb_lp);
 
-        // Status Badge
-        std::string status_str = item->switch_val ? "Disabled" : "Active";
-        Color badge_bg = item->switch_val ? config->colors.surface_variant : config->colors.primary_container.with_alpha(0.4f);
-        Color badge_fg = item->switch_val ? config->colors.on_surface_variant : config->colors.primary;
+        std::string status_str = sub.is_blocked ? "Isolated" : "Active";
+        Color badge_bg = sub.is_blocked ? config->colors.surface_variant.with_alpha(0.6f) : config->colors.primary_container.with_alpha(0.45f);
+        Color badge_fg = sub.is_blocked ? config->colors.on_surface_variant : config->colors.primary;
 
         auto status_view = TextViewBuilder::create()
             ->text(status_str)
@@ -2488,7 +2497,7 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
         pill_lp.gravity = Gravity::CenterVertical;
         row_content->add_view(pill, pill_lp);
 
-        Color row_bg = item->switch_val ? config->colors.surface_variant.with_alpha(0.2f) : Color::transparent();
+        Color row_bg = sub.is_blocked ? config->colors.surface_variant.with_alpha(0.18f) : Color::transparent();
         auto row_card = CardViewBuilder::create()
             ->style(CardStyle::Filled)
             ->backgroundColor(row_bg)
@@ -2499,9 +2508,71 @@ void MillerView::render_airplane_preview(const std::shared_ptr<SettingItem>& ite
 
         info_card->add_view(row_card);
     }
-
     add_preview_card(info_card);
-    return;
+
+    // 3. Hardware RFKill Devices Card (Physical & Kernel Devices from /sys/class/rfkill)
+    if (!state.radios.empty()) {
+        auto rf_card = LinearLayoutBuilder::create()
+            ->orientation(Orientation::Vertical)
+            ->spacing(6)
+            ->padding(16, 14)
+            ->backgroundColor(config->colors.surface)
+            ->stroke(1, config->colors.outline.with_alpha(0.3f))
+            ->cornerRadius(get_card_radius(config))
+            ->build();
+
+        auto rf_title = TextViewBuilder::create()
+            ->text("Kernel RFKill Hardware Switches")
+            ->caption(true)
+            ->textColor(config->colors.on_surface_variant.with_alpha(0.7f))
+            ->build();
+        rf_card->add_view(rf_title);
+
+        for (const auto& dev : state.radios) {
+            auto dev_row = LinearLayoutBuilder::create()
+                ->orientation(Orientation::Horizontal)
+                ->padding(10, 6)
+                ->spacing(10)
+                ->gravity(Gravity::CenterVertical)
+                ->build();
+
+            std::string dev_label = dev.name + " (" + dev.type + ")";
+            auto dev_name_tv = TextViewBuilder::create()
+                ->text(dev_label)
+                ->textSize(config->metrics.font_size)
+                ->textColor(config->colors.on_surface)
+                ->build();
+            dev_row->add_view(dev_name_tv, LayoutParams(static_cast<int>(LayoutDimension::MatchParent), static_cast<int>(LayoutDimension::WrapContent), 1.0f));
+
+            std::string rf_status = dev.hard_blocked ? "Hard Blocked" : (dev.soft_blocked ? "Soft Blocked" : "Unblocked");
+            Color rf_fg = (dev.hard_blocked || dev.soft_blocked) ? config->colors.on_surface_variant : config->colors.primary;
+            Color rf_bg = (dev.hard_blocked || dev.soft_blocked) ? config->colors.surface_variant.with_alpha(0.6f) : config->colors.primary_container.with_alpha(0.45f);
+
+            auto dev_badge = TextViewBuilder::create()
+                ->text(rf_status)
+                ->caption(true)
+                ->textColor(rf_fg)
+                ->padding(8, 3)
+                ->build();
+
+            auto dev_pill = CardViewBuilder::create()
+                ->style(CardStyle::Filled)
+                ->backgroundColor(rf_bg)
+                ->cornerRadius(get_chip_radius(config))
+                ->elevation(0)
+                ->addView(dev_badge)
+                ->build();
+            dev_row->add_view(dev_pill, LayoutParams(static_cast<int>(LayoutDimension::WrapContent), static_cast<int>(LayoutDimension::WrapContent), Gravity::CenterVertical));
+
+            rf_card->add_view(dev_row);
+        }
+        add_preview_card(rf_card);
+    }
+
+    // 4. Telemetry Card
+    if (!item->telemetry.empty()) {
+        add_preview_card(create_telemetry_card(item->telemetry, config, "Hardware & subsystem specifications"));
+    }
 }
 
 void MillerView::render_dns_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
