@@ -7,6 +7,7 @@
 #include "airplane_backend.hpp"
 #include "dns_backend.hpp"
 #include "monitor_backend.hpp"
+#include "apps_backend.hpp"
 
 namespace miqu {
 
@@ -265,117 +266,19 @@ std::vector<std::shared_ptr<SettingItem>> SettingsModel::build_default_tree() {
     // ==============================================================================
     {
         // 3.1 Installed Apps (Category)
-        auto app_firefox = SettingItem::create_leaf("app_firefox", "Firefox Web Browser", "", "󰈹");
-        app_firefox->is_installed_app = true;
-        app_firefox->app_info = {
-            "Firefox Web Browser", "132.0.2", "Mozilla Foundation",
-            "Internet & Web (Network;WebBrowser)",
-            "Fast, private, and open-source web browser developed by the Mozilla Foundation.",
-            "/usr/bin/firefox", "/usr/share/applications/firefox.desktop",
-            "Arch Linux Package (pacman)", "248.5 MB", "112.0 MB", "136.5 MB",
-            "Wayland Native, PipeWire Audio, Network Access, Storage (~/)",
-            true, 4821, "Allow"
-        };
-        app_firefox->telemetry = {
-            {"Binary Architecture", "x86_64 (Linux ELF)"},
-            {"Open Source License", "Mozilla Public License (MPL 2.0)"},
-            {"Toolkit & Runtime", "GTK4 / Wayland / Gecko 132"},
-            {"Core Dependencies", "gtk4, nss, libpulse, ffmpeg"}
-        };
-
-        auto app_vscode = SettingItem::create_leaf("app_vscode", "Visual Studio Code", "", "󰨞");
-        app_vscode->is_installed_app = true;
-        app_vscode->app_info = {
-            "Visual Studio Code", "1.95.3", "Microsoft Corporation",
-            "Developer Tools (Development;IDE)",
-            "Code editing redefined. Powerful code editor with built-in debugging, Git, and extensions.",
-            "/usr/bin/code", "/usr/share/applications/code.desktop",
-            "Arch Linux Package (community)", "312.0 MB", "185.0 MB", "127.0 MB",
-            "Wayland, FileSystem, Git Integration, IPC",
-            true, 5120, "Allow"
-        };
-        app_vscode->telemetry = {
-            {"Binary Architecture", "x86_64 (Linux ELF)"},
-            {"Open Source License", "MIT License (Code - OSS)"},
-            {"Toolkit & Runtime", "Electron 32 / Chromium 128 / Node 20"},
-            {"Core Dependencies", "glibc, libsecret, libxkbfile"}
-        };
-
-        auto app_kitty = SettingItem::create_leaf("app_kitty", "Kitty Terminal", "", "󰄛");
-        app_kitty->is_installed_app = true;
-        app_kitty->app_info = {
-            "Kitty Terminal", "0.37.0", "Kovid Goyal",
-            "System & Terminal (System;TerminalEmulator)",
-            "Fast, feature-rich, GPU-accelerated terminal emulator leveraging OpenGL for rendering.",
-            "/usr/bin/kitty", "/usr/share/applications/kitty.desktop",
-            "Arch Linux Package (extra)", "45.2 MB", "32.0 MB", "13.2 MB",
-            "GPU OpenGL 3.3, Wayland Protocol Extensions, PTY",
-            true, 3104, "Allow"
-        };
-        app_kitty->telemetry = {
-            {"Binary Architecture", "x86_64 (Linux ELF)"},
-            {"Open Source License", "GPL-3.0-or-later"},
-            {"Toolkit & Runtime", "Python / C Native / OpenGL"},
-            {"Core Dependencies", "fontconfig, freetype2, harfbuzz"}
-        };
-
-        auto app_gimp = SettingItem::create_leaf("app_gimp", "GIMP Image Editor", "", "󰽉");
-        app_gimp->is_installed_app = true;
-        app_gimp->app_info = {
-            "GIMP Image Editor", "2.10.38", "The GIMP Development Team",
-            "Graphics & Photography (Graphics;2DGraphics)",
-            "Full-featured raster graphics editor for photo retouching, composition, and digital painting.",
-            "/usr/bin/gimp-2.10", "/usr/share/applications/gimp.desktop",
-            "Arch Linux Package (extra)", "185.0 MB", "95.0 MB", "90.0 MB",
-            "Display, Color Profiles (ICC), Storage Access",
-            false, 0, "Block"
-        };
-        app_gimp->telemetry = {
-            {"Binary Architecture", "x86_64 (Linux ELF)"},
-            {"Open Source License", "GPL-3.0-or-later"},
-            {"Toolkit & Runtime", "GTK+ 2.24 / GEGL Engine"},
-            {"Core Dependencies", "babl, gegl, libmypaint, poppler"}
-        };
-
-        auto app_vlc = SettingItem::create_leaf("app_vlc", "VLC Media Player", "", "󰕼");
-        app_vlc->is_installed_app = true;
-        app_vlc->app_info = {
-            "VLC Media Player", "3.0.21", "VideoLAN Project",
-            "Audio & Video (AudioVideo;Player)",
-            "Universal multimedia framework and player supporting almost all codecs, discs, and network streams.",
-            "/usr/bin/vlc", "/usr/share/applications/vlc.desktop",
-            "Arch Linux Package (extra)", "142.8 MB", "88.0 MB", "54.8 MB",
-            "VA-API / VDPAU GPU, PipeWire Audio, Removable Media",
-            false, 0, "Local Only"
-        };
-        app_vlc->telemetry = {
-            {"Binary Architecture", "x86_64 (Linux ELF)"},
-            {"Open Source License", "GPL-2.0-or-later / LGPL-2.1"},
-            {"Toolkit & Runtime", "Qt5 / LibVLC Multimedia Engine"},
-            {"Core Dependencies", "ffmpeg, live-media, lua, taglib"}
-        };
-
-        auto app_miqumusic = SettingItem::create_leaf("app_miqumusic", "Miqu Music", "", "󰝚");
-        app_miqumusic->is_installed_app = true;
-        app_miqumusic->app_info = {
-            "Miqu Music", "1.2.0", "Miqu Desktop Ecosystem",
-            "Music & Audio (Audio;AudioPlayer)",
-            "Native Wayland MPD client with Cairo vector rendering and low-latency audio playback.",
-            "/usr/bin/miqumusic", "/usr/share/applications/miqumusic.desktop",
-            "Native Miqu Package", "18.4 MB", "12.0 MB", "6.4 MB",
-            "MPD Unix Socket, PipeWire Audio, Wayland Layer",
-            true, 2410, "Local Only"
-        };
-        app_miqumusic->telemetry = {
-            {"Binary Architecture", "x86_64 (Linux ELF)"},
-            {"Open Source License", "GPL-3.0 (Miqu Ecosystem)"},
-            {"Toolkit & Runtime", "miqutoolkit / C++20 / Cairo / Wayland"},
-            {"Core Dependencies", "libmpdclient, miqutoolkit, pipewire"}
-        };
+        std::vector<std::shared_ptr<SettingItem>> app_items = AppsBackend::get_installed_app_items();
+        if (app_items.empty()) {
+            auto app_firefox = SettingItem::create_leaf("app_firefox", "Firefox Web Browser", "", "󰈹");
+            app_firefox->is_installed_app = true;
+            app_firefox->app_info.app_name = "Firefox Web Browser";
+            app_firefox->app_info.desktop_file = "/usr/share/applications/firefox.desktop";
+            app_firefox->app_info.binary_path = "/usr/bin/firefox";
+            app_items.push_back(app_firefox);
+        }
 
         auto cat_installed_apps = SettingItem::create_category(
             "cat_installed_apps", "Installed Apps", "󰏖",
-            {app_firefox, app_vscode, app_kitty, app_gimp, app_vlc, app_miqumusic}
+            app_items
         );
 
         // 3.2 Default Applications (Category)

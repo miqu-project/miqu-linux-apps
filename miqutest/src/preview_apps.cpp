@@ -1,5 +1,6 @@
 #include "miller_view.hpp"
 #include "preview_common.hpp"
+#include "apps_backend.hpp"
 #include <miqutoolkit/view/popup_window.hpp>
 #include <algorithm>
 #include <chrono>
@@ -34,6 +35,12 @@ void MillerView::render_category_children_preview(const std::shared_ptr<SettingI
 
 
 void MillerView::render_installed_app_preview(const std::shared_ptr<SettingItem>& item, const std::shared_ptr<Config>& config) {
+    AppsBackend::populate_app_details(item->app_info, item->telemetry);
+    int active_pid = AppsBackend::find_running_pid(item->app_info.binary_path);
+    item->app_info.is_running = (active_pid > 0);
+    item->app_info.pid = active_pid;
+    item->app_info.network_policy = AppsBackend::query_network_policy(item->app_info.binary_path);
+
     // 1. App Banner Card with Category on a new line, Actions on a new line, and Description
     auto app_card = LinearLayoutBuilder::create()
         ->orientation(Orientation::Vertical)
@@ -137,9 +144,10 @@ void MillerView::render_installed_app_preview(const std::shared_ptr<SettingItem>
 
     // 1. Open Button
     auto on_open = [this, item]() {
-        item->app_info.is_running = true;
-        if (item->app_info.pid <= 0) item->app_info.pid = 4920;
-        item->last_action_message = "Launched " + item->app_info.app_name + " (running, PID " + std::to_string(item->app_info.pid) + ")";
+        AppsBackend::launch_app(item->app_info);
+        item->app_info.pid = AppsBackend::find_running_pid(item->app_info.binary_path);
+        item->app_info.is_running = (item->app_info.pid > 0);
+        item->last_action_message = "Launched " + item->app_info.app_name;
         rebuild_preview_column();
         notify_state_changed();
     };
@@ -162,11 +170,11 @@ void MillerView::render_installed_app_preview(const std::shared_ptr<SettingItem>
     bool is_running = item->app_info.is_running;
 
     auto on_force_close = [this, item]() {
-        if (item->app_info.is_running) {
-            int old_pid = item->app_info.pid;
+        if (item->app_info.is_running || item->app_info.pid > 0) {
+            AppsBackend::kill_app(item->app_info);
             item->app_info.is_running = false;
             item->app_info.pid = 0;
-            item->last_action_message = "Force closed " + item->app_info.app_name + " (terminated PID " + std::to_string(old_pid > 0 ? old_pid : 4821) + ")";
+            item->last_action_message = "Force closed " + item->app_info.app_name;
         } else {
             item->last_action_message = item->app_info.app_name + " is not running";
         }
@@ -193,7 +201,13 @@ void MillerView::render_installed_app_preview(const std::shared_ptr<SettingItem>
 
     // 3. Uninstall Button
     auto on_uninstall = [this, item]() {
-        item->last_action_message = "Uninstall requested for " + item->app_info.app_name;
+        std::string err;
+        if (AppsBackend::uninstall_app(item->app_info, err)) {
+            item->last_action_message = "Uninstalled " + item->app_info.app_name;
+            rebuild_current_column();
+        } else {
+            item->last_action_message = err.empty() ? "Uninstall failed" : err;
+        }
         rebuild_preview_column();
         notify_state_changed();
     };
@@ -316,12 +330,15 @@ void MillerView::render_installed_app_preview(const std::shared_ptr<SettingItem>
         ->onItemSelected([item, spinner_items, net_sub, config](int idx, const std::string& val) {
             (void)val;
             if (idx >= 0 && idx < static_cast<int>(spinner_items.size())) {
-                item->app_info.network_policy = spinner_items[idx];
-                item->last_action_message = "Network access set to " + item->app_info.network_policy;
-                if (item->app_info.network_policy == "Allow") {
+                std::string new_policy = spinner_items[idx];
+                item->app_info.network_policy = new_policy;
+                std::string msg;
+                AppsBackend::set_network_policy(item->app_info.binary_path, new_policy, msg);
+                item->last_action_message = msg;
+                if (new_policy == "Allow") {
                     net_sub->set_text("Allowed (Full)");
                     net_sub->set_text_color(config->colors.primary);
-                } else if (item->app_info.network_policy == "Local Only") {
+                } else if (new_policy == "Local Only") {
                     net_sub->set_text("Local subnet only");
                     net_sub->set_text_color(config->colors.primary);
                 } else {
@@ -366,7 +383,9 @@ void MillerView::render_installed_app_preview(const std::shared_ptr<SettingItem>
     header_row->add_view(details_title, dt_lp);
 
     auto on_clear_cache = [this, item]() {
-        item->app_info.size_data = "0 KB";
+        std::string err;
+        AppsBackend::clear_cache(item->app_info, err);
+        item->app_info.size_data = "0 B";
         item->app_info.size_total = item->app_info.size_binary;
         item->last_action_message = "Cache cleared (storage freed)";
         rebuild_current_column();

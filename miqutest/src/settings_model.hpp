@@ -89,6 +89,10 @@ struct InstalledAppInfo {
     bool is_running = false;
     int pid = 0;
     std::string network_policy = "Allow"; // "Allow", "Local Only", "Block"
+    std::string exec_cmd = "";
+    std::string package_name = "";
+    bool is_flatpak = false;
+    bool is_user_app = false;
 };
 
 struct DefaultAppCandidate {
