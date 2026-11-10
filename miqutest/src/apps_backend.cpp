@@ -472,13 +472,6 @@ bool AppsBackend::launch_app(const InstalledAppInfo& info) {
         pct = cmd.find('%');
     }
 
-    // If CLI tool / system package without desktop file, launch in terminal
-    if (info.desktop_file.empty() && fs::exists("/usr/bin/kitty")) {
-        std::string launch_cmd = "kitty --hold -e " + cmd + " &";
-        int ret = std::system(launch_cmd.c_str());
-        return ret == 0;
-    }
-
     std::string launch_cmd = cmd + " &";
     int ret = std::system(launch_cmd.c_str());
     return ret == 0;

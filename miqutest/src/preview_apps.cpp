@@ -142,29 +142,32 @@ void MillerView::render_installed_app_preview(const std::shared_ptr<SettingItem>
         ->gravity(Gravity::CenterVertical)
         ->build();
 
-    // 1. Open Button
-    auto on_open = [this, item]() {
-        AppsBackend::launch_app(item->app_info);
-        item->app_info.pid = AppsBackend::find_running_pid(item->app_info.binary_path);
-        item->app_info.is_running = (item->app_info.pid > 0);
-        item->last_action_message = "Launched " + item->app_info.app_name;
-        rebuild_preview_column();
-        notify_state_changed();
-    };
+    // 1. Open Button (only if launchable)
+    bool can_launch = !item->app_info.exec_cmd.empty() || !item->app_info.binary_path.empty();
+    if (can_launch) {
+        auto on_open = [this, item]() {
+            AppsBackend::launch_app(item->app_info);
+            item->app_info.pid = AppsBackend::find_running_pid(item->app_info.binary_path);
+            item->app_info.is_running = (item->app_info.pid > 0);
+            item->last_action_message = "Launched " + item->app_info.app_name;
+            rebuild_preview_column();
+            notify_state_changed();
+        };
 
-    auto open_btn = ButtonBuilder::create()
-        ->text("Open")
-        ->primary(true)
-        ->padding(16, 5)
-        ->cornerRadius(get_btn_radius(config))
-        ->onClick(on_open)
-        ->build();
+        auto open_btn = ButtonBuilder::create()
+            ->text("Open")
+            ->primary(true)
+            ->padding(16, 5)
+            ->cornerRadius(get_btn_radius(config))
+            ->onClick(on_open)
+            ->build();
 
-    LayoutParams open_lp;
-    open_lp.width = static_cast<int>(LayoutDimension::WrapContent);
-    open_lp.height = 30;
-    open_lp.gravity = Gravity::CenterVertical;
-    actions_box->add_view(open_btn, open_lp);
+        LayoutParams open_lp;
+        open_lp.width = static_cast<int>(LayoutDimension::WrapContent);
+        open_lp.height = 30;
+        open_lp.gravity = Gravity::CenterVertical;
+        actions_box->add_view(open_btn, open_lp);
+    }
 
     // 2. Force Close Button
     bool is_running = item->app_info.is_running;
