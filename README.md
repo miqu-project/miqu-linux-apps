@@ -29,7 +29,6 @@ This repository contains the integrated first-party desktop applications for the
 | [**`miqupower`**](./miqupower) | Shell | Power and session management dialog with running application warning and graceful shutdown. |
 | [**`miqutheme`**](./miqutheme) | Theming | Visual theme and appearance manager for color schemes, wallpapers, and global design tokens. |
 | [**`miqumusic`**](./miqumusic) | App | Fast, lightweight native MPD (Music Player Daemon) client and audio playback interface. |
-| [**`miqusecure`**](./miqusecure) | Security | Privacy, firewall, and security command center (Tor routing, OpenSnitch rules, LUKS status, auditing). |
 | [**`miqugallery`**](./miqugallery) | App | Hardware-accelerated image viewer and media gallery application. |
 | [**`miquinfo`**](./miquinfo) | Diagnostic | Hardware monitoring, system telemetry, and resource diagnostic utility. |
 | [**`miqudm`**](./miqudm) | Greeter | Wayland-native Display Manager & greeter with PAM and logind session management. |
@@ -38,8 +37,7 @@ This repository contains the integrated first-party desktop applications for the
 | [**`miquidle`**](./miquidle) | Daemon | Idle management daemon monitoring user activity via the Wayland `ext-idle-notify-v1` protocol. |
 | [**`miqupolkit`**](./miqupolkit) | Security | Native graphical Polkit authentication agent handling privilege escalation prompts. |
 | [**`miqufiles`**](./miqufiles) | App | Modern Yazi-style Miller columns file manager with instant preview (images, code/text, directories). |
-| [**`miqusettings`**](./miqusettings) | App | Modern Miller-columns centralized system settings and configuration manager. |
-| [**`miqutest`**](./miqutest) | Sandbox | Interactive widget showcase and testing harness for developing `miqutoolkit` controls. |
+| [**`miqucontrolpanel`**](./miqucontrolpanel) | Control Panel | Modern Miller-columns centralized desktop control panel, network security, and system configuration manager. |
 
 ---
 
@@ -84,7 +82,7 @@ The Miqu application suite draws inspiration and capabilities from stellar open-
 * **[GNOME](https://www.gnome.org/)** — Inspiring the dynamic live workspace expose and overview architecture ([`miquoverview`](./miquoverview)).
 * **Windows** — Inspiring the familiar, ergonomic bottom taskbar ergonomics and accessibility ([`miqubar`](./miqubar)).
 * **[Rofi](https://github.com/davatorium/rofi)** — Inspiring the fast, keyboard-first fuzzy application launcher ([`miqulauncher`](./miqulauncher)).
-* **[UFW](https://launchpad.net/ufw)** — Serving as the battle-tested firewall and network rule engine for [`miqusecure`](./miqusecure).
+* **[UFW](https://launchpad.net/ufw)** — Serving as the battle-tested firewall and network rule engine for [`miqucontrolpanel`](./miqucontrolpanel).
 * **[MPD (Music Player Daemon)](https://www.musicpd.org/)** — Powering the high-performance audio engine behind [`miqumusic`](./miqumusic).
 * **[Hyprland](https://github.com/hyprwm/Hyprland) & [Sway](https://github.com/swaywm/sway)** — For shaping the expectations of fluid motion, desktop ergonomics, and clean configuration paradigms.
 

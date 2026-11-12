@@ -19,7 +19,6 @@ APPS=(
     "miquinfo"
     "miqumusic"
     "miqugallery"
-    "miqusecure"
     "miquoverview"
     "miqunotify"
     "miqupower"
@@ -27,8 +26,7 @@ APPS=(
     "miqudm"
     "miqutheme"
     "miqufiles"
-    "miqusettings"
-    "miqutest"
+    "miqucontrolpanel"
 )
 
 TOTAL=${#APPS[@]}
